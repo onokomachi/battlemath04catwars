@@ -9,7 +9,8 @@ Cloudflare Workers上で動作する、単一ユーザー専用のツール。�
 
 | ツール | やること | 課金 |
 |---|---|---|
-| `create_firebase_project` | 新規Google CloudプロジェクトをFirebase対応で作成 | 発生しない |
+| `list_projects` | Google Cloudプロジェクトの一覧を取得(読み取りのみ) | 発生しない |
+| `create_firebase_project` | 新規Google CloudプロジェクトをFirebase対応で作成(`existingProjectId`指定時は既存プロジェクトへのFirebase有効化のみ) | 発生しない |
 | `create_web_app` | 既存プロジェクトにWebアプリを登録し、`firebaseConfig`を取得 | 発生しない |
 | `enable_firestore` | Firestore(Nativeモード)を有効化 | 最初の1DBはSparkプラン無料枠内 |
 | `enable_realtime_database` | Realtime Databaseを作成 | ⚠️**Blazeプラン(従量課金)必須**。実行前に必ずユーザーへ確認すること |
@@ -70,7 +71,20 @@ npx wrangler kv namespace create OAUTH_STORE
   Firebase Consoleの「有効にする」ボタンが行う内部処理に相当する公開APIは無い)。
   初回のみFirebase Consoleで手動オンにする必要がある(`enable_google_signin`のエラー応答がその手順を案内する)。
 
+- **プロジェクト数にはアカウント単位のクォータがある**(個人アカウントで25件前後)。上限に達すると
+  `exceeded your allotted project quota` で作成が失敗する。**プロジェクトを削除しても、削除後30日間の
+  復元可能期間中はクォータを消費し続ける**ため、消してもすぐには枠が空かない。急ぐ場合はGoogle Cloudに
+  クォータ増加を申請する。現状確認には`list_projects`を使う。
+
 ## ハマった実装上の罠(再発防止メモ)
+
+- **`X-Goog-User-Project`は「存在し、かつ対象APIが有効なプロジェクト」にしか指定できない。**
+  作成途中の新規プロジェクトを指定すると、Googleは `Project 'projects/xxx' not found or deleted` を返す。
+  プロジェクト作成の完了待ちでこれをやると、**作成自体は成功しているのに直後に失敗したように見え、
+  さらに本当のエラー(クォータ超過など)が完全に隠れてしまう**。作成フローではこのヘッダーを付けないこと。
+  現在は`googleFetch`側に、このヘッダーが原因で弾かれた場合だけヘッダー無しで1度やり直す安全網を入れてある。
+- **プロジェクト作成は非同期操作(Operation)**。クォータ超過などの失敗はPOSTの応答ではなく、
+  完了待ちの結果として返る。「リクエストは通ったのに直後に失敗する」ときはまずこれを疑う。
 
 - **Service Usage APIの`:enable`は、既に有効な場合に実体の無いダミー操作ID
   (`operations/noop.DONE_OPERATION`など)を同期的に返すことがある**。素直にポーリングすると

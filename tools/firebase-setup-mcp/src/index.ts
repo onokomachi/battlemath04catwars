@@ -124,21 +124,42 @@ async function getAccessToken(env: Env): Promise<string> {
 
 // ── Google APIの薄いラッパー ──────────────────────────────────────────────
 
+/** クォータプロジェクト(X-Goog-User-Project)自体が原因で弾かれたときのGoogleのエラーか判定する */
+function isQuotaProjectRejection(status: number, body: string): boolean {
+  if (status !== 400 && status !== 403) return false;
+  return (
+    body.includes('not found or deleted') ||
+    body.includes('SERVICE_DISABLED') ||
+    body.includes('serviceusage.services.use')
+  );
+}
+
 async function googleFetch(accessToken: string, url: string, init: RequestInit = {}, quotaProjectId?: string): Promise<any> {
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      ...(init.headers ?? {}),
-      Authorization: `Bearer ${accessToken}`,
-      'content-type': 'application/json',
-      // 指定しないと、URLパスのproject指定に関わらずクォータ/有効化チェックが
-      // 「このOAuthクライアントの持ち主のプロジェクト」に対して行われることがある
-      // (identitytoolkit.googleapis.comで実際に発生した: SERVICE_DISABLEDが
-      //  対象プロジェクトではなく別のプロジェクト番号で返ってきた)。
-      ...(quotaProjectId ? { 'x-goog-user-project': quotaProjectId } : {}),
-    },
-  });
-  const data = await res.json().catch(() => ({}));
+  // quotaProjectId を指定すると、URLパスのproject指定に関わらず行われがちな
+  // 「このOAuthクライアントの持ち主のプロジェクトに対するクォータ/有効化チェック」を
+  // 操作対象のプロジェクトに向け直せる(identitytoolkit.googleapis.comで実際に必要だった)。
+  //
+  // ただしこのヘッダーは万能ではなく、指定先のプロジェクトが「存在し、かつ呼び出す対象の
+  // APIが有効」でないと逆に失敗する。作りたてのプロジェクトはこの条件を満たさないので、
+  // ヘッダーが原因で弾かれたと判断できる場合に限り、ヘッダー無しで一度だけやり直す。
+  const attempt = async (withQuotaProject: boolean) => {
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        ...(init.headers ?? {}),
+        Authorization: `Bearer ${accessToken}`,
+        'content-type': 'application/json',
+        ...(withQuotaProject && quotaProjectId ? { 'x-goog-user-project': quotaProjectId } : {}),
+      },
+    });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  };
+
+  let { res, data } = await attempt(true);
+  if (!res.ok && quotaProjectId && isQuotaProjectRejection(res.status, JSON.stringify(data))) {
+    ({ res, data } = await attempt(false));
+  }
   if (!res.ok) {
     throw new Error(`Google API エラー (${res.status}): ${JSON.stringify(data)}`);
   }
@@ -343,26 +364,56 @@ async function enableApi(accessToken: string, projectId: string, serviceName: st
   }
 }
 
-async function toolCreateFirebaseProject(env: Env, args: { displayName: string }): Promise<string> {
+async function toolCreateFirebaseProject(env: Env, args: { displayName: string; existingProjectId?: string }): Promise<string> {
   const accessToken = await getAccessToken(env);
+
+  // 既存のGoogle Cloudプロジェクトを指定された場合は、作成を飛ばしてFirebase有効化だけ行う。
+  // (プロジェクト作成には成功したのに後続処理で失敗した、といったときの復旧に使う)
+  if (args.existingProjectId) {
+    const projectId = args.existingProjectId;
+    try {
+      const addOp = await googleFetch(
+        accessToken,
+        `https://firebase.googleapis.com/v1beta1/projects/${projectId}:addFirebase`,
+        { method: 'POST', body: JSON.stringify({}) },
+      );
+      await waitForOperation(accessToken, addOp.name, 'firebase.googleapis.com');
+    } catch (e: any) {
+      if (String(e.message).includes('ALREADY_EXISTS')) {
+        return `プロジェクト ${projectId} では既にFirebaseが有効になっています(何もしませんでした)。`;
+      }
+      throw e;
+    }
+    return (
+      `既存のGoogle CloudプロジェクトでFirebaseを有効化しました。\n` +
+      `- projectId: ${projectId}\n` +
+      `- コンソール: https://console.firebase.google.com/project/${projectId}/overview`
+    );
+  }
+
   const projectId = slugifyProjectId(args.displayName);
 
   // ① Google Cloud プロジェクトを新規作成(あなた自身のOAuthトークンとして実行される。
   //    個人アカウントではサービスアカウントにこの操作を渡せないため、必ずこの経路を通る)
+  //
+  // ここから②までの一連の呼び出しでは quotaProjectId を渡してはいけない。
+  // X-Goog-User-Project に指定するプロジェクトは「既に存在し、かつ呼び出す対象のAPIが
+  // 有効になっている」必要があるが、作りかけの新規プロジェクトはどちらも満たさない。
+  // 満たさないまま渡すと Google は "Project 'projects/xxx' not found or deleted" を返す
+  // (プロジェクト自体は作成に成功しているのに、直後の完了待ちで失敗しているように見える)。
   const createOp = await googleFetch(accessToken, 'https://cloudresourcemanager.googleapis.com/v1/projects', {
     method: 'POST',
     body: JSON.stringify({ projectId, name: args.displayName }),
   });
-  await waitForOperation(accessToken, createOp.name, 'cloudresourcemanager.googleapis.com', 25000, projectId);
+  await waitForOperation(accessToken, createOp.name, 'cloudresourcemanager.googleapis.com');
 
   // ② そのプロジェクトにFirebaseを有効化
   const addOp = await googleFetch(
     accessToken,
     `https://firebase.googleapis.com/v1beta1/projects/${projectId}:addFirebase`,
     { method: 'POST', body: JSON.stringify({}) },
-    projectId,
   );
-  await waitForOperation(accessToken, addOp.name, 'firebase.googleapis.com', 25000, projectId);
+  await waitForOperation(accessToken, addOp.name, 'firebase.googleapis.com');
 
   return (
     `Firebaseプロジェクトを作成しました。\n` +
@@ -371,6 +422,31 @@ async function toolCreateFirebaseProject(env: Env, args: { displayName: string }
     `- コンソール: https://console.firebase.google.com/project/${projectId}/overview\n\n` +
     `まだWebアプリの登録・Firestore/Authの設定は行っていません(このツールは「器を作る」ところまでです)。`
   );
+}
+
+async function toolListProjects(env: Env): Promise<string> {
+  const accessToken = await getAccessToken(env);
+  const data = await googleFetch(accessToken, 'https://cloudresourcemanager.googleapis.com/v1/projects?pageSize=200');
+  const projects: any[] = data.projects ?? [];
+
+  if (projects.length === 0) return 'プロジェクトが1つもありません。';
+
+  const active = projects.filter((p) => p.lifecycleState === 'ACTIVE');
+  const deleting = projects.filter((p) => p.lifecycleState === 'DELETE_REQUESTED');
+
+  const fmt = (p: any) => `- ${p.projectId}${p.name && p.name !== p.projectId ? ` (${p.name})` : ''}`;
+
+  let out = `Google Cloudプロジェクト一覧 (合計${projects.length}件)\n\n`;
+  out += `## 稼働中 (${active.length}件)\n${active.map(fmt).join('\n')}\n`;
+  if (deleting.length > 0) {
+    out +=
+      `\n## 削除待ち (${deleting.length}件)\n${deleting.map(fmt).join('\n')}\n` +
+      `\n※削除待ちのプロジェクトは、完全に消えるまでの30日間もプロジェクト数のクォータを消費し続けます。\n`;
+  }
+  out +=
+    `\nプロジェクト数には上限があり、上限に達すると新規作成が` +
+    `「exceeded your allotted project quota」エラーで失敗します。`;
+  return out;
 }
 
 async function toolCreateWebApp(env: Env, args: { projectId: string; displayName: string }): Promise<string> {
@@ -501,14 +577,28 @@ const TOOLS = [
     name: 'create_firebase_project',
     description:
       '新しいGoogle CloudプロジェクトをFirebase対応で作成する。個人のGoogleアカウントの権限で実行される' +
-      '(あなたが/oauth/startで一度連携ずみであることが前提)。Webアプリ登録やFirestore設定はまだ行わない。',
+      '(あなたが/oauth/startで一度連携ずみであることが前提)。Webアプリ登録やFirestore設定はまだ行わない。' +
+      'existingProjectIdを指定した場合は新規作成せず、その既存プロジェクトにFirebaseを有効化するだけになる' +
+      '(プロジェクトは作成できたが後続処理で失敗した、といったときの復旧用)。',
     inputSchema: {
       type: 'object',
       properties: {
         displayName: { type: 'string', description: '人間が読むためのプロジェクト表示名(例: 小4算数ゲーム-角度編)' },
+        existingProjectId: {
+          type: 'string',
+          description:
+            '省略推奨。既にあるGoogle CloudプロジェクトにFirebaseを有効化するだけにしたい場合のみ、そのプロジェクトIDを指定する。',
+        },
       },
       required: ['displayName'],
     },
+  },
+  {
+    name: 'list_projects',
+    description:
+      'このGoogleアカウントのGoogle Cloudプロジェクト一覧を取得する(読み取りのみ、何も変更しない)。' +
+      'プロジェクト数のクォータ上限に達したとき、何が残っているか・どれが削除待ちかを確認するのに使う。',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'create_web_app',
@@ -637,6 +727,10 @@ async function handleMcp(request: Request, env: Env): Promise<Response> {
     try {
       if (toolName === 'create_firebase_project') {
         const text = await toolCreateFirebaseProject(env, args);
+        return json(rpcResult(id, { content: [{ type: 'text', text }] }));
+      }
+      if (toolName === 'list_projects') {
+        const text = await toolListProjects(env);
         return json(rpcResult(id, { content: [{ type: 'text', text }] }));
       }
       if (toolName === 'create_web_app') {
