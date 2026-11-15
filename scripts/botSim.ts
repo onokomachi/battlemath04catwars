@@ -9,10 +9,10 @@ import { SimRunner, CommandProvider } from '../catwars/sim/runner';
 import { buildSimConfig, ResolvedBuffs } from '../catwars/sim/setup';
 import { SimCommand, TICK_MS, TICKS_PER_SEC } from '../catwars/sim/types';
 import {
-  CAMPAIGN, ChapterDifficulty, QUIZ_BASE_REWARD, ChapterTier, tierDifficulty, withThreat, threatLevel, chapterBaseLevel,
+  CAMPAIGN, ChapterDifficulty, QUIZ_BASE_REWARD, ChapterTier, tierDifficulty, withThreat, threatMultFor, chapterBaseLevel,
 } from '../catwars/data/campaign';
 import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../catwars/data/battleMaps';
-import { stageForLevel } from '../catwars/data/characters';
+import { facilityMult } from '../catwars/data/facilities';
 import { BuildingType } from '../catwars/types';
 import { DetRNG } from '../catwars/sim/rng';
 
@@ -53,24 +53,23 @@ export const NO_SOLVE_SKILL: Skill = { label: 'とかない', accuracy: 0, maxPr
 export const NORMAL_SKILL: Skill = SKILL_LEVELS[1];
 export const WEAK_SKILL: Skill = SKILL_LEVELS[2];
 
-// ── 章ごとの「そこに着いた子が普通に持っているもの」 ────────────────────
+// ── 章ごとの「そこに着いた子が普通に持っているもの」（2026-11-15 CW-4a で作りなおした）────────────
 //
-// キャンペーンは第1章から順に進むので、第8章に来た子は必ず第7章までを
-// クリアしている＝進化もバフも拠点も持っている。全章を「素の状態」で
-// 測ると、終盤の難易度を実際より厳しく見積もってしまう。
-//
-// ・進化: クリア報酬💠がたまるにつれ、よく使う系統から stage2 にしていく
-// ・拠点: 第3章あたりで砲台を1つ建てられるようになり、少しずつ増える
-// ・バフ: デイリー配布なので日によってブレる。ここでは控えめに見積もる
-//   （Lomas et al. 2013 の「教育ゲームは易しめが最適」に合わせ、
-//     見積もりを甘くして難易度を上げすぎないようにする）
-
-export type Stages = Record<string, 1 | 2 | 3>;
+// 手持ちのレベル＝その章・その段の めやす（chapterBaseLevel）。レベルは levelMult で少しずつ強くなる。
+// 施設：持ちつづける形（data/facilities.ts）。戦闘に出せるのは その日に動かせる数まで（2 + まちがえずに解いた数÷5）。
+//   1日に数戦して 10問ほど まちがえずに解いた子を想定し、コアのほか 4つまで（BASE_MID）。
+//   施設のレベルは scripts/progressionSim.ts の進み方から（エンジョイ勢が4週間で Lv4・トップ層は げきむず のころ Lv7〜9）。
+// バフ：デイリー配布なので日によってブレる。ここでは控えめに見積もる（Lomas et al. 2013 の「易しめが最適」）。
+// 出撃の5枠：近接・遠距離・タンク・爆発・魔法（空中・盾持ちに とどく 遠距離・魔法を ふくむ。章の画面で すすめている形）。
 
 export interface Loadout {
-  stages: Stages;
+  /** 系統ID → レベル */
+  levels: Record<string, number>;
   buffs: ResolvedBuffs;
-  buildings: { type: BuildingType; x: number; y: number }[];
+  /** mult＝施設のレベルの倍率 */
+  buildings: { type: BuildingType; x: number; y: number; mult?: number }[];
+  /** 出撃の5枠（この外の系統は出せない） */
+  formation: string[];
 }
 
 const CORE_ONLY = [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }];
@@ -86,50 +85,48 @@ const BASE_MID = [
   { type: BuildingType.WALL, x: 3, y: 8 },
 ];
 
-const s2 = (...ids: string[]): Stages =>
-  Object.fromEntries(ids.map(id => [id, 2 as const]));
+/** 想定の出撃の5枠（ボットが使う系統。ほかの系統は5枠の外なので出せない） */
+export const BOT_FORMATION = ['barbarian', 'archer', 'giant', 'bomber', 'magic'];
 
-/** 章番号(1起算) → その章に着いた時点の想定装備 */
-export const LOADOUT_BY_CHAPTER: Record<number, Loadout> = {
-  1: { stages: {}, buffs: { values: {} }, buildings: CORE_ONLY },
-  2: { stages: {}, buffs: { values: {} }, buildings: CORE_ONLY },
-  3: { stages: s2('barbarian'), buffs: { values: {} }, buildings: BASE_SMALL },
-  4: { stages: s2('barbarian', 'archer'), buffs: { values: {} }, buildings: BASE_SMALL },
-  5: { stages: s2('barbarian', 'archer', 'giant'), buffs: { values: {} }, buildings: BASE_MID },
-  6: {
-    stages: s2('barbarian', 'archer', 'giant', 'bomber'),
-    buffs: { values: { POWER_BOOST: 10 } },
-    buildings: BASE_MID,
-  },
-  7: {
-    stages: s2('barbarian', 'archer', 'giant', 'bomber', 'speed'),
-    buffs: { values: { POWER_BOOST: 15 } },
-    buildings: BASE_MID,
-  },
-  8: {
-    stages: s2('barbarian', 'archer', 'giant', 'bomber', 'speed', 'boss_artillery'),
-    buffs: { values: { POWER_BOOST: 15, GENIUS_COMMANDER: 10 } },
-    buildings: BASE_MID,
-  },
-};
+const ALL_FAMILIES = ['barbarian', 'archer', 'giant', 'bomber', 'magic', 'speed', 'flying', 'healer'];
+
+/** 章・段ごとの 施設のレベル（progressionSim の進み方から） */
+function facilityLevelFor(chNo: number, tier: ChapterTier): number {
+  if (tier === 'hard') return 5;
+  if (tier === 'extreme') return 7;
+  return 1 + Math.floor((chNo - 1) / 2);
+}
 
 /**
- * むずかしい・げきむず に来た子の想定装備：手持ちのレベルが「章の基準＋段のぶん」（chapterBaseLevel）まで育っている。
- * plusLevel は、そこからさらに育てた分（脅威レベルの試験で使う）。
+ * 手持ちのレベルが level の子の想定装備（章・段で 施設とバフを決める）。
+ * 章ごとの想定装備も、脅威レベルの試験（めやす＋20）も、これ1つで作る。
  */
-const MAIN_FAMILIES = ['barbarian', 'archer', 'giant', 'bomber', 'magic', 'speed', 'flying', 'healer'];
-export function loadoutForLevel(level: number): Loadout {
-  const st = stageForLevel(Math.max(1, Math.round(level)));
+export function loadoutForLevel(level: number, chNo = 8, tier: ChapterTier = 'normal'): Loadout {
+  const lv = Math.max(1, Math.round(level));
+  const buffs: Record<string, number> =
+    tier !== 'normal' || chNo >= 8 ? { POWER_BOOST: 15, GENIUS_COMMANDER: 10 }
+    : chNo >= 7 ? { POWER_BOOST: 15 }
+    : chNo >= 6 ? { POWER_BOOST: 10 }
+    : {};
+  const base = tier !== 'normal' || chNo >= 5 ? BASE_MID : chNo >= 3 ? BASE_SMALL : CORE_ONLY;
+  const fl = facilityLevelFor(chNo, tier);
   return {
-    stages: Object.fromEntries(MAIN_FAMILIES.map(id => [id, st])),
-    buffs: { values: { POWER_BOOST: 15, GENIUS_COMMANDER: 10 } },
-    buildings: BASE_MID,
+    levels: Object.fromEntries(ALL_FAMILIES.map(id => [id, lv])),
+    buffs: { values: buffs },
+    buildings: base.map(b => ({ ...b, mult: facilityMult(b.type, fl) })),
+    formation: BOT_FORMATION,
   };
+}
+
+/** その章・その段に着いた子の想定装備（手持ち＝めやすのレベル＋plus） */
+export function loadoutForChapter(chapterIndex: number, tier: ChapterTier = 'normal', plus = 0): Loadout {
+  const ch = CAMPAIGN[chapterIndex];
+  return loadoutForLevel(chapterBaseLevel(ch, tier) + plus, ch.no, tier);
 }
 
 /** 何も育てていない最悪ケース（ここでも詰まないかの下限チェック用） */
 export const BARE_LOADOUT: Loadout = {
-  stages: {}, buffs: { values: {} }, buildings: CORE_ONLY,
+  levels: {}, buffs: { values: {} }, buildings: CORE_ONLY, formation: BOT_FORMATION,
 };
 
 /**
@@ -255,18 +252,16 @@ export function playOnce(chapterIndex: number, seed: number, opts: PlayOptions =
   const tier = opts.tier ?? 'normal';
   const plus = opts.plusLevel ?? 0;
   const baseLevel = chapterBaseLevel(ch, tier);
-  const kit = opts.loadout
-    ?? (tier === 'normal' && plus === 0 ? LOADOUT_BY_CHAPTER[ch.no] : loadoutForLevel(baseLevel + plus))
-    ?? BARE_LOADOUT;
+  const kit = opts.loadout ?? loadoutForChapter(chapterIndex, tier, plus);
   const skill = opts.skill ?? NORMAL_SKILL;
-  const threat = opts.noThreat ? 0 : threatLevel(baseLevel + plus, baseLevel);
+  const threat = opts.noThreat ? 1 : threatMultFor(baseLevel + plus, baseLevel);
   const difficulty = withThreat(opts.difficulty ?? tierDifficulty(ch, tier), threat);
 
   const cfg = buildSimConfig({
     mode: 'PVE', seed, chapter: ch,
     difficulty,
     battleMap: map,
-    p1: { stages: kit.stages, buffs: kit.buffs },
+    p1: { levels: kit.levels, buffs: kit.buffs, formation: kit.formation },
   });
   const runner = new SimRunner(cfg, {
     defenderBuildings: tierEnemyBase(map, tier),

@@ -15,6 +15,9 @@ import {
   CAMPAIGN, ENEMY_UNIT_STATS, EnemyUnitKind, GUARD_MAGIC_MULT, GUARD_PHYSICAL_MULT, MEDIC_HEAL_PCT,
   SHIELD_DAMAGE_MULT, tierDifficulty,
 } from '../catwars/data/campaign';
+import { levelMult, CHARACTER_BY_ID } from '../catwars/data/characters';
+import { facilityMult } from '../catwars/data/facilities';
+import { BUILDING_STATS as BSTATS } from '../catwars/constants';
 import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../catwars/data/battleMaps';
 import type { BattleEntity } from '../catwars/types';
 import { BuildingType } from '../catwars/types';
@@ -48,7 +51,7 @@ function makeSetup(chapterIndex = CHAPTER_INDEX, seed = 424242) {
   const map = BATTLE_MAP_BY_ID[ch.mapId];
   const cfg = buildSimConfig({
     mode: 'PVE', seed, chapter: ch, difficulty: SIM_TEST_DIFFICULTY(ch.difficulty), battleMap: map,
-    p1: { stages: { barbarian: 2, giant: 2 }, buffs: { values: { POWER_BOOST: 10, HEAL_AURA: 5 } } },
+    p1: { levels: { barbarian: 10, giant: 10 }, buffs: { values: { POWER_BOOST: 10, HEAL_AURA: 5 } } },
   });
   const init = {
     defenderBuildings: map.enemyBase,
@@ -317,12 +320,12 @@ console.log('\n[6] PvP対戦セットアップ（ホストとゲストが同じ�
     seed: 3141592653,
     mapId: 'pvp-mirror',
     host: {
-      name: 'ホスト', stages: { barbarian: 2 as const }, buffs: { POWER_BOOST: 10 },
+      name: 'ホスト', levels: { barbarian: 10 }, buffs: { POWER_BOOST: 10 },
       base: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }, { type: BuildingType.CANNON, x: 3, y: 4 }],
       spells: { HEAL: 2, RAGE: 2 },
     },
     guest: {
-      name: 'ゲスト', stages: { archer: 3 as const }, buffs: { SWIFT_ARMY: 8 },
+      name: 'ゲスト', levels: { archer: 30 }, buffs: { SWIFT_ARMY: 8 },
       base: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }, { type: BuildingType.CANNON, x: 2, y: 11 }],
       spells: { HEAL: 2, RAGE: 2 },
     },
@@ -335,8 +338,8 @@ console.log('\n[6] PvP対戦セットアップ（ホストとゲストが同じ�
       mode: 'PVP', seed: roomDoc.seed,
       chapter: { enemyName: roomDoc.guest.name },
       difficulty: PVP_DIFFICULTY, battleMap: map,
-      p1: { stages: roomDoc.host.stages, buffs: { values: roomDoc.host.buffs } },
-      p2: { stages: roomDoc.guest.stages, buffs: { values: roomDoc.guest.buffs } },
+      p1: { levels: roomDoc.host.levels, buffs: { values: roomDoc.host.buffs } },
+      p2: { levels: roomDoc.guest.levels, buffs: { values: roomDoc.guest.buffs } },
     });
     const widthOf = (t: BuildingType) => BUILDING_STATS[t].width;
     return {
@@ -419,7 +422,7 @@ console.log('\n[7] 新しい敵のきまり（盾持ち・空中・自爆・回�
       mode: 'PVE', seed: 99, chapter: ch,
       difficulty: { ...ch.difficulty, firstSpawnDelayMs: 99999999, enemyHpMult: 1, enemyDamageMult: 1, startEnergy: 0, energyPerSec: 0 },
       battleMap: map,
-      p1: { stages: {}, buffs: { values: {} } },
+      p1: { levels: {}, buffs: { values: {} } },
     });
     const runner = new SimRunner(cfg, {
       defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
@@ -551,7 +554,7 @@ console.log('\n[8] げきむず（新しい敵・ボスのシールド・足し�
     const d = tierDifficulty(ch, 'extreme');
     const cfg = buildSimConfig({
       mode: 'PVE', seed, chapter: ch, difficulty: SIM_TEST_DIFFICULTY({ ...d, bossAtSpawnCount: 6 }), battleMap: map,
-      p1: { stages: { barbarian: 2, archer: 2, magic: 2 }, buffs: { values: {} } },
+      p1: { levels: { barbarian: 10, archer: 10, magic: 10 }, buffs: { values: {} } },
     });
     const runner = new SimRunner(cfg, {
       defenderBuildings: tierEnemyBase(map, 'extreme'),
@@ -578,6 +581,93 @@ console.log('\n[8] げきむず（新しい敵・ボスのシールド・足し�
   check('新しい敵が出ている（試験が意味を持っている）',
     ['guard', 'medic', 'kamikaze', 'flyer'].filter(k => a.sawKinds.has(k)).length >= 3, [...a.sawKinds].join(','));
   check('シールドつきのボスが出ている', a.sawShield);
+}
+
+// ── テスト9: 育ち方・施設のレベル・自爆のダメージ・出撃の5枠（2026-11-15 CW-4a）─────────────
+
+console.log('\n[9] レベルの倍率・施設のレベル・自爆ロボのダメージ・5枠の外は出せない');
+{
+  const ch = CAMPAIGN[0];
+  const map = BATTLE_MAP_BY_ID[ch.mapId];
+  const cfgFor = (levels: Record<string, number>, formation?: string[]) => buildSimConfig({
+    mode: 'PVE', seed: 7, chapter: ch,
+    difficulty: { ...ch.difficulty, firstSpawnDelayMs: 99999999, enemyHpMult: 1, enemyDamageMult: 1, startEnergy: 5000, energyPerSec: 0 },
+    battleMap: map, p1: { levels, buffs: { values: {} }, formation },
+  });
+
+  // levelMult：Lv1=1・Lv10≒1.32・Lv30≒2.0・Lv60≒3.07。sim の表にそのまま効く
+  check('levelMult：Lv10≒1.32・Lv30≒2.0・Lv60≒3.07',
+    Math.abs(levelMult(10) - 1.315) < 0.001 && Math.abs(levelMult(30) - 2.015) < 0.001 && Math.abs(levelMult(60) - 3.065) < 0.001,
+    `${levelMult(10).toFixed(3)} / ${levelMult(30).toFixed(3)} / ${levelMult(60).toFixed(3)}`);
+  const c1 = cfgFor({}), c30 = cfgFor({ barbarian: 30 });
+  const b = CHARACTER_BY_ID.barbarian.base;
+  check('レベルが sim のHP・こうげきに効く（Lv30 の近接系）',
+    c1.unitStats.P1.barbarian.hp === b.hp && c30.unitStats.P1.barbarian.hp === Math.round(b.hp * levelMult(30))
+    && c30.unitStats.P1.barbarian.damage === Math.round(b.damage * levelMult(30)),
+    `HP ${c1.unitStats.P1.barbarian.hp} → ${c30.unitStats.P1.barbarian.hp}`);
+  check('レベルは1ずつ少しずつ（Lv9→Lv10 で段差がない）',
+    cfgFor({ barbarian: 10 }).unitStats.P1.barbarian.hp - cfgFor({ barbarian: 9 }).unitStats.P1.barbarian.hp <= 3);
+
+  // 施設のレベル：SimInit の playerBuildings の mult が HP・こうげきに効く
+  {
+    const mk = (mult?: number) => new SimRunner(c1, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 13, mult }, { type: BuildingType.CANNON, x: 3, y: 4, mult }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    const m5 = facilityMult(BuildingType.CANNON, 5);
+    const a = mk(), z = mk(m5);
+    const core = (r: SimRunner) => r.state.entities.find(e => e.team === 'ATTACKER_BUILDING' && e.subType === BuildingType.TOWN_HALL)!;
+    const cannon = (r: SimRunner) => r.state.entities.find(e => e.team === 'ATTACKER_BUILDING' && e.subType === BuildingType.CANNON)!;
+    check('施設のレベル：Lv5（×1.4）でコアと砲台のHP・こうげきが上がる',
+      core(a).maxHp === BSTATS[BuildingType.TOWN_HALL].hp && core(z).maxHp === Math.round(BSTATS[BuildingType.TOWN_HALL].hp * m5)
+      && cannon(z).damage === Math.round((BSTATS[BuildingType.CANNON].damage ?? 0) * m5),
+      `コア ${core(a).maxHp} → ${core(z).maxHp}・砲台 こうげき ${cannon(a).damage} → ${cannon(z).damage}`);
+  }
+
+  // 自爆ロボ：1回のダメージは ENEMY_UNIT_STATS.kamikaze.damage のまま（ネコの ぼむにゃー の ×4 が掛からない）
+  {
+    const r = new SimRunner(c1, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 13 }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    r.state.started = true;
+    const st = ENEMY_UNIT_STATS.kamikaze;
+    r.state.entities.push({
+      id: 'zz-k', type: 'TROOP', subType: st.subType, x: 6, y: 13, hp: st.hp, maxHp: st.hp, damage: st.damage,
+      team: 'DEFENDER', kind: 'kamikaze', attackRange: st.attackRange, attackSpeed: st.attackSpeed,
+      lastAttack: -999999, moveSpeed: st.moveSpeed, targetPreference: 'ANY', path: [],
+    });
+    const core = r.state.entities.find(e => e.team === 'ATTACKER_BUILDING')!;
+    const hp0 = core.hp;
+    for (let i = 0; i < 160 && core.hp === hp0; i++) r.advance(TICK_MS, new TickScript(new Map()));
+    const lost = hp0 - core.hp;
+    check('自爆ロボ：ダメージは 1倍（4倍になっていない）', Math.abs(lost - st.damage) < 0.01, `コアが ${lost.toFixed(0)} へった（もと ${st.damage}）`);
+    check('自爆ロボ：1回で コアの最大HPの 約2割', lost / core.maxHp >= 0.15 && lost / core.maxHp <= 0.25, `${((lost / core.maxHp) * 100).toFixed(0)}%`);
+  }
+
+  // 5枠：表に入るのは5枠の系統だけ。外の系統は DEPLOY しても出ない（sim の中で止める）
+  {
+    const form = ['barbarian', 'archer', 'giant', 'bomber', 'magic'];
+    const cfg = cfgFor({}, form);
+    check('5枠：sim の表には 5枠の系統だけ', Object.keys(cfg.unitStats.P1).sort().join(',') === [...form].sort().join(','),
+      Object.keys(cfg.unitStats.P1).join(','));
+    const r = new SimRunner(cfg, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    const zone = r.statics.deployZones.P1!;
+    const x = zone.xMax, y = zone.yMin + 1;
+    r.advance(TICK_MS, new TickScript(new Map([[1, [
+      { type: 'DEPLOY', player: 'P1', troopId: 'flying', x, y },
+      { type: 'DEPLOY', player: 'P1', troopId: 'barbarian', x, y: y + 2 },
+    ]]])));
+    const mine = r.state.entities.filter(e => e.team === 'ATTACKER');
+    check('5枠：外の系統（飛行系）は DEPLOY しても出ない・中の系統（近接系）は出る',
+      !mine.some(e => e.subType === 'flying') && mine.some(e => e.subType === 'barbarian'), mine.map(e => e.subType).join(','));
+  }
 }
 
 console.log(failures === 0
