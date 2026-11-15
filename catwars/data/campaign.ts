@@ -183,7 +183,7 @@ export interface ChapterDifficulty {
   bossAtSpawnCount?: number;
   /** 戦闘開始時に持っている⚡ */
   startEnergy: number;
-  /** ⚡の自然回復（毎秒） */
+  /** ⚡の自然回復（毎秒）。キャンペーンでは 0（問題を解いて手に入れる） */
   energyPerSec: number;
 }
 
@@ -210,6 +210,15 @@ export interface CampaignChapter {
   rewardCredits: number;
 }
 
+/**
+ * 戦闘のエナジー（2026-11-15 持ち主と決めた）：**自動ではたまらない。問題を解いて手に入れる。**
+ * 前は 毎秒7.5〜9.0 の自動収入があり、エナジーの7〜8割が「待つだけ」で入っていた（解かずに勝てる章もあった）。
+ * はじめに持っているのは、基本のネコ2回ぶん（何もできずに止まらないように）。あとは問題（QUIZ_BASE_REWARD）と、敵をたおした分だけ。
+ */
+export const PLAYER_START_ENERGY = 60;
+/** むずかしさ3の問題を、まちがえずに解いたときのエナジー（むずかしさ・連続正解で 0.75〜2.9倍） */
+export const QUIZ_BASE_REWARD = 150;
+
 export const CAMPAIGN: CampaignChapter[] = [
   {
     id: 'ch1', no: 1,
@@ -218,7 +227,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     enemyTitle: 'ノラボット隊 隊長',
     background: '宇宙にすてられたガラクタが集まって生まれたロボネコ。ひろった部品を勝手に組み立てて、月のはずれに小さな基地をつくってしまった。',
     briefing: 'まもりの設備はまだ無い。ネコを出して、まっすぐコアをこわそう。',
-    hint: '⚡がへったら「📚といて⚡」で問題をとくと、すぐに補給できるよ。',
+    hint: '⚡は じぶんでは たまらないよ。左下の 問題カードを といて ⚡ を 手に入れよう。むずかしい カードほど ⚡ が 多い！',
     victoryLine: 'ガラクタ隊長はバラバラになって逃げていった。宇宙への第一歩だ！',
     defeatLine: 'つぎはもっとたくさんネコを出してみよう。',
     mapId: 'map-outpost',
@@ -227,7 +236,7 @@ export const CAMPAIGN: CampaignChapter[] = [
       defenseDamageMult: 0.6, defenseHpMult: 0.7,
       firstSpawnDelayMs: 8000, enemySpawnRatePerSec: 9.7,
       unitPool: ['grunt'],
-      startEnergy: 260, energyPerSec: 7.5,
+      startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
     rewardCredits: 300,
   },
@@ -245,9 +254,9 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 0.8, enemyDamageMult: 0.7,
       defenseDamageMult: 0.7, defenseHpMult: 0.8,
-      firstSpawnDelayMs: 7500, enemySpawnRatePerSec: 10.7,
+      firstSpawnDelayMs: 7500, enemySpawnRatePerSec: 6.6,
       unitPool: ['grunt', 'shooter'],
-      startEnergy: 250, energyPerSec: 7.7,
+      startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
     rewardCredits: 380,
   },
@@ -265,9 +274,9 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 0.9, enemyDamageMult: 0.85,
       defenseDamageMult: 0.8, defenseHpMult: 0.9,
-      firstSpawnDelayMs: 7000, enemySpawnRatePerSec: 19.1,
+      firstSpawnDelayMs: 7000, enemySpawnRatePerSec: 8.2,
       unitPool: ['grunt', 'shooter'],
-      startEnergy: 240, energyPerSec: 8.0,
+      startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
     rewardCredits: 460,
   },
@@ -285,9 +294,9 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.0, enemyDamageMult: 0.95,
       defenseDamageMult: 0.9, defenseHpMult: 1.0,
-      firstSpawnDelayMs: 6500, enemySpawnRatePerSec: 17.8,
+      firstSpawnDelayMs: 6500, enemySpawnRatePerSec: 5.3,
       unitPool: ['grunt', 'shooter', 'runner'],
-      startEnergy: 230, energyPerSec: 8.2,
+      startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
     rewardCredits: 550,
   },
@@ -305,9 +314,9 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.05, enemyDamageMult: 1.0,
       defenseDamageMult: 1.0, defenseHpMult: 1.05,
-      firstSpawnDelayMs: 6000, enemySpawnRatePerSec: 16.4,
+      firstSpawnDelayMs: 6000, enemySpawnRatePerSec: 6.3,
       unitPool: ['grunt', 'shooter', 'runner'],
-      startEnergy: 220, energyPerSec: 8.4,
+      startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
     rewardCredits: 650,
   },
@@ -325,9 +334,9 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.1, enemyDamageMult: 1.05,
       defenseDamageMult: 1.1, defenseHpMult: 1.1,
-      firstSpawnDelayMs: 5500, enemySpawnRatePerSec: 14.4,
+      firstSpawnDelayMs: 5500, enemySpawnRatePerSec: 5.6,
       unitPool: ['grunt', 'shooter', 'brute'],
-      startEnergy: 215, energyPerSec: 8.6,
+      startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
     rewardCredits: 780,
   },
@@ -345,9 +354,9 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.2, enemyDamageMult: 1.15,
       defenseDamageMult: 1.2, defenseHpMult: 1.15,
-      firstSpawnDelayMs: 5000, enemySpawnRatePerSec: 15.4,
+      firstSpawnDelayMs: 5000, enemySpawnRatePerSec: 4.9,
       unitPool: ['grunt', 'shooter', 'runner', 'flyer'],
-      startEnergy: 210, energyPerSec: 8.8,
+      startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
     rewardCredits: 920,
   },
@@ -366,7 +375,7 @@ export const CAMPAIGN: CampaignChapter[] = [
       enemyHpMult: 1.3, enemyDamageMult: 1.2,
       // 防衛施設が最多の章なので、HP倍率は上げない（威力だけで難しさを出す）
       defenseDamageMult: 1.3, defenseHpMult: 1.0,
-      firstSpawnDelayMs: 4500, enemySpawnRatePerSec: 12.1,
+      firstSpawnDelayMs: 4500, enemySpawnRatePerSec: 3.6,
       unitPool: ['grunt', 'shooter', 'brute', 'flyer'],
       // 増援ペースを上げるたびに、体数で指定したボス出現がどんどん早まる
       // （旧: 10秒間隔×9体=約90秒 → 2秒間隔×9体=約20秒 → 1.4秒間隔×45体=約68秒）。
@@ -374,7 +383,7 @@ export const CAMPAIGN: CampaignChapter[] = [
       // 現在のペース（施設健在で1.41秒/体）なら 4.5秒 + 70体 ≒ 開始103秒。
       // 生産施設をこわして増援を止めるほどボスも遅れて来る＝攻略のごほうびになる。
       bossAtSpawnCount: 70,
-      startEnergy: 210, energyPerSec: 9.0,
+      startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
     rewardCredits: 1200,
   },

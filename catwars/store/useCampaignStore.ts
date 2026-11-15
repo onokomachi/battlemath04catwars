@@ -9,6 +9,8 @@ interface CampaignStore {
   lossStreak: Record<string, number>;
   /** 章IDごとの挑戦回数（記録・分析用） */
   attempts: Record<string, number>;
+  /** 章IDごとの星（1〜3。いちばんよかったとき）。まちがえずに解けた割合で決まる */
+  stars: Record<string, 1 | 2 | 3>;
   /** 最後に選んだ章（つづきから遊べるように） */
   lastChapterId: string;
 
@@ -16,7 +18,7 @@ interface CampaignStore {
   isCleared: (chapterId: string) => boolean;
   assistLevelFor: (chapterId: string) => 0 | 1 | 2;
   recordAttempt: (chapterId: string) => void;
-  recordResult: (chapterId: string, win: boolean) => void;
+  recordResult: (chapterId: string, win: boolean, stars?: 1 | 2 | 3) => void;
   /** まだクリアしていない最初の章（全クリアなら最終章） */
   nextChapterId: () => string;
   setLastChapter: (chapterId: string) => void;
@@ -29,6 +31,7 @@ export const useCampaignStore = create<CampaignStore>()(
       clearedChapters: [],
       lossStreak: {},
       attempts: {},
+      stars: {},
       lastChapterId: CAMPAIGN[0].id,
 
       // 第1章は常に開放。以降は「前の章をクリア」で開放（線形進行）。
@@ -49,8 +52,10 @@ export const useCampaignStore = create<CampaignStore>()(
           lastChapterId: chapterId,
         })),
 
-      recordResult: (chapterId, win) =>
+      recordResult: (chapterId, win, stars) =>
         set(s => ({
+          stars: win && stars && stars > (s.stars?.[chapterId] ?? 0)
+            ? { ...(s.stars ?? {}), [chapterId]: stars } : (s.stars ?? {}),
           clearedChapters: win && !s.clearedChapters.includes(chapterId)
             ? [...s.clearedChapters, chapterId]
             : s.clearedChapters,
@@ -66,7 +71,7 @@ export const useCampaignStore = create<CampaignStore>()(
 
       setLastChapter: (chapterId) => set({ lastChapterId: chapterId }),
 
-      reset: () => set({ clearedChapters: [], lossStreak: {}, attempts: {}, lastChapterId: CAMPAIGN[0].id }),
+      reset: () => set({ clearedChapters: [], lossStreak: {}, attempts: {}, stars: {}, lastChapterId: CAMPAIGN[0].id }),
     }),
     { name: 'catwars-campaign' }
   )

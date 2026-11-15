@@ -64,10 +64,10 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleEndBattle = (win: boolean, loot: { gold: number }) => {
+  const handleEndBattle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
     if (win) addResources(Math.round(loot.gold));
     // 章の結果を記録（勝敗で連敗数が更新され、サポートモードの判定に反映される）
-    campaign.recordResult(activeChapterId, win);
+    campaign.recordResult(activeChapterId, win, stars);
     setView('home');
   };
 

@@ -20,13 +20,17 @@ npm run test:balance   # 全章の勝率（数値を変えたら流す）
 - `catwars/learn/gradePack.ts` … **学年パック**（単元 → 出せる問題）。ゲーム本体はここだけを見る。5年・6年はパックを足す
 - `catwars/learn/AppRoundHost.tsx` … 単元アプリの解答画面を「白い紙」（`.app-paper`。`index.css`）の上に出す
 - `apps/` … 単元アプリの問題の作り方と解答画面の写し（SANMON の `apps/` と同じもの）
+- `docs/REBUILD_SPEC.md` … **作り直しの仕様（決めたこと・数値・合格条件）。実装の前に読む**
+- `catwars/components/game/ProblemCards.tsx` … 問題カード（戦闘の主役の操作）と星の決め方
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
 ## 必ず守ること
 - **問題は SOL の単元アプリと同じ問題・同じ答え方にする。** `apps/` は手で直さない。直すときは 単元アプリ → SANMON（`npm run sync-apps`）→ ここ（`node scripts/sync-apps-from-sanmon.mjs`）。
 - **判定は1回目のまちがいで×**（SANMON と同じ）。まちがえても罰はなく、ヒントで最後まで解ける。
 - **記録の名前は単元アプリの skill_id**（`PackRound.skillId`）。前に何かを足さない。
-- **解かずに勝てる作りに戻さない。** 数値を変えたら `npm run test:balance`（問題を解かない想定プレイヤーが勝てないこと・解くプレイヤーの勝率が目標どおりであること）。
+- **解かずに勝てる作りに戻さない。** 戦闘のエナジーは自動ではたまらない（`energyPerSec: 0`）。問題カードを解いて手に入れる。
+  数値を変えたら `npm run test:balance`（解かない想定プレイヤーが全章で0%・ふつうが勝つまでに解く問題が平均18問以下、でないと exit 1。全章で約10分かかるので `RUNS=12` や `CH=3` でしぼれる）。
+- **速さを報酬にしない。** 星と報酬は「まちがえずに解けたか」で決める。
 - 戦闘の計算（`catwars/sim/`）は決定的に保つ（乱数は `sim/rng.ts`。`Math.random` を使わない）。対戦を作り直すときに要る。
 - 他社ゲームの固有名（タウンホール・エリクサー・バーバリアンなど）を新しく足さない。残っているものは独自の名前に置きかえる。
 - `window.confirm()` / `alert()` を使わない（iPad で出ないことがある）。

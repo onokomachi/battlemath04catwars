@@ -17,7 +17,7 @@ interface Props {
   onStart: (chapterId: string) => void;
 }
 
-/** 章の相対的な手ごわさ（★1〜5）。防衛威力と敵の強さから機械的に出す。 */
+/** 章の相対的な手ごわさ（◆1〜5）。★は「とった星」に使うので、手ごわさは ◆ で出す。防衛威力と敵の強さから機械的に出す。 */
 const toughnessStars = (ch: CampaignChapter): number => {
   const d = ch.difficulty;
   const raw = d.defenseDamageMult * 0.6 + d.enemyDamageMult * 0.4;
@@ -30,7 +30,8 @@ const toughnessStars = (ch: CampaignChapter): number => {
  * 次の「陣地づくり」でその広さに合わせて陣地を組む。
  */
 export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart }) => {
-  const { clearedChapters, isUnlocked, assistLevelFor, nextChapterId } = useCampaignStore();
+  const campaign = useCampaignStore();
+  const { clearedChapters, isUnlocked, assistLevelFor, nextChapterId } = campaign;
   const baseStore = useBaseStore();
   const [selectedId, setSelectedId] = useState<string>(() => nextChapterId());
 
@@ -82,9 +83,18 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
             >
               <span className="text-[10px] text-white/50" style={fontMono}>第{ch.no}章</span>
               <span className="text-xl leading-none mt-0.5">{!open ? '🔒' : done ? '👑' : '⚔️'}</span>
-              <span className="text-[9px] mt-1" style={{ color: done ? '#a3e635' : '#f87171' }}>
-                {'★'.repeat(toughnessStars(ch))}
-              </span>
+              {done ? (
+                // とった星（まちがえずに解けた割合で決まる。★3まで なんどでも ちょうせんできる）
+                <span className="text-[11px] mt-1 leading-none" aria-label={`星 ${campaign.stars?.[ch.id] ?? 1}つ`}>
+                  {[1, 2, 3].map((n) => (
+                    <span key={n} style={{ color: n <= (campaign.stars?.[ch.id] ?? 1) ? '#facc15' : 'rgba(255,255,255,0.2)' }}>★</span>
+                  ))}
+                </span>
+              ) : (
+                <span className="text-[9px] mt-1" style={{ color: '#f87171' }}>
+                  {'◆'.repeat(toughnessStars(ch))}
+                </span>
+              )}
             </button>
           );
         })}
@@ -128,7 +138,7 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
             </span>
             <span className="px-2.5 py-1 rounded-full border text-[#f87171]"
               style={{ background: 'rgba(239,68,68,0.10)', borderColor: 'rgba(239,68,68,0.3)' }}>
-              手ごわさ {'★'.repeat(toughnessStars(selected))}
+              手ごわさ {'◆'.repeat(toughnessStars(selected))}
             </span>
             <span className="px-2.5 py-1 rounded-full border text-[#38bdf8]"
               style={{ background: 'rgba(56,189,248,0.10)', borderColor: 'rgba(56,189,248,0.3)' }}>

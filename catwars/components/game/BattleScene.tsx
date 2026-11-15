@@ -12,7 +12,8 @@ import { buildSimConfig } from '../../sim/setup';
 import { stateChecksum } from '../../sim/checksum';
 import { SimCommand, SimEvent, SimConfig, PlayerId, TICK_MS } from '../../sim/types';
 import type { LockstepSession, LockstepStatus } from '../../net/lockstep';
-import { InBattleQuiz } from './InBattleQuiz';
+import { ProblemCards, starsFor } from './ProblemCards';
+import { QUIZ_BASE_REWARD } from '../../data/campaign';
 import { grantStudyReward } from '../../bridge';
 import { sfx } from '../../utils/audioEngine';
 import { useProgressStore, BUFF_LEVEL_INFO } from '../../store/useProgressStore';
@@ -222,7 +223,8 @@ interface Props {
     init: SimInit;
     opponentName: string;
   };
-  onEndBattle: (win: boolean, loot: { gold: number }) => void;
+  /** stars＝勝ったときの星（1〜3。まちがえずに解けた割合で決まる） */
+  onEndBattle: (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => void;
 }
 
 export const BattleScene: React.FC<Props> = ({
@@ -265,6 +267,8 @@ export const BattleScene: React.FC<Props> = ({
   const [briefingOpen, setBriefingOpen] = useState(true);
   const [battlePaused, setBattlePaused] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
+  /** この戦闘で解いた問題の数・うち まちがえずに解けた数（星と結果の画面に使う） */
+  const quizStatsRef = useRef({ answered: 0, perfect: 0 });
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [damagedEntities, setDamagedEntities] = useState<Set<string>>(new Set());
   const [projectiles, setProjectiles] = useState<{ id: string; fromX: number; fromY: number; toX: number; toY: number; startedAt: number; duration: number; type: 'CANNON' | 'TESLA' }[]>([]);
@@ -744,43 +748,22 @@ export const BattleScene: React.FC<Props> = ({
           </div>
        </div>
 
-       {/* ④ 「といて⚡」を大きな浮かぶボタンにする。
-           絶対配置なのでレイアウトの高さを一切食わず、画面を圧迫しないまま
-           いちばん押してほしい行動をいちばん目立たせられる。
-           ⚡が少ないときは色と文言が変わり、「いま解くべき」ことが伝わる。 */}
-       {quizSubtopics.length > 0 && !battleResult && (() => {
-         const cheapest = runner.cfg.minTroopCost[localPlayer];
-         const poor = Math.floor(gold) < cheapest;
-         return (
-           <button
-             onClick={() => { setBattlePaused(true); setQuizOpen(true); }}
-             className="absolute z-[60] flex flex-col items-center justify-center rounded-full shadow-2xl active:scale-95 transition-transform"
-             style={{
-               // 右下はズーム操作(＋/−/リセット)が居るので、左下に置いて重なりを避ける
-               left: 16,
-               bottom: 150,
-               width: 92, height: 92,
-               background: poor
-                 ? 'radial-gradient(circle at 30% 25%, #fde68a, #f59e0b 70%)'
-                 : 'radial-gradient(circle at 30% 25%, #67e8f9, #0891b2 70%)',
-               border: `3px solid ${poor ? '#fff7ed' : '#a5f3fc'}`,
-               boxShadow: poor
-                 ? '0 0 26px rgba(245,158,11,0.85), 0 6px 18px rgba(0,0,0,0.55)'
-                 : '0 0 22px rgba(34,211,238,0.65), 0 6px 18px rgba(0,0,0,0.55)',
-               animation: poor ? 'cw-quiz-urgent 1s ease-in-out infinite' : 'cw-quiz-idle 2.6s ease-in-out infinite',
-             }}
-           >
-             <span className="text-3xl leading-none drop-shadow">📚</span>
-             <span className="text-[13px] font-black text-white leading-tight mt-0.5"
-               style={{ fontFamily: 'Orbitron, monospace', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
-               といて⚡
-             </span>
-             <span className="text-[9px] font-bold text-white/90 leading-none">
-               {poor ? 'エナジー不足！' : 'ためる'}
-             </span>
-           </button>
-         );
-       })()}
+       {/* 問題カード（戦闘の主役の操作）。エナジーは自動ではたまらず、カードを解いて手に入れる。
+           解いている間は戦闘を止める（対戦のときは止めない）。 */}
+       {quizSubtopics.length > 0 && !battleResult && !briefingOpen && (
+         <ProblemCards
+           unitKeys={quizSubtopics}
+           baseReward={QUIZ_BASE_REWARD}
+           poor={Math.floor(gold) < runner.cfg.minTroopCost[localPlayer]}
+           onOpenChange={(open) => { setQuizOpen(open); setBattlePaused(open); }}
+           onReward={(en) => issue({ type: 'GRANT_ENERGY', player: localPlayer, amount: en })}
+           onAnswered={(item, perfect) => {
+             quizStatsRef.current.answered += 1;
+             if (perfect) quizStatsRef.current.perfect += 1;
+             grantStudyReward(perfect, item.skillId, item.difficulty);
+           }}
+         />
+       )}
 
        {/* Temporary visual dynamic notification banner inside combat */}
        {triggerMessage && (
@@ -1399,8 +1382,9 @@ export const BattleScene: React.FC<Props> = ({
                  </div>
                  <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
                  <p className="text-sm text-gray-200 mb-4 leading-relaxed">{chapter.victoryLine}</p>
+                 <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} win />
                  <LevelUpSummary events={levelUps} />
-                 <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot)}>
+                 <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect))}>
                    戦利品を獲得して帰還 (💠{loot.gold} クレジット){hasBuff('DOUBLE_LOOT') && ' ×2!'}
                  </Button>
                </div>
@@ -1416,6 +1400,7 @@ export const BattleScene: React.FC<Props> = ({
                  <div className="text-[11px] text-[#a3e635] mb-3 leading-relaxed">
                    まけても部隊の経験値は手に入るよ。何回かまけると「サポートモード」で やさしくなるので、あきらめずにもう一回！
                  </div>
+                 <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" variant="secondary" onClick={() => onEndBattle(false, { gold: 0 })}>
                    村へ撤退する
@@ -1612,18 +1597,6 @@ export const BattleScene: React.FC<Props> = ({
 
        </div>
 
-       {/* 戦闘中クイズ（出撃前に選んだ範囲からランダム出題 → ⚡エナジー獲得）
-           ③ 報酬は問題の難易度・所要工程に応じて傾斜配分される（InBattleQuiz 側で算出）。 */}
-       {quizOpen && (
-         <InBattleQuiz
-           unitKeys={quizSubtopics}
-           baseReward={34}
-           onReward={(en) => issue({ type: 'GRANT_ENERGY', player: localPlayer, amount: en })}
-          onAnswered={(item, perfect) => grantStudyReward(perfect, item.skillId, item.difficulty)}
-           onClose={() => { setQuizOpen(false); setBattlePaused(false); }}
-         />
-       )}
-
        {/* 開戦ブリーフィング（②: 戦いのタイトル・敵の背景・作戦の一言） */}
        {briefingOpen && (
          <div className="absolute inset-0 z-[130] flex items-center justify-center p-4"
@@ -1678,6 +1651,28 @@ export const BattleScene: React.FC<Props> = ({
 };
 
 // 戦闘リザルトのレベルアップ/進化サマリー
+/** この戦闘で解いた問題のまとめ。勝ったときは星（まちがえずに解けた割合で決まる。速さでは決まらない） */
+const QuizSummary: React.FC<{ answered: number; perfect: number; win?: boolean }> = ({ answered, perfect, win }) => {
+  const stars = starsFor(answered, perfect);
+  return (
+    <div className="mb-3 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-left">
+      {win && (
+        <div className="text-center text-2xl mb-1" aria-label={`星 ${stars}つ`}>
+          {[1, 2, 3].map((n) => <span key={n} style={{ color: n <= stars ? '#facc15' : 'rgba(255,255,255,0.18)' }}>★</span>)}
+        </div>
+      )}
+      <div className="text-[12px] text-gray-200 text-center">
+        といた問題 <b className="text-white">{answered}</b>問 ・ まちがえずに とけた <b className="text-[#a3e635]">{perfect}</b>問
+      </div>
+      {win && stars < 3 && (
+        <div className="text-[10px] text-white/50 text-center mt-1">
+          ★3は「8問いじょう といて、9わり まちがえない」。★2は「5問いじょうで 7わり」。はやさは かんけいないよ
+        </div>
+      )}
+    </div>
+  );
+};
+
 const LevelUpSummary: React.FC<{ events: import('../../store/useArmyStore').LevelUpEvent[] }> = ({ events }) => {
   if (!events || events.length === 0) {
     return (
