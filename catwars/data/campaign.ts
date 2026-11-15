@@ -305,7 +305,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 0.9, enemyDamageMult: 0.85,
       defenseDamageMult: 0.8, defenseHpMult: 0.9,
-      firstSpawnDelayMs: 7000, enemySpawnRatePerSec: 9.0,
+      firstSpawnDelayMs: 7000, enemySpawnRatePerSec: 6.36,
       unitPool: ['grunt', 'shooter'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -325,7 +325,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.0, enemyDamageMult: 0.95,
       defenseDamageMult: 0.9, defenseHpMult: 1.0,
-      firstSpawnDelayMs: 6500, enemySpawnRatePerSec: 5.6,
+      firstSpawnDelayMs: 6500, enemySpawnRatePerSec: 6.38,
       unitPool: ['grunt', 'shooter', 'runner'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -365,7 +365,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.1, enemyDamageMult: 1.05,
       defenseDamageMult: 1.1, defenseHpMult: 1.1,
-      firstSpawnDelayMs: 5500, enemySpawnRatePerSec: 5.6,
+      firstSpawnDelayMs: 5500, enemySpawnRatePerSec: 6.16,
       unitPool: ['grunt', 'shooter', 'brute'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -385,7 +385,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.2, enemyDamageMult: 1.15,
       defenseDamageMult: 1.2, defenseHpMult: 1.15,
-      firstSpawnDelayMs: 5000, enemySpawnRatePerSec: 5.1,
+      firstSpawnDelayMs: 5000, enemySpawnRatePerSec: 8.42,
       unitPool: ['grunt', 'shooter', 'runner', 'flyer'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -406,7 +406,7 @@ export const CAMPAIGN: CampaignChapter[] = [
       enemyHpMult: 1.3, enemyDamageMult: 1.2,
       // 防衛施設が最多の章なので、HP倍率は上げない（威力だけで難しさを出す）
       defenseDamageMult: 1.3, defenseHpMult: 1.0,
-      firstSpawnDelayMs: 4500, enemySpawnRatePerSec: 3.6,
+      firstSpawnDelayMs: 4500, enemySpawnRatePerSec: 6.23,
       unitPool: ['grunt', 'shooter', 'brute', 'flyer'],
       // 増援ペースを上げるたびに、体数で指定したボス出現がどんどん早まる
       // （旧: 10秒間隔×9体=約90秒 → 2秒間隔×9体=約20秒 → 1.4秒間隔×45体=約68秒）。
@@ -514,13 +514,14 @@ function tierBossAt(ch: CampaignChapter, tier: ChapterTier): number | undefined 
 }
 
 /**
- * 段ごとの「出現の速さ」の倍率（章ごと）。仕様の ×1.25／×1.5 から、「にがて」の勝率が目標帯に入るよう決めなおした値（2026-11-15。RUNS=12）。
+ * 段ごとの「出現の速さ」の倍率（章ごと）。「にがて」の勝率が目標帯に入るよう決めなおした値
+ *（2026-11-15 CW-4a。育ち方を levelMult にし、想定装備を めやすのレベルに作りなおしたので 全部 決めなおした。RUNS=24）。
  * むずかしい は 手持ちが育っている想定（scripts/botSim.ts の loadoutForLevel）なので、序盤の章ほど大きい。
  * 変えたら `npm run test:balance:all`（3段＋脅威）。さがすときは scripts/tuneTiers.ts。
  */
 export const TIER_SPAWN_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<number, number>> = {
-  hard:    { 1: 3.0, 2: 3.1, 3: 1.5, 4: 1.5, 5: 1.47, 6: 1.09, 7: 2.04, 8: 1.78 },
-  extreme: { 1: 1.5,  2: 1.5,  3: 1.5,  4: 1.5,  5: 1.5,  6: 1.41, 7: 1.1,  8: 1.5 },
+  hard:    { 1: 4.95, 2: 2.58, 3: 3.05, 4: 2.28, 5: 2.31, 6: 1.97, 7: 1.43, 8: 1.34 },
+  extreme: { 1: 2.59, 2: 2.85, 3: 2.42, 4: 1.95, 5: 1.71, 6: 1.95, 7: 1.21, 8: 1.34 },
 };
 
 /**
@@ -528,9 +529,10 @@ export const TIER_SPAWN_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<numb
  * 敵の出る速さには下限（0.6秒に1体）があり、序盤の章では 出現を速めても 手ごたえが変わらない。そこは兵を強くする。
  * 変えたら `TIER=hard npm run test:balance`・`TIER=extreme npm run test:balance`（KNOB=power の tuneTiers でさがせる）。
  */
+// むずかしい 第2章は 出現だけ速めると、とかない子が 敵をたおした分のエナジーで勝つことがあった（24回に1回）ので、兵の強さで合わせた
 export const TIER_POWER_MULT: Record<ChapterTier, Record<number, number>> = {
   normal: {},
-  hard: { 1: 1.42 },
+  hard: { 1: 1.42, 2: 1.3 },
   extreme: { 1: 1.3 },
 };
 
@@ -571,7 +573,7 @@ export function chapterBaseLevel(ch: CampaignChapter, tier: ChapterTier): number
  * 育ち方の式（levelMult）に合わせる（2026-11-15 CW-4a）：敵の倍率 ＝ levelMult(基準 + 0.75×育てた分) ÷ levelMult(基準)。
  * 0.75 は「育てたぶんの4分の1は そのまま楽になる」の意味。上限 +120%。「脅威 Lv.n」の n ＝ round(0.75×育てた分)。
  */
-export const THREAT_GROWTH = 0.75;
+export const THREAT_GROWTH = 0.9;
 export const THREAT_MAX_BONUS = 1.2;
 export function threatLevel(avgLevel: number, baseLevel: number): number {
   return Math.max(0, Math.round(THREAT_GROWTH * (avgLevel - baseLevel)));

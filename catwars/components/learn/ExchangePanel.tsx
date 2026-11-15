@@ -19,7 +19,8 @@ export const ExchangePanel: React.FC = () => {
   const [pending, setPending] = useState<{ id: string; cost: number } | null>(null);
 
   const isUnlocked = (id: string) => permanentUnlocks.includes(id);
-  const rares = CHARACTERS.filter(c => !c.isStarter);
+  // ふつうの系統は 兵舎の数で開く（基地の 兵舎）。ここは ボスの系統だけ（2026-11-15 CW-4a）
+  const rares = CHARACTERS.filter(c => c.id.startsWith('boss'));
 
   const confirmBuy = () => {
     const p = pending;
@@ -42,8 +43,8 @@ export const ExchangePanel: React.FC = () => {
         </div>
       </div>
       <p className="text-white/40 text-xs mb-4" style={font}>
-        💠 をつかうと、レアな宇宙ネコを<b style={{ color: '#a3e635' }}>ずっと</b>つかえるようになるよ。
-        問題を解いてクレジットをためよう！
+        💠 をつかうと、ボスの宇宙ネコを<b style={{ color: '#a3e635' }}>ずっと</b>つかえるようになるよ。
+        ほかの系統は、陣地づくりで 兵舎を ふやすと ひらく。
       </p>
 
       <div className="flex flex-col gap-2.5">

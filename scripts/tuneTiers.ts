@@ -9,7 +9,7 @@
  * 「にがて」の勝率が目標（ふつう：85/70/55、むずかしい：−15、げきむず：−30）になる値をさがす。
  */
 import { CAMPAIGN, ChapterTier, TIER_ORDER, tierDifficulty } from '../catwars/data/campaign';
-import { playOnce, seedFor, WEAK_SKILL } from './botSim';
+import { playOnce, seedFor, WEAK_SKILL, NORMAL_SKILL } from './botSim';
 
 const RUNS = Number(process.env.RUNS ?? 20);
 const ITERS = Number(process.env.ITERS ?? 6);
@@ -27,6 +27,9 @@ const PHI = Number(process.env.PHI ?? 3.0);
 const ONLY = (process.env.CH ?? '').split(',').map(s => Number(s.trim())).filter(n => n > 0);
 const TIERS = (process.env.TIER ? [process.env.TIER as ChapterTier] : TIER_ORDER);
 const BASE_TARGET: Record<number, number> = { 1: 85, 2: 85, 3: 70, 4: 70, 5: 70, 6: 70, 7: 55, 8: 55 };
+/** SKILL=normal で「ふつう」の勝率を TARGET（既定 75）に合わせる（ふつうの帯を見るとき）。そのとき「にがて」の勝率も出す */
+const BY_NORMAL = process.env.SKILL === 'normal';
+const SKILL = BY_NORMAL ? NORMAL_SKILL : WEAK_SKILL;
 const MINUS: Record<ChapterTier, number> = { normal: 0, hard: 15, extreme: 30 };
 
 function winRate(i: number, tier: ChapterTier, mult: number, knob: 'power' | 'spawn' = KNOB === 'power' ? 'power' : 'spawn', spawnMult = 1): number {
@@ -36,7 +39,7 @@ function winRate(i: number, tier: ChapterTier, mult: number, knob: 'power' | 'sp
     ? { ...d1, enemyHpMult: d1.enemyHpMult * mult, enemyDamageMult: d1.enemyDamageMult * mult }
     : { ...d1, enemySpawnRatePerSec: d1.enemySpawnRatePerSec * mult };
   let wins = 0;
-  for (let r = 0; r < RUNS; r++) if (playOnce(i, seedFor(r), { skill: WEAK_SKILL, tier, difficulty, maxSeconds: MAX_SECONDS }).win) wins++;
+  for (let r = 0; r < RUNS; r++) if (playOnce(i, seedFor(r), { skill: SKILL, tier, difficulty, maxSeconds: MAX_SECONDS }).win) wins++;
   return (wins / RUNS) * 100;
 }
 
@@ -46,7 +49,7 @@ for (const tier of TIERS) {
   for (let i = 0; i < CAMPAIGN.length; i++) {
     const no = CAMPAIGN[i].no;
     if (ONLY.length > 0 && !ONLY.includes(no)) continue;
-    const target = BASE_TARGET[no] - MINUS[tier];
+    const target = BY_NORMAL ? Number(process.env.TARGET ?? 75) : BASE_TARGET[no] - MINUS[tier];
     const now = winRate(i, tier, 1);
     console.log(`    第${no}章 いま ${now.toFixed(0)}%（目標 ${target}%）`);
     let best = 1, bestRate = now, power = 1;
@@ -74,7 +77,15 @@ for (const tier of TIERS) {
         }
       }
     }
-    console.log(`  第${no}章  目標${target}%  いま${now.toFixed(0)}%  →  出現×${best.toFixed(2)}・強さ×${power.toFixed(2)}（${bestRate.toFixed(0)}%）`);
+    let weakNote = '';
+    if (BY_NORMAL) {
+      const d0 = tierDifficulty(CAMPAIGN[i], tier);
+      const d = { ...d0, enemySpawnRatePerSec: d0.enemySpawnRatePerSec * best, enemyHpMult: d0.enemyHpMult * power, enemyDamageMult: d0.enemyDamageMult * power };
+      let w = 0;
+      for (let r = 0; r < RUNS; r++) if (playOnce(i, seedFor(r), { skill: WEAK_SKILL, tier, difficulty: d, maxSeconds: MAX_SECONDS }).win) w++;
+      weakNote = `・そのときの にがて ${((w / RUNS) * 100).toFixed(0)}%（にがての目標 ${BASE_TARGET[no] - MINUS[tier]}±15）`;
+    }
+    console.log(`  第${no}章  目標${target}%  いま${now.toFixed(0)}%  →  出現×${best.toFixed(2)}・強さ×${power.toFixed(2)}（${bestRate.toFixed(0)}%）${weakNote}`);
     out.push(`${no}: 出現${best.toFixed(2)}/強さ${power.toFixed(2)}`);
   }
   console.log(`  ${tier}: { ${out.join(', ')} }`);
