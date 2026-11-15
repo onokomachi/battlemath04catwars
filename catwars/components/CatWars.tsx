@@ -5,10 +5,14 @@ import { usePlayerStore } from '../store/usePlayerStore';
 import { useProgressStore } from '../store/useProgressStore';
 import { useBaseStore } from '../store/useBaseStore';
 import { useBattleSetupStore } from '../store/useBattleSetupStore';
-import { computeBattleLoadout } from '../utils/battleLoadout';
+import { computeBattleLoadout, splitActiveLayout, unlockedFamilies } from '../utils/battleLoadout';
+import { useStudyStore } from '../store/useStudyStore';
+import { activeFacilityLimit, facilityMult, powerPlantBonus, LEVELED_COMBAT } from '../data/facilities';
+import { FormationScreen } from './army/FormationScreen';
+import { effectiveFormation } from '../store/useArmyStore';
 import { BATTLE_MAP_BY_ID, BATTLE_MAPS, tierEnemyBase } from '../data/battleMaps';
 import {
-  CHAPTER_BY_ID, CAMPAIGN, effectiveDifficulty, threatLevel, chapterBaseLevel, type ChapterTier,
+  CHAPTER_BY_ID, CAMPAIGN, effectiveDifficulty, threatLevel, threatMultFor, chapterBaseLevel, type ChapterTier,
 } from '../data/campaign';
 import { useCampaignStore } from '../store/useCampaignStore';
 import { useArmyStore } from '../store/useArmyStore';
@@ -24,10 +28,9 @@ import { sfx } from '../utils/audioEngine';
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 
-// 出撃導線: 範囲えらび → ステージえらび → 陣地づくり → 戦闘
+// 出撃導線: 範囲えらび → ステージえらび → 出撃メンバー（5枠）→ 陣地づくり（施設の買う・レベル上げも ここ）→ 戦闘
 // 陣地はステージごとに組む（ゾーンの広さが章によって変わるため）。
-// 陣地づくりは常にこの導線の中でのみ行う（ハブから単独で開く入口は廃止・一本化ずみ）。
-type View = 'home' | 'army' | 'range' | 'stage' | 'prep' | 'battle' | 'buffs' | 'mercs';
+type View = 'home' | 'army' | 'range' | 'stage' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
 
 interface Props {
   /** 上の階のメニューがあるときだけ（いまは CAT-WARS だけで動くので無い） */
@@ -37,10 +40,10 @@ interface Props {
 
 export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const [view, setView] = useState<View>('home');
-  const { resources, buildings, troops, lastTick, addResources, setGameState } = usePlayerStore();
+  const { resources, buildings, troops, lastTick, addResources } = usePlayerStore();
   const { resetBattleSession } = useBattleSetupStore();
   const {
-    getTodayDailyStars, dailyStreak, todayAnswered, dailyGoal, updateDailyStreak,
+    getTodayDailyStars, dailyStreak, todayAnswered, dailyGoal, updateDailyStreak, permanentUnlocks,
   } = useProgressStore();
   const campaign = useCampaignStore();
   const base = useBaseStore();
@@ -53,22 +56,20 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const topAvgLevel = useMemo(() => topFamiliesAvgLevel(army), [army]);
   const [quizSubtopics, setQuizSubtopics] = useState<string[]>([]);
   const gameState: GameState = { resources, buildings, troops, lastTick };
-  // 施設は当日リセット制。今日建てたぶんから、今日つかえる戦力を算出する。
-  const built = base.getBuilt();
-  const loadout = useMemo(() => computeBattleLoadout(built), [built]);
+  // 施設は持ちつづける（useBaseStore）。きょう動かせる数は、きょう まちがえずに解いた数で決まる
+  const owned = base.owned;
+  const todayPerfect = useStudyStore(s => (s.todayDate === new Date().toISOString().slice(0, 10) ? s.todayPerfect : 0));
+  const limit = activeFacilityLimit(todayPerfect);
+  const unlocked = useMemo(() => unlockedFamilies(owned, permanentUnlocks), [owned, permanentUnlocks]);
+  const savedFormation = useArmyStore((s) => s.formation);
+  const formation = useMemo(() => effectiveFormation(savedFormation, unlocked), [savedFormation, unlocked]);
+  const loadout = useMemo(() => computeBattleLoadout(owned, [], permanentUnlocks), [owned, permanentUnlocks]);
   const dailyStars = getTodayDailyStars();
+  /** 発電所：勝ったときの 💠 の上乗せ（放置の収入は無い） */
+  const creditBonus = powerPlantBonus(owned[BuildingType.GOLD_MINE] ?? 0, base.levelOf(BuildingType.GOLD_MINE));
 
-  // 金山のパッシブ収入を来訪時にまとめて回収（放置ボーナス）
   useEffect(() => {
     updateDailyStreak();
-    base.rollDateIfNeeded();
-    const now = Date.now();
-    const mins = Math.min(240, (now - lastTick) / 60000); // 最大4時間ぶん
-    const mines = useBaseStore.getState().built[BuildingType.GOLD_MINE] ?? 0;
-    const rate = mines * (BUILDING_STATS[BuildingType.GOLD_MINE].productionRate ?? 0);
-    const earned = Math.floor(rate * (mins / 60));
-    if (earned > 0) addResources(earned);
-    setGameState(prev => ({ ...prev, lastTick: now }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -100,10 +101,18 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         onStart={(chapterId, tier) => {
           setActiveChapterId(chapterId);
           setActiveTier(tier);
-          // ステージを決めてから、そのステージの自陣ゾーンに合わせて陣地を組む
-          setView('prep');
+          // ステージを決めたら、その敵に合わせて 出撃メンバー（5枠）をえらぶ → 陣地づくり
+          setView('formation');
         }}
       />
+    );
+  }
+
+  if (view === 'formation') {
+    const chapter = CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
+    return (
+      <FormationScreen chapter={chapter} tier={activeTier}
+        onBack={() => setView('stage')} onProceed={() => setView('prep')} />
     );
   }
 
@@ -112,7 +121,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     return (
       <BaseBuilder
         chapter={chapter}
-        onBack={() => setView('stage')}
+        onBack={() => setView('formation')}
         onProceed={() => {
           campaign.recordAttempt(chapter.id, activeTier);
           setView('battle');
@@ -127,21 +136,29 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     // サポートモードは段ごとの連敗で決まる
     const assist = campaign.assistLevelFor(chapter.id, activeTier);
     // 脅威レベル：手持ちが その段の めやすより育っているぶん、敵も強くなる（画面に出す）
-    const threat = threatLevel(topAvgLevel, chapterBaseLevel(chapter, activeTier));
-    // 陣地づくりで組んだ配置を、そのまま戦場に出す（座標はすでに戦場のもの）
-    const deployments = base.getLayout(chapter.id);
+    const baseLv = chapterBaseLevel(chapter, activeTier);
+    const threat = threatLevel(topAvgLevel, baseLv);
+    const tMult = threatMultFor(topAvgLevel, baseLv);
+    // 陣地づくりで組んだ配置のうち、きょう動かせるもの（先に置いた順）だけを戦場に出す
+    const { active } = splitActiveLayout(base.getLayout(chapter.id), limit);
+    const facilityMults: Partial<Record<BuildingType, number>> = {};
+    for (const t of LEVELED_COMBAT) facilityMults[t] = facilityMult(t, base.levelOf(t));
     return (
       <BattleScene
         attackerState={gameState}
         defenderBuildings={tierEnemyBase(map, activeTier)}
-        playerDeployments={deployments}
+        playerDeployments={active}
         battleMap={map}
-        loadout={loadout}
+        loadout={computeBattleLoadout(owned, active, permanentUnlocks)}
+        formation={formation}
+        facilityMults={facilityMults}
+        creditBonus={creditBonus}
         chapter={chapter}
-        difficulty={effectiveDifficulty(chapter, assist, activeTier, threat)}
+        difficulty={effectiveDifficulty(chapter, assist, activeTier, tMult)}
         assistLevel={assist}
         tier={activeTier}
         threat={threat}
+        threatPct={Math.round((tMult - 1) * 100)}
         quizSubtopics={quizSubtopics}
         onEndBattle={handleEndBattle}
       />
@@ -183,7 +200,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       {/* Daily goal */}
       <div className="px-5">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-white/60 text-[11px]">きょうの学習で 💠クレジット と ⚡エナジー がたまる</span>
+          <span className="text-white/60 text-[11px]">まちがえずに とくと 💠クレジット・⚡エナジー・施設を 動かす力 が たまる</span>
           <span className="text-[#38bdf8] text-[11px]" style={fontMono}>{todayAnswered}/{dailyGoal}問</span>
         </div>
         <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
@@ -216,26 +233,26 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           onClick={() => setView('buffs')} />
       </div>
 
-      {/* Base mini-preview（陣地の編集は出撃フローの中でのみ行う。ここは今日のもちものの確認のみ） */}
+      {/* 基地のようす（施設の買う・レベル上げ・配置は 出撃の中の「陣地づくり」で） */}
       <div className="px-4 pt-4">
-        <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }}>
+        <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }} data-testid="hub-base">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-white/70 text-xs font-bold" style={fontMono}>きょうの もちもの</span>
+            <span className="text-white/70 text-xs font-bold" style={fontMono}>基地</span>
+            <span className="text-[#facc15] text-[11px]">きょう 動かせる施設 {limit}こ まで（コアのほか）</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(built).filter(([, n]) => (n ?? 0) > 0).length === 0 && (
-              <span className="text-white/40 text-xs">
-                まだ施設がありません。「出撃！」から陣地づくりで⚡エナジーで建てよう（明日リセット）
-              </span>
-            )}
-            {Object.entries(built).filter(([, n]) => (n ?? 0) > 0).map(([type, n]) => (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
+              <span className="text-white/70 text-[11px]">🏰 コア Lv{base.levelOf(BuildingType.TOWN_HALL)}</span>
+            </div>
+            {(Object.entries(owned) as [BuildingType, number][]).filter(([, n]) => (n ?? 0) > 0).map(([type, n]) => (
               <div key={type} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
-                <img src={`/assets/sprites/${type.toLowerCase().replace(/_/g, '-')}.png`} alt={type}
-                  style={{ width: 20, height: 20, objectFit: 'contain' }} draggable={false} />
-                <span className="text-white/70 text-[11px]">{BUILDING_STATS[type as BuildingType].name}×{n}</span>
+                <span className="text-white/70 text-[11px]">{BUILDING_STATS[type].icon || '🧱'} {BUILDING_STATS[type].name}×{n} Lv{base.levelOf(type)}</span>
               </div>
             ))}
           </div>
+          {Object.values(owned).every(n => !n) && (
+            <p className="text-white/40 text-[11px] mt-2">「出撃！」の 陣地づくりで、💠クレジットで 施設を 買えるよ。施設は ずっと のこる。</p>
+          )}
         </div>
       </div>
 

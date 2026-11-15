@@ -4,8 +4,11 @@ import { GameState, BuildingType, BuildingStatus } from '../types';
 import { BUILDING_STATS, INITIAL_TROOPS } from '../constants';
 import { syncPlayerState } from '../utils/syncToSupabase';
 
+import { START_CREDITS, MAX_CREDITS } from '../data/rewards';
+
 const INITIAL_PLAYER_STATE: GameState = {
-  resources: { gold: 2500, maxGold: 8000 },
+  // 💠 のはじめの額。施設は 💠 で買って持ちつづける（2026-11-15 CW-4a）。上限は事実上なし
+  resources: { gold: START_CREDITS, maxGold: MAX_CREDITS },
   buildings: [
     {
       id: 'th-1',
@@ -109,7 +112,12 @@ export const usePlayerStore = create<PlayerStore>()(
     {
       name: 'neo-academia-player',
       onRehydrateStorage: () => (state) => {
-        if (state) state.troops = mergeTroops(state.troops);
+        if (state) {
+          state.troops = mergeTroops(Array.isArray(state.troops) ? state.troops : []);
+          // 前は上限 8000 だった（施設を持ちつづける形にしたので 上限を外す）
+          const gold = Number(state.resources?.gold) || 0;
+          state.resources = { gold, maxGold: MAX_CREDITS };
+        }
       },
     }
   )

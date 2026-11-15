@@ -40,6 +40,7 @@
 //     2秒台では足りない。※実測値は `docs/CATWARS_DESIGN.md` の表を参照。
 
 import { BuildingType } from '../types';
+import { levelMult } from './characters';
 
 export type EnemyUnitKind = 'grunt' | 'shooter' | 'runner' | 'brute' | 'flyer' | 'guard' | 'medic' | 'kamikaze' | 'boss';
 
@@ -85,7 +86,8 @@ export const ENEMY_UNIT_STATS: Record<EnemyUnitKind, {
   flyer:   { subType: 'flying',        label: '飛行ドローン', hp: 90, damage: 14, attackRange: 1.4, attackSpeed: 1100, moveSpeed: 3.0 },
   guard:   { subType: 'barbarian',     label: 'たてロボ',   hp: 170, damage: 12, attackRange: 1.2, attackSpeed: 1300, moveSpeed: 1.7 },
   medic:   { subType: 'healer',        label: 'しゅうりドローン', hp: 60, damage: 5, attackRange: 1.4, attackSpeed: 1400, moveSpeed: 2.0 },
-  kamikaze:{ subType: 'bomber',        label: 'ばくだんロボ', hp: 42, damage: 200, attackRange: 1.2, attackSpeed: 1000, moveSpeed: 3.0 },
+  // 自爆の1回＝300（章の倍率の前）。コア（最大HP1500）の約2割。前は ネコの ぼむにゃー の ×4 が誤って掛かり 800 へっていた
+  kamikaze:{ subType: 'bomber',        label: 'ばくだんロボ', hp: 42, damage: 300, attackRange: 1.2, attackSpeed: 1000, moveSpeed: 3.0 },
   boss:    { subType: 'boss_overlord', label: '皇帝の親衛隊', hp: 700, damage: 45, attackRange: 1.8, attackSpeed: 2400, moveSpeed: 0.9 },
 };
 
@@ -526,7 +528,8 @@ export const TIER_SPAWN_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<numb
  * 敵の出る速さには下限（0.6秒に1体）があり、序盤の章では 出現を速めても 手ごたえが変わらない。そこは兵を強くする。
  * 変えたら `TIER=hard npm run test:balance`・`TIER=extreme npm run test:balance`（KNOB=power の tuneTiers でさがせる）。
  */
-export const TIER_POWER_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<number, number>> = {
+export const TIER_POWER_MULT: Record<ChapterTier, Record<number, number>> = {
+  normal: {},
   hard: { 1: 1.42 },
   extreme: { 1: 1.3 },
 };
@@ -537,7 +540,10 @@ export function tierDifficulty(ch: CampaignChapter, tier: ChapterTier): ChapterD
   const t = TIER_INFO[tier];
   const bossAt = tierBossAt(ch, tier);
   const base: ChapterDifficulty = { ...d, bossAtSpawnCount: bossAt, bossShield: bossAt != null ? t.bossShield : 0 };
-  if (tier === 'normal') return base;
+  if (tier === 'normal') {
+    const p = TIER_POWER_MULT.normal[ch.no] ?? 1;
+    return p === 1 ? base : { ...base, enemyHpMult: d.enemyHpMult * p, enemyDamageMult: d.enemyDamageMult * p };
+  }
   const extra = TIER_EXTRA_POOL[tier](ch.no).filter(k => !d.unitPool.includes(k));
   const power = TIER_POWER_MULT[tier][ch.no] ?? 1;
   return {
@@ -561,23 +567,27 @@ export function chapterBaseLevel(ch: CampaignChapter, tier: ChapterTier): number
  * 脅威レベル：手持ちが章の基準より育っているぶん、敵も強くなる（育てすぎても楽勝にならない）。
  * SANMON の「相手のレベルは自分に合わせて上がる」と同じ考え方。**画面に「脅威 Lv.n」を出す**（隠れた調整はしない）。
  * 下がる方向には はたらかない（弱い手持ちで来た子を、さらに楽にはしない。そちらはサポートモード）。
+ *
+ * 育ち方の式（levelMult）に合わせる（2026-11-15 CW-4a）：敵の倍率 ＝ levelMult(基準 + 0.75×育てた分) ÷ levelMult(基準)。
+ * 0.75 は「育てたぶんの4分の1は そのまま楽になる」の意味。上限 +120%。「脅威 Lv.n」の n ＝ round(0.75×育てた分)。
  */
-export const THREAT_PER_LEVEL = 0.9;
-export const THREAT_STEP = 0.025;
+export const THREAT_GROWTH = 0.75;
 export const THREAT_MAX_BONUS = 1.2;
 export function threatLevel(avgLevel: number, baseLevel: number): number {
-  return Math.max(0, Math.round(THREAT_PER_LEVEL * (avgLevel - baseLevel)));
+  return Math.max(0, Math.round(THREAT_GROWTH * (avgLevel - baseLevel)));
 }
-export function threatMult(threat: number): number {
-  return 1 + Math.min(THREAT_MAX_BONUS, THREAT_STEP * Math.max(0, threat));
+/** 敵（兵と施設）の HP・こうげきに掛ける倍率（1 以上） */
+export function threatMultFor(avgLevel: number, baseLevel: number): number {
+  const grown = Math.max(0, avgLevel - baseLevel);
+  if (grown <= 0) return 1;
+  return Math.min(1 + THREAT_MAX_BONUS, levelMult(baseLevel + THREAT_GROWTH * grown) / levelMult(baseLevel));
 }
-export function withThreat(d: ChapterDifficulty, threat: number): ChapterDifficulty {
-  if (threat <= 0) return d;
-  const m = threatMult(threat);
+export function withThreat(d: ChapterDifficulty, mult: number): ChapterDifficulty {
+  if (mult <= 1) return d;
   return {
     ...d,
-    enemyHpMult: d.enemyHpMult * m, enemyDamageMult: d.enemyDamageMult * m,
-    defenseHpMult: d.defenseHpMult * m, defenseDamageMult: d.defenseDamageMult * m,
+    enemyHpMult: d.enemyHpMult * mult, enemyDamageMult: d.enemyDamageMult * mult,
+    defenseHpMult: d.defenseHpMult * mult, defenseDamageMult: d.defenseDamageMult * mult,
   };
 }
 
@@ -587,10 +597,10 @@ export const tierKey = (chapterId: string, tier: ChapterTier): string =>
 
 /** サポート段階を反映した実効難易度を返す */
 export function effectiveDifficulty(
-  ch: CampaignChapter, assist: 0 | 1 | 2, tier: ChapterTier = 'normal', threat = 0,
+  ch: CampaignChapter, assist: 0 | 1 | 2, tier: ChapterTier = 'normal', threatMult = 1,
 ): ChapterDifficulty {
   const a = ASSIST_LEVELS[assist];
-  const d = withThreat(tierDifficulty(ch, tier), threat);
+  const d = withThreat(tierDifficulty(ch, tier), threatMult);
   return {
     ...d,
     enemyDamageMult: d.enemyDamageMult * a.damageMult,

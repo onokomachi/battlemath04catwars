@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   CAMPAIGN, ASSIST_LEVELS, CampaignChapter, ChapterTier, TIER_ORDER, TIER_INFO, ENEMY_UNIT_STATS, ENEMY_TRAIT_NOTE,
-  tierDifficulty, threatLevel, threatMult, chapterBaseLevel,
+  tierDifficulty, threatLevel, threatMultFor, chapterBaseLevel,
 } from '../../data/campaign';
 import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../../data/battleMaps';
 import { BUILDING_STATS } from '../../constants';
@@ -57,7 +57,7 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, avgLevel, onBack, 
   const tierInfo = TIER_INFO[tier];
   const td = tierDifficulty(selected, tier);
   const threat = threatLevel(avgLevel, chapterBaseLevel(selected, tier));
-  const threatPct = Math.round((threatMult(threat) - 1) * 100);
+  const threatPct = Math.round((threatMultFor(avgLevel, chapterBaseLevel(selected, tier)) - 1) * 100);
   const enemyBase = map ? tierEnemyBase(map, tier) : [];
   /** 1章の星（3段ぶん。最大9つ） */
   const chapterStars = (id: string) => TIER_ORDER.reduce((a, t) => a + starsFor(id, t), 0);
@@ -288,7 +288,7 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, avgLevel, onBack, 
             boxShadow: unlocked ? `0 0 16px ${tierInfo.color}88` : 'none',
           }}>
           {unlocked
-            ? `🏰 第${selected.no}章${tier === 'normal' ? '' : `（${tierInfo.label}）`}の陣地をつくる →`
+            ? `🐱 第${selected.no}章${tier === 'normal' ? '' : `（${tierInfo.label}）`}の 出撃メンバーを えらぶ →`
             : `🔒 ${TIER_LOCK_NOTE[tier]}`}
         </button>
       </div>

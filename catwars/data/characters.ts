@@ -19,7 +19,7 @@ export interface CharacterFamily {
   role: string;          // 役割の短い説明
   isStarter?: boolean;   // 最初から使えるスターターキャラ
   forms: [EvolutionForm, EvolutionForm, EvolutionForm];
-  // 戦闘の基礎ステータス（Lv1）。進化段階で乗算強化される。
+  // 戦闘の基礎ステータス（Lv1）。レベルで少しずつ強くなる（levelMult）。
   base: {
     hp: number;
     damage: number;
@@ -76,18 +76,34 @@ export function stageForLevel(level: number): 1 | 2 | 3 {
   return 1;
 }
 
-// 段階ごとの戦闘倍率（進化＝強化）。Flow理論：学習量が戦力に直結する手応え。
-export const STAGE_MULT: Record<1 | 2 | 3, { hp: number; dmg: number }> = {
-  1: { hp: 1.0,  dmg: 1.0 },
-  2: { hp: 1.45, dmg: 1.4 },
-  3: { hp: 2.0,  dmg: 1.9 },
-};
+/**
+ * レベルごとの強さの倍率（HP・こうげき。2026-11-15 CW-4a）。1レベルごとに少しずつ強くなる。
+ * Lv10≒1.32・Lv30≒2.0・Lv60≒3.07。前は Lv10・Lv30 で急に ×1.45・×2.0 になる段差だった。
+ * 進化（Lv10・Lv30）は 見た目と、あとの段階の「スキルの枠」のために残す（強さの段差は無い）。
+ */
+export const LEVEL_STEP = 0.035;
+export function levelMult(level: number): number {
+  return 1 + LEVEL_STEP * (Math.max(1, level) - 1);
+}
 
-export const MAX_LEVEL = 50;
+/** レベルの上限の上限。系統ごとの上限は「かけら」で上がる（levelCapForShards） */
+export const MAX_LEVEL = 60;
+/** かけら0のときの上限 */
+export const BASE_LEVEL_CAP = 20;
+/** かけら1つで上がる上限 */
+export const LEVEL_CAP_PER_SHARD = 5;
+/** かけら（0〜8）→ その系統のレベルの上限（20＋5×かけら・60まで） */
+export function levelCapForShards(shards: number): number {
+  return Math.min(MAX_LEVEL, BASE_LEVEL_CAP + LEVEL_CAP_PER_SHARD * Math.max(0, Math.floor(shards)));
+}
 
-// 累積XPテーブルではなく「次のレベルに必要なXP」= level * 40
+/**
+ * 次のレベルに必要なXP（2026-11-15 CW-4a。scripts/progressionSim.ts で決めた）。
+ * 1日20分の子が4週間で Lv24（第8章のめやす）に、1日90分の子でも 8週間で 全系統 Lv60 には届かない上がり方。
+ */
+export const XP_CURVE = { a: 2.6, b: 30 };
 export function xpToNext(level: number): number {
-  return level * 40;
+  return Math.round(XP_CURVE.a * level * level + XP_CURVE.b);
 }
 
 const SPRITE_BASE = '/assets/sprites/chars';

@@ -1,9 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { BuildingType, DeployedBuilding, GRID_W, GRID_H, BattleMap } from '../types';
 import { BUILDING_STATS } from '../constants';
-import { useBaseStore, FACILITY_ENERGY_COST } from '../store/useBaseStore';
-import { useProgressStore } from '../store/useProgressStore';
-import { computeBattleLoadout } from '../utils/battleLoadout';
+import { useBaseStore } from '../store/useBaseStore';
+import { usePlayerStore } from '../store/usePlayerStore';
+import { useStudyStore } from '../store/useStudyStore';
+import { computeBattleLoadout, splitActiveLayout } from '../utils/battleLoadout';
+import {
+  FACILITY_MAX_COUNT, MAX_FACILITY_LEVEL, PERFECT_PER_ACTIVE, PLACEABLE_FACILITIES, SUPPORT_FACILITIES,
+  activeFacilityLimit, buyCost, facilityMult, powerPlantBonus, upgradeCost,
+} from '../data/facilities';
 import { BATTLE_MAP_BY_ID, zoneSize } from '../data/battleMaps';
 import { CampaignChapter } from '../data/campaign';
 import { sfx } from '../utils/audioEngine';
@@ -11,18 +16,17 @@ import { sfx } from '../utils/audioEngine';
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 
-// 陣地に置ける施設（コアは必須・無料で常に1つ）
-const PLACEABLE: BuildingType[] = [
-  BuildingType.WALL,
-  BuildingType.CANNON,
-  BuildingType.HIDDEN_TESLA,
-  BuildingType.ARMY_CAMP,
-];
-// 戦場には出ないが、建てておくと効果がある施設（マス目を消費しない）
-const SUPPORT: BuildingType[] = [
-  BuildingType.BARRACKS,
-  BuildingType.GOLD_MINE,
-];
+// 陣地に置ける施設（コアは必須・いつも1つ）／戦場には出ないが、持っていると はたらく施設
+const PLACEABLE: BuildingType[] = PLACEABLE_FACILITIES;
+const SUPPORT: BuildingType[] = SUPPORT_FACILITIES;
+
+/** 施設の効き目（レベルの説明。小4が読める短い文） */
+function effectNote(type: BuildingType, level: number, count: number): string {
+  if (type === BuildingType.GOLD_MINE) return `勝ったときの💠 +${Math.round(powerPlantBonus(Math.max(1, count), level) * 100)}%`;
+  if (type === BuildingType.BARRACKS) return '数で ネコの系統が ひらく';
+  if (type === BuildingType.ARMY_CAMP) return '呪文 +1（おいた数）';
+  return `HP・こうげき ×${facilityMult(type, level).toFixed(1)}`;
+}
 
 const TERRAIN_BG: Record<string, string> = {
   GRASS: 'rgba(255,255,255,0.03)',
@@ -41,17 +45,19 @@ interface Props {
 }
 
 /**
- * ステージごとの陣地づくり。
+ * ステージごとの陣地づくり（2026-11-15 CW-4a：施設は持ちつづける）。
  *
- * ・施設は ⚡エナジー で「その日ぶん」建設する（翌日リセット）
- * ・建てた施設は今日のうちなら、どのステージでも自由に置き直せる
- * ・置ける範囲（自陣ゾーン）はステージごとに違う。広い章もあれば、ほとんど置けない章もある
+ * ・施設は 💠クレジット で買い、レベルを上げる。ずっと持っている（日付で消えない）
+ * ・その日に戦闘で動かせるのは「2 + きょう まちがえずに解いた数 ÷ 5」個まで（コアは いつも）。先に置いた順
+ * ・置ける範囲（自陣ゾーン）はステージごとに違う
  */
 export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => {
   const map: BattleMap = BATTLE_MAP_BY_ID[chapter.mapId];
   const base = useBaseStore();
-  const { getTodayDailyStars, spendDailyStars, addDailyStars } = useProgressStore();
-  const energy = getTodayDailyStars();
+  const credits = Math.floor(usePlayerStore(s => s.resources.gold));
+  const spendResources = usePlayerStore(s => s.spendResources);
+  const todayPerfect = useStudyStore(s => (s.todayDate === new Date().toISOString().slice(0, 10) ? s.todayPerfect : 0));
+  const limit = activeFacilityLimit(todayPerfect);
 
   const [layout, setLayoutLocal] = useState<DeployedBuilding[]>(() => {
     const saved = base.getLayout(chapter.id);
@@ -65,14 +71,12 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
   const [selected, setSelected] = useState<BuildingType | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const built = base.getBuilt();
+  const built = base.owned;
   const flash = (t: string) => { setMsg(t); setTimeout(() => setMsg(null), 1900); };
 
   // 自動配置したコアは、まだストアに入っていないので初回に保存しておく。
   // （これを忘れると、何も編集せずに出撃したときコアが戦場に出ない）
   React.useEffect(() => {
-    // 日付が変わっていればここでリセットする（描画中ではなく効果の中で行う）
-    base.rollDateIfNeeded();
     const saved = base.getLayout(chapter.id);
     if (!saved.some(d => d.type === BuildingType.TOWN_HALL)) {
       base.setLayout(chapter.id, layout);
@@ -91,10 +95,17 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
     return u;
   }, [layout]);
 
-  /** その施設をあと何個 置けるか（もちもの − 配置ずみ） */
+  /** その施設をあと何個 置けるか（持っている数 − 配置ずみ） */
   const spare = (t: BuildingType) => (built[t] ?? 0) - (used[t] ?? 0);
 
-  const loadout = useMemo(() => computeBattleLoadout(built), [built]);
+  // きょう動かせるもの（先に置いた順）と、止まっているもの
+  const { active, inactive } = useMemo(() => splitActiveLayout(layout, limit), [layout, limit]);
+  const isInactive = (d: DeployedBuilding) => inactive.includes(d);
+  const ownedPlaceable = PLACEABLE.reduce((a, t) => a + (built[t] ?? 0), 0);
+  const runnable = Math.min(limit, ownedPlaceable);
+  const toNext = PERFECT_PER_ACTIVE - (todayPerfect % PERFECT_PER_ACTIVE);
+
+  const loadout = useMemo(() => computeBattleLoadout(built, active), [built, active]);
   const zone = map.playerDeployZone;
   const zs = zoneSize(map);
 
@@ -153,34 +164,27 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
       return;
     }
 
-    // もちものが無ければ、その場で⚡をはらって建設する
-    if (spare(selected) <= 0) {
-      const cost = FACILITY_ENERGY_COST[selected] ?? 0;
-      if (energy < cost) { flash(`⚡ エナジーが ${cost - energy} たりない！問題をといてためよう`); return; }
-      const ok = base.build(selected, (n) => spendDailyStars(n));
-      if (!ok) { flash('⚡ エナジーがたりない！'); return; }
-      flash(`🏗️ ${BUILDING_STATS[selected].name}を建設！（-${cost}⚡）`);
-    }
+    if (spare(selected) <= 0) { flash('🏪 もう おけるものが ないよ。下の「買う」で ふやそう'); return; }
     save([...layout, { type: selected, x, y }]);
     sfx.tap();
   };
 
-  /** 戦場に出ない施設（兵舎・金山）を建設する */
-  const buildSupport = (t: BuildingType) => {
-    const cost = FACILITY_ENERGY_COST[t] ?? 0;
-    if (energy < cost) { flash(`⚡ エナジーが ${cost - energy} たりない！`); return; }
-    if (base.build(t, (n) => spendDailyStars(n))) {
-      sfx.tap();
-      flash(`🏗️ ${BUILDING_STATS[t].name}を建設！（-${cost}⚡）`);
-    }
+  /** 1つ買う（💠） */
+  const buy = (t: BuildingType) => {
+    const have = built[t] ?? 0;
+    if (have >= FACILITY_MAX_COUNT[t]) { flash('これ以上は もてないよ'); return; }
+    const cost = buyCost(t, have + 1);
+    if (credits < cost) { flash(`💠 クレジットが ${cost - credits} たりない！問題をといて ためよう`); return; }
+    if (base.buy(t, (n) => spendResources(n))) { sfx.correct(); flash(`🏗️ ${BUILDING_STATS[t].name}を 買った！（-${cost}💠）`); }
   };
 
-  /** もちもの（未配置ぶん）を1つこわして⚡をもどす */
-  const demolish = (t: BuildingType) => {
-    if (spare(t) <= 0) { flash('⚡ 置いてあるものは、さきに陣地からはずしてね'); return; }
-    base.demolish(t, (n) => addDailyStars(n));
-    sfx.tap();
-    flash(`♻️ ${BUILDING_STATS[t].name}をこわして ⚡がもどった`);
+  /** レベルを上げる（💠） */
+  const upgrade = (t: BuildingType) => {
+    const lv = base.levelOf(t);
+    if (lv >= MAX_FACILITY_LEVEL) return;
+    const cost = upgradeCost(t, lv);
+    if (credits < cost) { flash(`💠 クレジットが ${cost - credits} たりない！`); return; }
+    if (base.upgrade(t, (n) => spendResources(n))) { sfx.correct(); flash(`⬆️ ${BUILDING_STATS[t].name} Lv${lv + 1}！（-${cost}💠）`); }
   };
 
   // 盤面は 28×16 と横長なので、表示領域に合わせてマス目の大きさを決める。
@@ -218,10 +222,10 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
           <h2 className="text-[#38bdf8] font-bold text-sm leading-tight" style={fontMono}>陣地づくり</h2>
           <p className="text-white/45 text-[10px] truncate">第{chapter.no}章「{chapter.title}」／{map.name}</p>
         </div>
-        <span className="ml-auto flex items-center gap-1 px-3 py-1 rounded-full flex-shrink-0"
-          style={{ background: 'rgba(250,204,21,0.12)', border: '1px solid rgba(250,204,21,0.4)' }}>
-          <span>⚡</span>
-          <span className="text-[#facc15] font-bold" style={fontMono}>{energy}</span>
+        <span className="ml-auto flex items-center gap-1 px-3 py-1 rounded-full flex-shrink-0" data-testid="credits"
+          style={{ background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.4)' }}>
+          <span>💠</span>
+          <span className="text-[#38bdf8] font-bold" style={fontMono}>{credits}</span>
         </span>
       </div>
 
@@ -238,8 +242,13 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
           この章の陣地 {zs.w}×{zs.h}マス
         </span>
         <span className="text-white/45">
-          {zs.w >= 9 ? 'ひろい！ たっぷり組めるよ' : zs.w <= 5 ? 'せまい…えらんで置こう' : 'ふつうの広さ'}
+          {zs.w >= 9 ? 'ひろい！' : zs.w <= 5 ? 'せまい…' : 'ふつうの広さ'}
         </span>
+        <span className="px-2 py-0.5 rounded-full border text-[#facc15] font-bold" data-testid="active-limit"
+          style={{ background: 'rgba(250,204,21,0.1)', borderColor: 'rgba(250,204,21,0.4)' }}>
+          きょう 動かせる施設：{runnable}／{ownedPlaceable}　あと {toNext}問 まちがえずに とくと +1
+        </span>
+        {inactive.length > 0 && <span className="text-white/45">💤＝きょうは 止まっている（先に おいた順に 動く）</span>}
       </div>
 
       {/* Battlefield */}
@@ -267,8 +276,12 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
                     fontSize: CELL * 0.55, lineHeight: 1,
                   }}>
                   {isTopLeft && (
-                    <span style={{ filter: 'drop-shadow(0 0 4px #22d3ee)', fontSize: CELL * 0.68 }}>
+                    <span style={{
+                      filter: isInactive(p!) ? 'grayscale(1)' : 'drop-shadow(0 0 4px #22d3ee)',
+                      opacity: isInactive(p!) ? 0.35 : 1, fontSize: CELL * 0.68, position: 'relative',
+                    }}>
                       {BUILDING_STATS[p!.type].icon || '🧱'}
+                      {isInactive(p!) && <span style={{ position: 'absolute', right: -CELL * 0.3, top: -CELL * 0.3, fontSize: CELL * 0.4 }}>💤</span>}
                     </span>
                   )}
                   {isEnemyTopLeft && <span style={{ opacity: 0.5 }}>{BUILDING_STATS[e!.type].icon || '🧱'}</span>}
@@ -299,76 +312,64 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
       <div className="border-t border-white/10 px-3 pt-2 flex-shrink-0"
         style={{ background: 'rgba(6,10,24,0.95)', paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}>
         <div className="flex gap-2 overflow-x-auto pb-2">
-          {/* コア */}
+          {/* コア（いつも1つ・いつも動く。レベルだけ上げられる） */}
+          <div className="flex-shrink-0 flex flex-col items-stretch gap-1 min-w-[92px]" data-facility="TOWN_HALL">
           <button onClick={() => setSelected(selected === BuildingType.TOWN_HALL ? null : BuildingType.TOWN_HALL)}
-            className="flex-shrink-0 flex flex-col items-center p-1.5 rounded-xl border-2 min-w-[68px] transition-all active:scale-95"
+            className="flex flex-col items-center p-1.5 rounded-xl border-2 transition-all active:scale-95"
             style={{
               borderColor: selected === BuildingType.TOWN_HALL ? '#38bdf8' : 'rgba(255,255,255,0.15)',
               background: selected === BuildingType.TOWN_HALL ? 'rgba(56,189,248,0.18)' : 'rgba(255,255,255,0.04)',
             }}>
             <span className="text-xl leading-none">🏰</span>
-            <span className="text-[10px] text-white/80 mt-1 leading-none">コア</span>
-            <span className="text-[9px] font-bold text-[#a3e635] mt-0.5" style={fontMono}>ひっす</span>
+            <span className="text-[10px] text-white/80 mt-1 leading-none">コア <b style={{ color: '#facc15' }}>Lv{base.levelOf(BuildingType.TOWN_HALL)}</b></span>
+            <span className="text-[9px] font-bold text-[#a3e635] mt-0.5" style={fontMono}>いつも動く</span>
+            <span className="text-[8px] mt-0.5 text-white/50">{effectNote(BuildingType.TOWN_HALL, base.levelOf(BuildingType.TOWN_HALL), 1)}</span>
           </button>
+          <button onClick={() => upgrade(BuildingType.TOWN_HALL)} disabled={base.levelOf(BuildingType.TOWN_HALL) >= MAX_FACILITY_LEVEL}
+            className="text-[9px] font-bold rounded-md border px-1 py-0.5 disabled:opacity-30"
+            style={{ borderColor: 'rgba(250,204,21,0.5)', color: '#fde68a' }}>
+            {base.levelOf(BuildingType.TOWN_HALL) >= MAX_FACILITY_LEVEL ? 'Lv MAX' : `Lv↑ ${upgradeCost(BuildingType.TOWN_HALL, base.levelOf(BuildingType.TOWN_HALL))}💠`}
+          </button>
+          </div>
 
-          {PLACEABLE.map(type => {
-            const s = BUILDING_STATS[type];
-            const cost = FACILITY_ENERGY_COST[type];
+          {[...PLACEABLE, ...SUPPORT].map(type => {
+            const st = BUILDING_STATS[type];
+            const placeable = PLACEABLE.includes(type);
+            const own = built[type] ?? 0;
+            const max = FACILITY_MAX_COUNT[type];
+            const lv = base.levelOf(type);
             const sp = spare(type);
-            const own = built[type] ?? 0;
             const sel = selected === type;
-            const poor = sp <= 0 && energy < cost;
+            const bCost = own < max ? buyCost(type, own + 1) : null;
+            const uCost = own > 0 && lv < MAX_FACILITY_LEVEL ? upgradeCost(type, lv) : null;
             return (
-              <div key={type} className="flex-shrink-0 flex flex-col items-center">
-                <button onClick={() => setSelected(sel ? null : type)}
-                  className="flex flex-col items-center p-1.5 rounded-xl border-2 min-w-[68px] transition-all active:scale-95"
+              <div key={type} className="flex-shrink-0 flex flex-col items-stretch gap-1 min-w-[92px]" data-facility={type}>
+                <button onClick={() => { if (placeable && own > 0) setSelected(sel ? null : type); }}
+                  className="flex flex-col items-center p-1.5 rounded-xl border-2 transition-all active:scale-95"
                   style={{
-                    borderColor: sel ? '#38bdf8' : 'rgba(255,255,255,0.15)',
+                    borderColor: sel ? '#38bdf8' : own > 0 ? 'rgba(163,230,53,0.45)' : 'rgba(255,255,255,0.15)',
                     background: sel ? 'rgba(56,189,248,0.18)' : 'rgba(255,255,255,0.04)',
-                    opacity: poor && !sel ? 0.45 : 1,
+                    opacity: own > 0 ? 1 : 0.6,
                   }}>
-                  <span className="text-xl leading-none">{s.icon || '🧱'}</span>
-                  <span className="text-[10px] text-white/80 mt-1 leading-none">{s.name}</span>
-                  <span className="text-[9px] font-bold mt-0.5" style={{ ...fontMono, color: sp > 0 ? '#a3e635' : '#facc15' }}>
-                    {sp > 0 ? `もちもの${sp}` : `${cost}⚡`}
+                  <span className="text-xl leading-none">{st.icon || '🧱'}</span>
+                  <span className="text-[10px] text-white/85 mt-1 leading-none">{st.name} <b style={{ color: '#facc15' }}>Lv{lv}</b></span>
+                  <span className="text-[9px] mt-0.5 text-[#a3e635]" style={fontMono}>
+                    {own}/{max}{placeable && own > 0 ? `・のこり${sp}` : ''}
                   </span>
+                  <span className="text-[8px] mt-0.5 text-white/50 leading-tight text-center">{effectNote(type, lv, own)}</span>
                 </button>
-                {own > 0 && (
-                  <button onClick={() => demolish(type)}
-                    className="text-[9px] text-white/35 hover:text-white/70 mt-0.5">
-                    ♻️こわす
+                <div className="flex gap-1">
+                  <button onClick={() => buy(type)} disabled={bCost == null}
+                    className="flex-1 text-[9px] font-bold rounded-md border px-1 py-0.5 disabled:opacity-30"
+                    style={{ borderColor: 'rgba(56,189,248,0.5)', color: '#7dd3fc', opacity: bCost != null && credits < bCost ? 0.5 : 1 }}>
+                    {bCost == null ? 'MAX' : `買う ${bCost}💠`}
                   </button>
-                )}
-              </div>
-            );
-          })}
-
-          {/* 戦場に出ない支援施設 */}
-          {SUPPORT.map(type => {
-            const s = BUILDING_STATS[type];
-            const cost = FACILITY_ENERGY_COST[type];
-            const own = built[type] ?? 0;
-            return (
-              <div key={type} className="flex-shrink-0 flex flex-col items-center">
-                <button onClick={() => buildSupport(type)}
-                  className="flex flex-col items-center p-1.5 rounded-xl border-2 min-w-[68px] transition-all active:scale-95"
-                  style={{
-                    borderColor: own > 0 ? 'rgba(163,230,53,0.5)' : 'rgba(255,255,255,0.15)',
-                    background: own > 0 ? 'rgba(163,230,53,0.1)' : 'rgba(255,255,255,0.04)',
-                    opacity: energy < cost && own === 0 ? 0.45 : 1,
-                  }}>
-                  <span className="text-xl leading-none">{s.icon || '🏭'}</span>
-                  <span className="text-[10px] text-white/80 mt-1 leading-none">{s.name}</span>
-                  <span className="text-[9px] font-bold mt-0.5" style={{ ...fontMono, color: '#facc15' }}>
-                    {own > 0 ? `×${own} ・ ${cost}⚡` : `${cost}⚡`}
-                  </span>
-                </button>
-                {own > 0 && (
-                  <button onClick={() => demolish(type)}
-                    className="text-[9px] text-white/35 hover:text-white/70 mt-0.5">
-                    ♻️こわす
+                  <button onClick={() => upgrade(type)} disabled={uCost == null}
+                    className="flex-1 text-[9px] font-bold rounded-md border px-1 py-0.5 disabled:opacity-30"
+                    style={{ borderColor: 'rgba(250,204,21,0.5)', color: '#fde68a', opacity: uCost != null && credits < uCost ? 0.5 : 1 }}>
+                    {lv >= MAX_FACILITY_LEVEL ? 'Lv MAX' : own === 0 ? 'Lv↑' : `Lv↑ ${uCost}💠`}
                   </button>
-                )}
+                </div>
               </div>
             );
           })}
@@ -377,7 +378,7 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
         <p className="text-center text-white/40 text-[10px] pb-1.5">
           {selected
             ? `👆 青いわくの中をタップして「${BUILDING_STATS[selected].name}」をおく ・ おいたものをタップではずす`
-            : '⚡エナジーで施設を建てよう。今日建てた施設は、今日じゅうは どのステージでも使えるよ（明日リセット）'}
+            : '💠で 施設を 買って レベルを 上げよう。施設は ずっと のこるよ。きょう 動かせる数は、まちがえずに といた数で ふえる'}
         </p>
 
         {onProceed && (

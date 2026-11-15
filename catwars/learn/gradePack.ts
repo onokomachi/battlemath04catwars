@@ -56,6 +56,30 @@ export const PACK_UNITS: PackUnit[] = SANMON_UNITS
   .filter((u) => !!u.appId)
   .map((u) => ({ key: u.key, name: u.name, appId: u.appId!, modules: u.modules }));
 
+/**
+ * 系統（ネコ）と単元の結びつき（2026-11-15 CW-4a）。その系統のレベルの上限は、ここに書いた単元の「かけら」で上がる。
+ * ゲーム本体に4年の単元名を書かないため、パックに書く。ここに無い系統（ボス）は「全単元」。
+ * 8系統に 12単元を 1〜2個ずつ（魔法系＝分数・小数、タンク系＝わり算の筆算 など。役わりの感じが合うものを）。
+ */
+export const FAMILY_UNITS: Record<string, string[]> = {
+  magic: ['fraction', 'decimal'],
+  giant: ['div1', 'div2'],
+  archer: ['rounding', 'ratio'],
+  bomber: ['decmuldiv', 'calcrules'],
+  flying: ['suihei'],
+  speed: ['change'],
+  healer: ['area'],
+  barbarian: ['solid'],
+};
+/** その系統に結びついた単元の key（パックに無い系統は全単元） */
+export function unitsForFamily(familyId: string): string[] {
+  const keys = FAMILY_UNITS[familyId];
+  const all = PACK_UNITS.map((u) => u.key);
+  if (!keys) return all;
+  return keys.filter((k) => all.includes(k));
+}
+export const UNIT_NAME_BY_KEY: Record<string, string> = Object.fromEntries(PACK_UNITS.map((u) => [u.key, u.name]));
+
 /** アプリのカタログでの並び順（小さいほど先に学ぶ） */
 function catalogOrder(appId: string, skillId: string): number {
   const all = (CATALOGS[appId]?.modules ?? []).flatMap((m) => m.skills.map((x) => x.skill_id));
@@ -96,6 +120,22 @@ export function buildPackRounds(registry: RoundRegistry): PackRound[] {
 }
 
 let cache: { registry: RoundRegistry; rounds: PackRound[] } | null = null;
+
+/**
+ * その単元の項目（skill_id）の一覧。パックを読みこんだあとは 出せる問題から、まだなら カタログから（ほぼ同じ）。
+ * かけらの数え方（learn/shards.ts）で使う。
+ */
+export function unitSkillIds(unitKey: string): string[] {
+  if (cache) return cache.rounds.filter((r) => r.unitKey === unitKey).map((r) => r.skillId);
+  const u = PACK_UNITS.find((x) => x.key === unitKey);
+  if (!u) return [];
+  return (CATALOGS[u.appId]?.modules ?? [])
+    .filter((m) => !u.modules || u.modules.includes(m.module_id))
+    .flatMap((m) => m.skills.map((x) => x.skill_id))
+    .filter((id) => unitAccepts(unitKey, id));
+}
+/** 読みこみずみなら true（画面で「読みこんだら もう一度かぞえる」に使う） */
+export function packLoaded(): boolean { return cache !== null; }
 let loading: Promise<{ registry: RoundRegistry; rounds: PackRound[] }> | null = null;
 
 /** 解答画面は重いので、要るときにだけ読みこむ */

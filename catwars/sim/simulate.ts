@@ -98,8 +98,8 @@ function emptyPlayerState(startEnergy: number, healCharges: number, rageCharges:
 export interface SimInit {
   /** 敵（P2）の拠点。PvEでは章の固定配置、PvPでは相手が組んだ陣地 */
   defenderBuildings: { type: BuildingType; x: number; y: number }[];
-  /** 自軍（P1）の拠点 */
-  playerBuildings: { type: BuildingType; x: number; y: number }[];
+  /** 自軍（P1）の拠点。mult＝施設のレベルの倍率（HP・こうげき。無ければ1） */
+  playerBuildings: { type: BuildingType; x: number; y: number; mult?: number }[];
   spellCharges: Record<PlayerId, { HEAL: number; RAGE: number }>;
 }
 
@@ -124,10 +124,13 @@ export function createSimState(cfg: SimConfig, init: SimInit): SimState {
 
   for (const b of init.playerBuildings) {
     const stats = BUILDING_STATS[b.type];
+    // 施設のレベルの倍率（HP・こうげき）。試合の前に決めて渡す（sim の中でストアを読まない）
+    const m = b.mult ?? 1;
+    const hp = Math.round(stats.hp * m);
     entities.push({
       id: `pb-${counter++}`,
       type: 'BUILDING', subType: b.type, x: b.x, y: b.y,
-      hp: stats.hp, maxHp: stats.hp, damage: stats.damage ?? 0,
+      hp, maxHp: hp, damage: Math.round((stats.damage ?? 0) * m),
       team: 'ATTACKER_BUILDING',
       attackRange: stats.range ?? 0,
       attackSpeed: stats.attackSpeed ?? 1500,
@@ -842,7 +845,9 @@ function updateTroop(
     if (state.tick - entity.lastAttack >= msToTicks(atkSpeed)) {
       // 攻城倍率: 爆発系は建物に大ダメージ（役割説明・章のヒントのとおり）。
       // これが無かったため、砲台が並ぶ終盤の要塞を崩す手段が実質存在しなかった。
-      const bMult = target.type === 'BUILDING' && owner
+      // 敵AIの兵（kind がある）は、見た目に使う subType が同じネコでも その倍率を使わない
+      // （自爆ロボ＝bomber の ×4 が掛かり、コアが1回で半分へっていた。2026-11-15 CW-4a で直した）。
+      const bMult = target.type === 'BUILDING' && owner && !entity.kind
         ? (cfg.unitStats[owner][entity.subType]?.buildingDamageMult ?? 1)
         : 1;
       dealDamage(target, damage * bMult, entity.subType);

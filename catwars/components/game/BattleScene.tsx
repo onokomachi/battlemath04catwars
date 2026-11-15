@@ -18,11 +18,11 @@ import { grantStudyReward } from '../../bridge';
 import { sfx } from '../../utils/audioEngine';
 import { useProgressStore, BUFF_LEVEL_INFO } from '../../store/useProgressStore';
 import { useArmyStore } from '../../store/useArmyStore';
-import { CHARACTERS, CHARACTER_BY_ID, STAGE_MULT, getCharacterSprite, spriteFamilyForSubType, stageForLevel } from '../../data/characters';
+import { CHARACTERS, CHARACTER_BY_ID, getCharacterSprite, spriteFamilyForSubType, stageForLevel } from '../../data/characters';
 import { PinchZoomLayer } from './PinchZoomLayer';
 import {
   CampaignChapter, ChapterDifficulty, ENEMY_UNIT_STATS, ENEMY_UNIT_COST, ASSIST_LEVELS,
-  ENEMY_TRAIT_NOTE, TIER_INFO, threatMult, type ChapterTier,
+  ENEMY_TRAIT_NOTE, TIER_INFO, type ChapterTier,
   EnemyUnitKind, pickWeightedEnemyUnit, enemySpawnRate,
   ENEMY_SPAWN_BUILDINGS, ENEMY_PRODUCTION_RATE, BARRACKS_ONLY_UNITS,
 } from '../../data/campaign';
@@ -213,6 +213,14 @@ interface Props {
   tier?: ChapterTier;
   /** 脅威レベル（1以上なら 上の帯に「脅威 Lv.n」を出す。隠れた調整はしない） */
   threat?: number;
+  /** 脅威レベルで 敵が強くなっている割合（%。帯の説明に出す） */
+  threatPct?: number;
+  /** 出撃の5枠（下のバーには これだけを出す。sim の表にも これだけを入れる＝5枠の外は出せない） */
+  formation: string[];
+  /** 発電所による 勝利の 💠 の上乗せ（0.1＝+10%） */
+  creditBonus?: number;
+  /** 施設の種類 → レベルの倍率（HP・こうげき。試合の前に決めて sim に渡す） */
+  facilityMults?: Partial<Record<BuildingType, number>>;
   /** 出撃前に選んだ出題範囲（戦闘中クイズで使う。空なら「といて⚡」は無効） */
   quizSubtopics?: string[];
   /**
@@ -243,6 +251,10 @@ export const BattleScene: React.FC<Props> = ({
   assistLevel = 0,
   tier = 'normal',
   threat = 0,
+  threatPct = 0,
+  formation,
+  facilityMults = {},
+  creditBonus = 0,
   quizSubtopics = [],
   pvp,
   onEndBattle,
@@ -283,8 +295,8 @@ export const BattleScene: React.FC<Props> = ({
   const [levelUps, setLevelUps] = useState<import('../../store/useArmyStore').LevelUpEvent[]>([]);
   const [, forceRender] = useState(0);
 
-  const { getTodayBuffs, unlockCharacterToday, permanentUnlocks, unlockedToday, unlockedTodayDate } = useProgressStore();
-  const { getStage, grantBattleXp } = useArmyStore();
+  const { getTodayBuffs } = useProgressStore();
+  const { getStage, getLevel, grantBattleXp } = useArmyStore();
   const activeBuffs = getTodayBuffs();
   const hasBuff = (t: string) => activeBuffs.some(b => b.type === t);
   const buffLvl = (t: string): 0 | 1 | 2 | 3 => {
@@ -318,8 +330,8 @@ export const BattleScene: React.FC<Props> = ({
       const lv = ((b as { level?: number }).level ?? 2) as 1 | 2 | 3;
       if (info) values[b.type] = info.values[lv - 1];
     }
-    const stages: Record<string, 1 | 2 | 3> = {};
-    for (const c of CHARACTERS) stages[c.id] = getStage(c.id);
+    const levels: Record<string, number> = {};
+    for (const c of CHARACTERS) levels[c.id] = getLevel(c.id);
 
     const cfg = buildSimConfig({
       mode: 'PVE',
@@ -328,11 +340,11 @@ export const BattleScene: React.FC<Props> = ({
       // ——クライアントが選べると有利な乱数を引くまで作り直せてしまうため。
       seed: (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0,
       chapter, difficulty, battleMap: battleMap ?? null,
-      p1: { stages, buffs: { values } },
+      p1: { levels, buffs: { values }, formation },
     });
     runnerRef.current = new SimRunner(cfg, {
       defenderBuildings: defenderBuildings.map(b => ({ type: b.type, x: b.x, y: b.y })),
-      playerBuildings: playerDeployments.map(b => ({ type: b.type, x: b.x, y: b.y })),
+      playerBuildings: playerDeployments.map(b => ({ type: b.type, x: b.x, y: b.y, mult: facilityMults[b.type] ?? 1 })),
       spellCharges: {
         P1: { HEAL: loadout?.healCharges ?? 2, RAGE: loadout?.rageCharges ?? 2 },
         P2: { HEAL: 0, RAGE: 0 },
@@ -369,10 +381,13 @@ export const BattleScene: React.FC<Props> = ({
     resolved: m.resolved,
   })).filter(m => m.zone);
 
-  const availableTroops: Troop[] = useMemo(() => CHARACTERS.map(c => ({
-    id: c.id, name: c.forms[0].name, count: 1,
-    damage: c.base.damage, hp: c.base.hp, target: c.base.target, moveSpeed: c.base.moveSpeed,
-  })), []);
+  // 下のバーは 出撃の5枠だけ（えらんだ順）
+  const availableTroops: Troop[] = useMemo(() => formation
+    .map(id => CHARACTER_BY_ID[id]).filter((c): c is NonNullable<typeof c> => !!c)
+    .map(c => ({
+      id: c.id, name: c.forms[0].name, count: 1,
+      damage: c.base.damage, hp: c.base.hp, target: c.base.target, moveSpeed: c.base.moveSpeed,
+    })), [formation]);
 
   const showMessage = (text: string, ms = 2000) => {
     setTriggerMessage(text);
@@ -577,17 +592,6 @@ export const BattleScene: React.FC<Props> = ({
     }
   }
 
-  const isCharUnlocked = (id: string): boolean => {
-    const fam = CHARACTER_BY_ID[id];
-    if (fam?.isStarter) return true;
-    // 兵舎を建てた日は、その解放ぶんを無料で使える（＝施設を建てる意味がここに出る）
-    if (loadout?.unlockedTroopTypes?.includes(id)) return true;
-    if (permanentUnlocks.includes(id)) return true;
-    // reset unlockedToday if date changed
-    const today = new Date().toISOString().slice(0, 10);
-    if (unlockedTodayDate !== today) return false;
-    return unlockedToday.includes(id);
-  };
 
   const buildingAccentColor: Record<string, string> = {
     TOWN_HALL: 'rgba(250,204,21,0.25)',
@@ -748,7 +752,7 @@ export const BattleScene: React.FC<Props> = ({
             )}
             {threat >= 1 && (
               <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
-                title={`手持ちが育っているぶん、敵も強くなっているよ（+${Math.round((threatMult(threat) - 1) * 100)}%）`}
+                title={`手持ちが育っているぶん、敵も強くなっているよ（+${threatPct}%）`}
                 style={{ background: 'rgba(244,114,182,0.14)', borderColor: 'rgba(244,114,182,0.6)', color: '#f472b6' }}>
                 ⚠️ 脅威 Lv.{threat}
               </span>
@@ -790,7 +794,7 @@ export const BattleScene: React.FC<Props> = ({
            onAnswered={(item, perfect) => {
              quizStatsRef.current.answered += 1;
              if (perfect) quizStatsRef.current.perfect += 1;
-             grantStudyReward(perfect, item.skillId, item.difficulty);
+             grantStudyReward(perfect, item, formation);
            }}
            shieldLayers={shieldLayers}
            onShieldBreak={() => issue({ type: 'BREAK_SHIELD', player: localPlayer })}
@@ -1423,7 +1427,7 @@ export const BattleScene: React.FC<Props> = ({
          const lootMult = hasBuff('DOUBLE_LOOT') ? 1 + buffVal('DOUBLE_LOOT') / 100 : 1;
          const win = battleResult === 'WIN';
          // 戦利品は章ごとに設定（難しい章ほど多い）
-         const loot = win ? { gold: Math.round(chapter.rewardCredits * TIER_INFO[tier].rewardMult * lootMult) } : { gold: 0 };
+         const loot = win ? { gold: Math.round(chapter.rewardCredits * TIER_INFO[tier].rewardMult * lootMult * (1 + creditBonus)) } : { gold: 0 };
          // fixed + z-[160] にして、下部のキャラ出撃バー(z-50)より確実に手前へ出す。
          // 以前は両方 z-50 の兄弟要素で、DOM順が後のバーがリザルトを覆っていた。
          return (
@@ -1457,7 +1461,7 @@ export const BattleScene: React.FC<Props> = ({
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" variant="secondary" onClick={() => onEndBattle(false, { gold: 0 })}>
-                   村へ撤退する
+                   基地へ もどる
                  </Button>
                </div>
             )}
@@ -1560,7 +1564,7 @@ export const BattleScene: React.FC<Props> = ({
            )}
          </div>
 
-         {/* Row 2: 出撃（ゴールド消費・にゃんこ式）+ 一時ランクアップ */}
+         {/* Row 2: 出撃（えらんだ5枠・エナジーで出す）+ 一時ランクアップ */}
          <div className="relative flex items-center gap-2 overflow-x-auto px-1">
             {availableTroops.map(troop => {
                const fam = CHARACTER_BY_ID[troop.id];
@@ -1577,15 +1581,6 @@ export const BattleScene: React.FC<Props> = ({
                   <button
                     key={troop.id}
                     onClick={() => {
-                      if (!isCharUnlocked(troop.id)) {
-                        if (unlockCharacterToday(troop.id)) {
-                          sfx.correct();
-                        } else {
-                          setTriggerMessage('⚡ エナジーが15たりない！まず「といて⚡」で問題をとこう！');
-                          setTimeout(() => setTriggerMessage(null), 2000);
-                        }
-                        return;
-                      }
                       setSelectedTroopId(troop.id);
                       setSelectedSpell(null);
                     }}
@@ -1612,17 +1607,11 @@ export const BattleScene: React.FC<Props> = ({
                          <span className="text-white text-xs font-bold">{(cdLeft/1000).toFixed(1)}</span>
                        </div>
                      )}
-                     {!isCharUnlocked(troop.id) && (
-                       <div className="absolute inset-0 rounded-xl bg-black/70 flex flex-col items-center justify-center gap-0.5">
-                         <span className="text-base">🔒</span>
-                         <span className="text-[8px] text-[#facc15] font-bold">15⚡</span>
-                       </div>
-                     )}
                   </button>
                );
             })}
 
-            {/* 一時ランクアップ（選択中の兵種をゴールドで強化） */}
+            {/* 一時ランクアップ（選択中の兵種をエナジーで強化） */}
             {selectedTroopId && (() => {
               const fam = CHARACTER_BY_ID[selectedTroopId];
               if (!fam) return null;
