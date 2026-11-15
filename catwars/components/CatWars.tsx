@@ -6,9 +6,12 @@ import { useProgressStore } from '../store/useProgressStore';
 import { useBaseStore } from '../store/useBaseStore';
 import { useBattleSetupStore } from '../store/useBattleSetupStore';
 import { computeBattleLoadout } from '../utils/battleLoadout';
-import { BATTLE_MAP_BY_ID, BATTLE_MAPS } from '../data/battleMaps';
-import { CHAPTER_BY_ID, CAMPAIGN, effectiveDifficulty } from '../data/campaign';
+import { BATTLE_MAP_BY_ID, BATTLE_MAPS, tierEnemyBase } from '../data/battleMaps';
+import {
+  CHAPTER_BY_ID, CAMPAIGN, effectiveDifficulty, threatLevel, chapterBaseLevel, type ChapterTier,
+} from '../data/campaign';
 import { useCampaignStore } from '../store/useCampaignStore';
+import { useArmyStore } from '../store/useArmyStore';
 import { BattleScene } from './game/BattleScene';
 import { StageSelectScreen } from './game/StageSelectScreen';
 import { RangeSelect } from './game/RangeSelect';
@@ -43,6 +46,11 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const base = useBaseStore();
 
   const [activeChapterId, setActiveChapterId] = useState<string>(CAMPAIGN[0].id);
+  /** えらんだ難易度の段（ふつう／むずかしい／げきむず） */
+  const [activeTier, setActiveTier] = useState<ChapterTier>('normal');
+  const army = useArmyStore((s) => s.army);
+  /** 手持ちの上位5系統の平均レベル（脅威レベルの もと） */
+  const topAvgLevel = useMemo(() => topFamiliesAvgLevel(army), [army]);
   const [quizSubtopics, setQuizSubtopics] = useState<string[]>([]);
   const gameState: GameState = { resources, buildings, troops, lastTick };
   // 施設は当日リセット制。今日建てたぶんから、今日つかえる戦力を算出する。
@@ -67,7 +75,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const handleEndBattle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
     if (win) addResources(Math.round(loot.gold));
     // 章の結果を記録（勝敗で連敗数が更新され、サポートモードの判定に反映される）
-    campaign.recordResult(activeChapterId, win, stars);
+    campaign.recordResult(activeChapterId, win, stars, activeTier);
     setView('home');
   };
 
@@ -88,8 +96,10 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       <StageSelectScreen
         loadout={loadout}
         onBack={() => setView('home')}
-        onStart={(chapterId) => {
+        avgLevel={topAvgLevel}
+        onStart={(chapterId, tier) => {
           setActiveChapterId(chapterId);
+          setActiveTier(tier);
           // ステージを決めてから、そのステージの自陣ゾーンに合わせて陣地を組む
           setView('prep');
         }}
@@ -104,7 +114,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         chapter={chapter}
         onBack={() => setView('stage')}
         onProceed={() => {
-          campaign.recordAttempt(chapter.id);
+          campaign.recordAttempt(chapter.id, activeTier);
           setView('battle');
         }}
       />
@@ -114,19 +124,24 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   if (view === 'battle') {
     const chapter = CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
     const map = BATTLE_MAP_BY_ID[chapter.mapId] ?? BATTLE_MAPS[0];
-    const assist = campaign.assistLevelFor(chapter.id);
+    // サポートモードは段ごとの連敗で決まる
+    const assist = campaign.assistLevelFor(chapter.id, activeTier);
+    // 脅威レベル：手持ちが その段の めやすより育っているぶん、敵も強くなる（画面に出す）
+    const threat = threatLevel(topAvgLevel, chapterBaseLevel(chapter, activeTier));
     // 陣地づくりで組んだ配置を、そのまま戦場に出す（座標はすでに戦場のもの）
     const deployments = base.getLayout(chapter.id);
     return (
       <BattleScene
         attackerState={gameState}
-        defenderBuildings={map.enemyBase}
+        defenderBuildings={tierEnemyBase(map, activeTier)}
         playerDeployments={deployments}
         battleMap={map}
         loadout={loadout}
         chapter={chapter}
-        difficulty={effectiveDifficulty(chapter, assist)}
+        difficulty={effectiveDifficulty(chapter, assist, activeTier, threat)}
         assistLevel={assist}
+        tier={activeTier}
+        threat={threat}
         quizSubtopics={quizSubtopics}
         onEndBattle={handleEndBattle}
       />
@@ -246,6 +261,13 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     </div>
   );
 };
+
+/** 手持ちの上位5系統の平均レベル（脅威レベルの もと） */
+export function topFamiliesAvgLevel(army: Record<string, { level: number }>): number {
+  const lv = Object.values(army).map((e) => e?.level ?? 1).sort((a, b) => b - a).slice(0, 5);
+  if (lv.length === 0) return 1;
+  return lv.reduce((a, b) => a + b, 0) / lv.length;
+}
 
 const HubButton: React.FC<{
   icon: string; label: string; sub: string; color: string; onClick: () => void; big?: boolean;

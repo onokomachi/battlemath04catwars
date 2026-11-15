@@ -22,6 +22,7 @@ import { CHARACTERS, CHARACTER_BY_ID, STAGE_MULT, getCharacterSprite, spriteFami
 import { PinchZoomLayer } from './PinchZoomLayer';
 import {
   CampaignChapter, ChapterDifficulty, ENEMY_UNIT_STATS, ENEMY_UNIT_COST, ASSIST_LEVELS,
+  ENEMY_TRAIT_NOTE, TIER_INFO, threatMult, type ChapterTier,
   EnemyUnitKind, pickWeightedEnemyUnit, enemySpawnRate,
   ENEMY_SPAWN_BUILDINGS, ENEMY_PRODUCTION_RATE, BARRACKS_ONLY_UNITS,
 } from '../../data/campaign';
@@ -208,6 +209,10 @@ interface Props {
   difficulty: ChapterDifficulty;
   /** 0=通常 / 1,2=サポートモード（プレイヤーに明示する） */
   assistLevel?: 0 | 1 | 2;
+  /** 難易度の段（ふつう いがいは 上の帯に出す。勝利報酬の倍率） */
+  tier?: ChapterTier;
+  /** 脅威レベル（1以上なら 上の帯に「脅威 Lv.n」を出す。隠れた調整はしない） */
+  threat?: number;
   /** 出撃前に選んだ出題範囲（戦闘中クイズで使う。空なら「といて⚡」は無効） */
   quizSubtopics?: string[];
   /**
@@ -236,6 +241,8 @@ export const BattleScene: React.FC<Props> = ({
   chapter,
   difficulty,
   assistLevel = 0,
+  tier = 'normal',
+  threat = 0,
   quizSubtopics = [],
   pvp,
   onEndBattle,
@@ -339,6 +346,8 @@ export const BattleScene: React.FC<Props> = ({
   const me = simState.players[localPlayer];
   const entities = simState.entities;
   const gold = me.energy;
+  /** いま盤上にいる敵の シールドの合計（ふくしゅうカードを出す） */
+  const shieldLayers = entities.reduce((a, e) => a + (e.team === 'DEFENDER' ? (e.shield ?? 0) : 0), 0);
   const battleResult: 'WIN' | 'LOSE' | null =
     simState.result === null ? null : simState.result === localPlayer ? 'WIN' : 'LOSE';
   const battleStarted = simState.started;
@@ -667,6 +676,14 @@ export const BattleScene: React.FC<Props> = ({
            0%, 100% { transform: scale(1); }
            50% { transform: scale(1.06); }
          }
+         @keyframes cw-shield-glow {
+           0%, 100% { box-shadow: 0 0 10px rgba(103,232,249,0.6); }
+           50% { box-shadow: 0 0 22px rgba(103,232,249,1); }
+         }
+         @keyframes cw-shield-ring {
+           0%, 100% { opacity: 0.7; transform: scale(1); }
+           50% { opacity: 1; transform: scale(1.06); }
+         }
          @keyframes cw-quiz-urgent {
            0%, 100% { transform: scale(1) rotate(0deg); }
            25% { transform: scale(1.12) rotate(-4deg); }
@@ -723,6 +740,19 @@ export const BattleScene: React.FC<Props> = ({
             <span className="text-white/60 text-xs truncate hidden sm:inline" style={{ fontFamily: '"M PLUS Rounded 1c", sans-serif' }}>
               {chapter.title}
             </span>
+            {tier !== 'normal' && (
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
+                style={{ background: `${TIER_INFO[tier].color}22`, borderColor: TIER_INFO[tier].color, color: TIER_INFO[tier].color }}>
+                {TIER_INFO[tier].label}
+              </span>
+            )}
+            {threat >= 1 && (
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
+                title={`手持ちが育っているぶん、敵も強くなっているよ（+${Math.round((threatMult(threat) - 1) * 100)}%）`}
+                style={{ background: 'rgba(244,114,182,0.14)', borderColor: 'rgba(244,114,182,0.6)', color: '#f472b6' }}>
+                ⚠️ 脅威 Lv.{threat}
+              </span>
+            )}
             {assistLevel > 0 && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
                 style={{ background: 'rgba(163,230,53,0.12)', borderColor: 'rgba(163,230,53,0.45)', color: '#a3e635' }}>
@@ -762,6 +792,8 @@ export const BattleScene: React.FC<Props> = ({
              if (perfect) quizStatsRef.current.perfect += 1;
              grantStudyReward(perfect, item.skillId, item.difficulty);
            }}
+           shieldLayers={shieldLayers}
+           onShieldBreak={() => issue({ type: 'BREAK_SHIELD', player: localPlayer })}
          />
        )}
 
@@ -1343,6 +1375,28 @@ export const BattleScene: React.FC<Props> = ({
                               }}
                             ></div>
                         </div>
+                        {/* 特別な敵のしるし（空中・盾持ち・回復役・自爆）。たおし方は ステージえらびの画面に出している */}
+                        {e.team === 'DEFENDER' && e.kind && ENEMY_TRAIT_NOTE[e.kind as EnemyUnitKind] && (
+                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-[12px] leading-none pointer-events-none select-none"
+                            style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.9))' }}>
+                            {ENEMY_TRAIT_NOTE[e.kind as EnemyUnitKind]!.icon}
+                          </div>
+                        )}
+                        {/* ボスのシールド（ふくしゅうカードを といて わる） */}
+                        {e.team === 'DEFENDER' && (e.shield ?? 0) > 0 && (
+                          <>
+                            <div className="absolute rounded-full pointer-events-none"
+                              style={{
+                                inset: -8, border: '3px solid rgba(103,232,249,0.9)',
+                                boxShadow: '0 0 14px rgba(103,232,249,0.85), inset 0 0 10px rgba(103,232,249,0.5)',
+                                animation: 'cw-shield-ring 1.4s ease-in-out infinite',
+                              }} />
+                            <div className="absolute -top-9 left-1/2 -translate-x-1/2 text-[10px] font-black px-1.5 rounded-full whitespace-nowrap pointer-events-none"
+                              style={{ background: 'rgba(8,47,73,0.95)', border: '1px solid #67e8f9', color: '#67e8f9' }}>
+                              🛡️×{e.shield}
+                            </div>
+                          </>
+                        )}
                         {e.team === 'ATTACKER' && (tempRank[e.subType] ?? 0) > 0 && (
                           <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-[8px] font-black text-[#facc15] bg-black/80 px-1 rounded-full border border-[#facc15]/60 whitespace-nowrap" style={{ fontFamily: 'Orbitron, monospace' }}>
                             ⬆+{tempRank[e.subType]}
@@ -1369,7 +1423,7 @@ export const BattleScene: React.FC<Props> = ({
          const lootMult = hasBuff('DOUBLE_LOOT') ? 1 + buffVal('DOUBLE_LOOT') / 100 : 1;
          const win = battleResult === 'WIN';
          // 戦利品は章ごとに設定（難しい章ほど多い）
-         const loot = win ? { gold: Math.round(chapter.rewardCredits * lootMult) } : { gold: 0 };
+         const loot = win ? { gold: Math.round(chapter.rewardCredits * TIER_INFO[tier].rewardMult * lootMult) } : { gold: 0 };
          // fixed + z-[160] にして、下部のキャラ出撃バー(z-50)より確実に手前へ出す。
          // 以前は両方 z-50 の兄弟要素で、DOM順が後のバーがリザルトを覆っていた。
          return (
