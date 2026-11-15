@@ -13,6 +13,13 @@ import { playOnce, seedFor, WEAK_SKILL } from './botSim';
 
 const RUNS = Number(process.env.RUNS ?? 20);
 const ITERS = Number(process.env.ITERS ?? 6);
+/** 1試合の上限秒（おそいときは 240 などに） */
+const MAX_SECONDS = Number(process.env.MAXSEC ?? 300);
+/** 二分探索のはば（いまの値に掛ける倍率の下限・上限） */
+const LO = Number(process.env.LO ?? 0.3);
+const HI = Number(process.env.HI ?? 3.0);
+/** KNOB=power で「敵の兵の強さ（HP・こうげき）」をさがす（出現の速さが下限に当たる章で使う。TIER_POWER_MULT に掛ける） */
+const KNOB = process.env.KNOB === 'power' ? 'power' : 'spawn';
 const ONLY = (process.env.CH ?? '').split(',').map(s => Number(s.trim())).filter(n => n > 0);
 const TIERS = (process.env.TIER ? [process.env.TIER as ChapterTier] : TIER_ORDER);
 const BASE_TARGET: Record<number, number> = { 1: 85, 2: 85, 3: 70, 4: 70, 5: 70, 6: 70, 7: 55, 8: 55 };
@@ -20,29 +27,33 @@ const MINUS: Record<ChapterTier, number> = { normal: 0, hard: 15, extreme: 30 };
 
 function winRate(i: number, tier: ChapterTier, mult: number): number {
   const d0 = tierDifficulty(CAMPAIGN[i], tier);
-  const difficulty = { ...d0, enemySpawnRatePerSec: d0.enemySpawnRatePerSec * mult };
+  const difficulty = KNOB === 'power'
+    ? { ...d0, enemyHpMult: d0.enemyHpMult * mult, enemyDamageMult: d0.enemyDamageMult * mult }
+    : { ...d0, enemySpawnRatePerSec: d0.enemySpawnRatePerSec * mult };
   let wins = 0;
-  for (let r = 0; r < RUNS; r++) if (playOnce(i, seedFor(r), { skill: WEAK_SKILL, tier, difficulty }).win) wins++;
+  for (let r = 0; r < RUNS; r++) if (playOnce(i, seedFor(r), { skill: WEAK_SKILL, tier, difficulty, maxSeconds: MAX_SECONDS }).win) wins++;
   return (wins / RUNS) * 100;
 }
 
 for (const tier of TIERS) {
-  console.log(`\n段：${tier}（いまの値に掛ける倍率。1.00 なら そのままでよい）`);
+  console.log(`\n段：${tier}・${KNOB === 'power' ? '兵の強さ' : '出現の速さ'}（いまの値に掛ける倍率。1.00 なら そのままでよい）`);
   const out: string[] = [];
   for (let i = 0; i < CAMPAIGN.length; i++) {
     const no = CAMPAIGN[i].no;
     if (ONLY.length > 0 && !ONLY.includes(no)) continue;
     const target = BASE_TARGET[no] - MINUS[tier];
     const now = winRate(i, tier, 1);
+    console.log(`    第${no}章 いま ${now.toFixed(0)}%（目標 ${target}%）`);
     let best = 1, bestRate = now;
     if (Math.abs(now - target) > 8) {
       // 速いほど敵が増える＝勝率は下がる、とみて二分探索
-      let lo = 0.3, hi = 3.0;
+      let lo = LO, hi = HI;
       bestRate = -1;
       for (let k = 0; k < ITERS; k++) {
         const mid = (lo + hi) / 2;
         const wr = winRate(i, tier, mid);
         if (bestRate < 0 || Math.abs(wr - target) < Math.abs(bestRate - target)) { best = mid; bestRate = wr; }
+        console.log(`    第${no}章 ×${mid.toFixed(3)} → ${wr.toFixed(0)}%`);
         if (wr >= target) lo = mid; else hi = mid;
       }
     }

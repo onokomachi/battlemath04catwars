@@ -303,7 +303,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 0.9, enemyDamageMult: 0.85,
       defenseDamageMult: 0.8, defenseHpMult: 0.9,
-      firstSpawnDelayMs: 7000, enemySpawnRatePerSec: 8.2,
+      firstSpawnDelayMs: 7000, enemySpawnRatePerSec: 9.0,
       unitPool: ['grunt', 'shooter'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -323,7 +323,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.0, enemyDamageMult: 0.95,
       defenseDamageMult: 0.9, defenseHpMult: 1.0,
-      firstSpawnDelayMs: 6500, enemySpawnRatePerSec: 5.3,
+      firstSpawnDelayMs: 6500, enemySpawnRatePerSec: 5.6,
       unitPool: ['grunt', 'shooter', 'runner'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -375,7 +375,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     enemyName: 'アステロ',
     enemyTitle: '小惑星帯の破壊者',
     background: '小惑星をくだいて宇宙をちらかす、あばれんぼうのネコ。岩と沼のふくざつな地形を、自分の庭のように使いこなす。',
-    briefing: '岩・沼・砲台、ぜんぶある。どのルートが一番はやいか考えよう。',
+    briefing: '岩・沼・砲台、ぜんぶある。どのルートが一番はやいか考えよう。空をとぶ敵には 近接は とどかない。遠距離・魔法を まぜよう。',
     hint: '砲台の射程はとても長い。ネコを選んでから敵をタップすると、その敵だけを集中してねらえるよ。',
     victoryLine: 'ちらかった小惑星帯に、しずかな星の光がもどった。',
     defeatLine: 'ルートを変えるか、部隊の組み合わせを変えてみよう。',
@@ -383,7 +383,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.2, enemyDamageMult: 1.15,
       defenseDamageMult: 1.2, defenseHpMult: 1.15,
-      firstSpawnDelayMs: 5000, enemySpawnRatePerSec: 4.9,
+      firstSpawnDelayMs: 5000, enemySpawnRatePerSec: 5.1,
       unitPool: ['grunt', 'shooter', 'runner', 'flyer'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -395,7 +395,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     enemyName: 'ニャースベイダー',
     enemyTitle: '銀河皇帝',
     background: '黒いマントをまとった銀河の支配者。三重の防衛線をもつ最終要塞シタデルの奥で、じっとこちらを見つめている。',
-    briefing: '砲台も電撃トラップもいちばん多い。あわてずに、少しずつ防衛をけずっていこう。',
+    briefing: '砲台も電撃トラップもいちばん多い。あわてずに、少しずつ防衛をけずっていこう。空をとぶ敵には 近接は とどかない。遠距離・魔法を まぜよう。',
     hint: '「めかにゃー」は砲台よりも射程が長い。撃たれずに砲台をつぶせる唯一のネコだ。',
     victoryLine: '銀河にへいわがもどった。きみとネコ軍団の伝説がはじまる。',
     defeatLine: 'ここまで来たらもう一息。⚡をためてから一気に攻めこもう。',
@@ -512,12 +512,23 @@ function tierBossAt(ch: CampaignChapter, tier: ChapterTier): number | undefined 
 }
 
 /**
- * 段ごとの「出現の速さ」の倍率（章ごと）。仕様の ×1.25／×1.5 から、勝率が目標帯に入るよう決めなおした値。
- * 変えたら `TIER=hard npm run test:balance`・`TIER=extreme npm run test:balance`。
+ * 段ごとの「出現の速さ」の倍率（章ごと）。仕様の ×1.25／×1.5 から、「にがて」の勝率が目標帯に入るよう決めなおした値（2026-11-15。RUNS=12）。
+ * むずかしい は 手持ちが育っている想定（scripts/botSim.ts の loadoutForLevel）なので、序盤の章ほど大きい。
+ * 変えたら `npm run test:balance:all`（3段＋脅威）。さがすときは scripts/tuneTiers.ts。
  */
 export const TIER_SPAWN_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<number, number>> = {
-  hard:    { 1: 1.25, 2: 1.25, 3: 1.25, 4: 1.25, 5: 1.25, 6: 1.25, 7: 1.25, 8: 1.25 },
-  extreme: { 1: 1.5,  2: 1.5,  3: 1.5,  4: 1.5,  5: 1.5,  6: 1.5,  7: 1.5,  8: 1.5 },
+  hard:    { 1: 3.0, 2: 3.1, 3: 1.5, 4: 1.5, 5: 1.47, 6: 1.09, 7: 2.04, 8: 1.78 },
+  extreme: { 1: 1.5,  2: 1.5,  3: 1.5,  4: 1.5,  5: 1.5,  6: 1.41, 7: 1.1,  8: 1.5 },
+};
+
+/**
+ * 段ごとの「敵の兵の強さ（HP・こうげき）」の追加の倍率（章ごと。無ければ 1）。
+ * 敵の出る速さには下限（0.6秒に1体）があり、序盤の章では 出現を速めても 手ごたえが変わらない。そこは兵を強くする。
+ * 変えたら `TIER=hard npm run test:balance`・`TIER=extreme npm run test:balance`（KNOB=power の tuneTiers でさがせる）。
+ */
+export const TIER_POWER_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<number, number>> = {
+  hard: { 1: 1.42 },
+  extreme: { 1: 1.3 },
 };
 
 /** その章・その段の難易度（サポート・脅威レベルをかける前） */
@@ -528,11 +539,12 @@ export function tierDifficulty(ch: CampaignChapter, tier: ChapterTier): ChapterD
   const base: ChapterDifficulty = { ...d, bossAtSpawnCount: bossAt, bossShield: bossAt != null ? t.bossShield : 0 };
   if (tier === 'normal') return base;
   const extra = TIER_EXTRA_POOL[tier](ch.no).filter(k => !d.unitPool.includes(k));
+  const power = TIER_POWER_MULT[tier][ch.no] ?? 1;
   return {
     ...base,
-    enemyHpMult: d.enemyHpMult * t.hpMult,
+    enemyHpMult: d.enemyHpMult * t.hpMult * power,
     defenseHpMult: d.defenseHpMult * (1 + (t.hpMult - 1) * 0.5),
-    enemyDamageMult: d.enemyDamageMult * t.damageMult,
+    enemyDamageMult: d.enemyDamageMult * t.damageMult * power,
     defenseDamageMult: d.defenseDamageMult * t.damageMult,
     enemySpawnRatePerSec: d.enemySpawnRatePerSec * (TIER_SPAWN_MULT[tier][ch.no] ?? 1),
     unitPool: [...d.unitPool, ...extra],

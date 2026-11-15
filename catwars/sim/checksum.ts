@@ -49,6 +49,8 @@ export function stateChecksum(state: SimState): number {
     h = foldInt(h, Math.round(e.y * 1000));
     h = foldInt(h, Math.round(e.hp * 100));
     h = foldInt(h, e.lastAttack);
+    // ボスのシールド（ふくしゅうで われる）。0 のときは足さない（前のチェックサムと同じになるように）
+    if (e.shield) h = foldInt(h, e.shield);
   }
 
   for (const pid of ['P1', 'P2'] as const) {

@@ -11,8 +11,12 @@ import { SimRunner, CommandProvider } from '../catwars/sim/runner';
 import { buildSimConfig } from '../catwars/sim/setup';
 import { stateChecksum, dumpState } from '../catwars/sim/checksum';
 import { SimCommand, TICK_MS, PlayerId } from '../catwars/sim/types';
-import { CAMPAIGN } from '../catwars/data/campaign';
-import { BATTLE_MAP_BY_ID } from '../catwars/data/battleMaps';
+import {
+  CAMPAIGN, ENEMY_UNIT_STATS, EnemyUnitKind, GUARD_MAGIC_MULT, GUARD_PHYSICAL_MULT, MEDIC_HEAL_PCT,
+  SHIELD_DAMAGE_MULT, tierDifficulty,
+} from '../catwars/data/campaign';
+import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../catwars/data/battleMaps';
+import type { BattleEntity } from '../catwars/types';
 import { BuildingType } from '../catwars/types';
 import { DetRNG } from '../catwars/sim/rng';
 import { LockstepSession, BUCKET_TICKS, recommendedInputDelayTicks } from '../catwars/net/lockstep';
@@ -401,6 +405,179 @@ console.log('\n[6] PvP対戦セットアップ（ホストとゲストが同じ�
     `P1側=${r1.state.result ?? '継続'} P2側=${r2.state.result ?? '継続'}`);
   check('決着がついた（PvPの勝利条件が機能している）', r1.state.result !== null,
     `勝者=${r1.state.result}`);
+}
+
+// ── テスト7: 新しい敵のきまり（盾持ち・空中・自爆・回復役）とボスのシールド ─────────
+
+console.log('\n[7] 新しい敵のきまり（盾持ち・空中・自爆・回復役・ボスのシールド）');
+{
+  // 小さな試合場：敵の増援は出さない（firstSpawnDelayMs を大きく）。敵の基地はコアだけ、自軍もコアだけ
+  const ch = CAMPAIGN[0];
+  const map = BATTLE_MAP_BY_ID[ch.mapId];
+  const arena = () => {
+    const cfg = buildSimConfig({
+      mode: 'PVE', seed: 99, chapter: ch,
+      difficulty: { ...ch.difficulty, firstSpawnDelayMs: 99999999, enemyHpMult: 1, enemyDamageMult: 1, startEnergy: 0, energyPerSec: 0 },
+      battleMap: map,
+      p1: { stages: {}, buffs: { values: {} } },
+    });
+    const runner = new SimRunner(cfg, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 13 }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    runner.state.started = true;
+    return runner;
+  };
+  let n = 0;
+  /** 敵を置く（still＝動かない・こうげきしない） */
+  const enemy = (r: SimRunner, kind: EnemyUnitKind, x: number, y: number, still = true, extra: Partial<BattleEntity> = {}): BattleEntity => {
+    const st = ENEMY_UNIT_STATS[kind];
+    const e: BattleEntity = {
+      id: `zz-e${n++}`, type: 'TROOP', subType: st.subType, x, y, hp: st.hp, maxHp: st.hp,
+      damage: still ? 0 : st.damage, team: 'DEFENDER', kind,
+      attackRange: st.attackRange, attackSpeed: st.attackSpeed, lastAttack: -999999,
+      moveSpeed: still ? 0 : st.moveSpeed, targetPreference: 'ANY', path: [], ...extra,
+    };
+    r.state.entities.push(e);
+    return e;
+  };
+  /** ネコを置く（cfg の性能のまま。still＝動かない） */
+  const cat = (r: SimRunner, id: string, x: number, y: number, extra: Partial<BattleEntity> = {}): BattleEntity => {
+    const line = r.cfg.unitStats.P1[id];
+    const e: BattleEntity = {
+      id: `zz-c${n++}`, type: 'TROOP', subType: id, x, y, hp: line.hp, maxHp: line.hp,
+      damage: line.damage, team: 'ATTACKER', attackRange: line.attackRange,
+      attackSpeed: Math.round(line.attackSpeed), lastAttack: -999999, moveSpeed: 0,
+      targetPreference: 'ANY', path: [], ...extra,
+    };
+    r.state.entities.push(e);
+    return e;
+  };
+  const NONE = new TickScript(new Map());
+  const run = (r: SimRunner, ticks: number, provider: CommandProvider = NONE) => { for (let i = 0; i < ticks; i++) r.advance(TICK_MS, provider); };
+  /** 最初に こうげきを うけるまで進めて、へった HP を返す */
+  const firstHit = (r: SimRunner, target: BattleEntity, max = 80): number => {
+    const hp0 = target.hp;
+    for (let i = 0; i < max && target.hp === hp0; i++) r.advance(TICK_MS, NONE);
+    return hp0 - target.hp;
+  };
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.01;
+
+  // 盾持ち：魔法いがいは半分、魔法は1.5倍
+  {
+    const r = arena();
+    const g = enemy(r, 'guard', 14, 7);
+    const a = cat(r, 'archer', 12, 7);
+    const lost = firstHit(r, g);
+    check('盾持ち：遠距離（魔法いがい）の こうげきは 半分', near(lost, a.damage * GUARD_PHYSICAL_MULT), `うけた=${lost.toFixed(1)} 元=${a.damage}`);
+  }
+  {
+    const r = arena();
+    const g = enemy(r, 'guard', 14, 7);
+    const m = cat(r, 'magic', 12, 7);
+    const lost = firstHit(r, g);
+    check('盾持ち：魔法は 1.5倍', near(lost, m.damage * GUARD_MAGIC_MULT), `うけた=${lost.toFixed(1)} 元=${m.damage}`);
+  }
+
+  // 空中：近接のネコは こうげきしない・遠距離は当たる
+  {
+    const r = arena();
+    const f = enemy(r, 'flyer', 14, 7);
+    cat(r, 'barbarian', 13.2, 7);
+    run(r, 60);
+    check('空中：近接のネコ（射程2未満）は 空中の敵を こうげきしない', f.hp === f.maxHp, `HP ${f.hp}/${f.maxHp}`);
+  }
+  {
+    const r = arena();
+    const f = enemy(r, 'flyer', 14, 7);
+    cat(r, 'archer', 12, 7);
+    run(r, 60);
+    check('空中：遠距離のネコの こうげきは 当たる', f.hp < f.maxHp, `HP ${f.hp.toFixed(0)}/${f.maxHp}`);
+  }
+
+  // 自爆：ネコは ねらわず、施設に当たって消える
+  {
+    const r = arena();
+    const core = r.state.entities.find(e => e.team === 'ATTACKER_BUILDING')!;
+    const coreHp = core.hp;
+    const k = enemy(r, 'kamikaze', 6, 13, false);
+    // 施設より近くに、こうげきしないネコを置く（ねらわれないこと。通り道には置かない＝体でとめてしまうため）
+    const c = cat(r, 'giant', 6, 11, { damage: 0 });
+    run(r, 120);
+    const gone = !r.state.entities.includes(k);
+    check('自爆：施設に つっこんで ダメージを与える', core.hp < coreHp, `コア ${coreHp} → ${core.hp.toFixed(0)}`);
+    check('自爆：ばくはつしたら 消える（1回きり）', gone);
+    check('自爆：ネコは ねらわない', c.hp === c.maxHp, `ネコ HP ${c.hp}/${c.maxHp}`);
+  }
+
+  // 回復役：2.5マスの中の味方を 最大HPの8% 回復。外は回復しない
+  {
+    const r = arena();
+    enemy(r, 'medic', 14, 7);
+    const inside = enemy(r, 'grunt', 15, 7);
+    const outside = enemy(r, 'grunt', 14, 12);
+    inside.hp = inside.maxHp / 2; outside.hp = outside.maxHp / 2;
+    run(r, 45); // 2.25秒（2秒ごとに1回）
+    const healed = inside.hp - inside.maxHp / 2;
+    check('回復役：まわりの味方を 最大HPの8% 回復する', near(healed, inside.maxHp * MEDIC_HEAL_PCT),
+      `+${healed.toFixed(1)}（1回=${(inside.maxHp * MEDIC_HEAL_PCT).toFixed(1)}）`);
+    check('回復役：はなれた味方は回復しない', outside.hp === outside.maxHp / 2);
+  }
+
+  // ボスのシールド：あるあいだは1割しか通らない。BREAK_SHIELD で1枚へる
+  {
+    const r = arena();
+    const b = enemy(r, 'boss', 14, 7, true, { shield: 2 });
+    const a = cat(r, 'archer', 12, 7);
+    const lost = firstHit(r, b);
+    check('シールド：あるあいだは ダメージが1割', near(lost, a.damage * SHIELD_DAMAGE_MULT), `うけた=${lost.toFixed(2)} 元=${a.damage}`);
+    const t = r.tick + 1;
+    run(r, 2, new TickScript(new Map([[t, [{ type: 'BREAK_SHIELD', player: 'P1' }]]])));
+    check('シールド：BREAK_SHIELD で1枚へる', b.shield === 1, `のこり ${b.shield}`);
+    run(r, 2, new TickScript(new Map([[r.tick + 1, [{ type: 'BREAK_SHIELD', player: 'P1' }]]])));
+    const lost2 = firstHit(r, b);
+    check('シールド：ぜんぶ われたら ふつうに通る', b.shield === 0 && near(lost2, a.damage), `うけた=${lost2.toFixed(1)}`);
+  }
+}
+
+// ── テスト8: 難易度の段（新しい敵・ボスのシールドつき）でも決定論 ─────────────────
+
+console.log('\n[8] げきむず（新しい敵・ボスのシールド・足した砲台）でも、同じseed＋同じコマンド列 → 同じ結果');
+{
+  const run8 = (seed: number) => {
+    const ch = CAMPAIGN[7];
+    const map = BATTLE_MAP_BY_ID[ch.mapId];
+    const d = tierDifficulty(ch, 'extreme');
+    const cfg = buildSimConfig({
+      mode: 'PVE', seed, chapter: ch, difficulty: SIM_TEST_DIFFICULTY({ ...d, bossAtSpawnCount: 6 }), battleMap: map,
+      p1: { stages: { barbarian: 2, archer: 2, magic: 2 }, buffs: { values: {} } },
+    });
+    const runner = new SimRunner(cfg, {
+      defenderBuildings: tierEnemyBase(map, 'extreme'),
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }],
+      spellCharges: { P1: { HEAL: 2, RAGE: 2 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    const script = makeScript(4242, 2400);
+    for (let t = 300; t < 2400; t += 97) script.set(t, [...(script.get(t) ?? []), { type: 'BREAK_SHIELD', player: 'P1' }]);
+    const provider = new TickScript(script);
+    const sums: number[] = [];
+    const sawKinds = new Set<string>();
+    let sawShield = false;
+    for (let i = 0; i < 2400; i++) {
+      runner.advance(TICK_MS, provider);
+      sums.push(stateChecksum(runner.state));
+      for (const e of runner.state.entities) { if (e.kind) sawKinds.add(e.kind); if ((e.shield ?? 0) > 0) sawShield = true; }
+      if (runner.state.result) break;
+    }
+    return { sums, sawKinds, sawShield };
+  };
+  const a = run8(8080), b = run8(8080);
+  const same = a.sums.length === b.sums.length && a.sums.every((v, i) => v === b.sums[i]);
+  check('全tickのチェックサムが一致', same, `${a.sums.length} tick`);
+  check('新しい敵が出ている（試験が意味を持っている）',
+    ['guard', 'medic', 'kamikaze', 'flyer'].filter(k => a.sawKinds.has(k)).length >= 3, [...a.sawKinds].join(','));
+  check('シールドつきのボスが出ている', a.sawShield);
 }
 
 console.log(failures === 0
