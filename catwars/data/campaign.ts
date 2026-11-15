@@ -41,7 +41,28 @@
 
 import { BuildingType } from '../types';
 
-export type EnemyUnitKind = 'grunt' | 'shooter' | 'runner' | 'brute' | 'flyer' | 'boss';
+export type EnemyUnitKind = 'grunt' | 'shooter' | 'runner' | 'brute' | 'flyer' | 'guard' | 'medic' | 'kamikaze' | 'boss';
+
+/**
+ * 特別なきまりを持つ敵（2026-11-15。編成を変えないと勝てない敵）。きまりは sim/simulate.ts。
+ * - flyer（空中）：近接のネコ（射程2未満・飛行でない）の こうげきが とどかない。遠距離・魔法・飛行・砲台でたおす
+ * - guard（盾持ち）：魔法いがいの こうげきは半分。魔法は1.5倍
+ * - medic（回復役）：2秒ごとに、まわり（2.5マス）の味方を 最大HPの8% 回復する。先にたおす
+ * - kamikaze（自爆）：ネコは ねらわず、施設に つっこんで ばくはつする（1回きり）。とどく前に たおす
+ */
+export const ENEMY_TRAIT_NOTE: Partial<Record<EnemyUnitKind, { icon: string; counter: string }>> = {
+  flyer: { icon: '🪽', counter: '空をとぶ。近接は とどかない → 遠距離・魔法・飛行・砲台で' },
+  guard: { icon: '🛡️', counter: 'たてで こうげきを半分にする → 魔法が よくきく' },
+  medic: { icon: '💚', counter: 'まわりの敵を回復する → さきに たおそう' },
+  kamikaze: { icon: '💥', counter: '施設に つっこんで ばくはつ → とどく前に 遠距離で' },
+};
+export const MEDIC_HEAL_PCT = 0.08;
+export const MEDIC_HEAL_RADIUS = 2.5;
+export const MEDIC_HEAL_INTERVAL_MS = 2000;
+export const GUARD_PHYSICAL_MULT = 0.5;
+export const GUARD_MAGIC_MULT = 1.5;
+/** シールドがあるあいだ、ボスに通るダメージの割合 */
+export const SHIELD_DAMAGE_MULT = 0.1;
 
 /** 敵ウェーブ兵の基礎ステータス（章の倍率をかける前の素の値） */
 export const ENEMY_UNIT_STATS: Record<EnemyUnitKind, {
@@ -62,6 +83,9 @@ export const ENEMY_UNIT_STATS: Record<EnemyUnitKind, {
   runner:  { subType: 'speed',         label: 'かけぬけ兵', hp: 32,  damage: 8,  attackRange: 1.2, attackSpeed: 900,  moveSpeed: 3.4 },
   brute:   { subType: 'giant',         label: '重装ロボ',   hp: 220, damage: 18, attackRange: 1.3, attackSpeed: 1500, moveSpeed: 1.4 },
   flyer:   { subType: 'flying',        label: '飛行ドローン', hp: 90, damage: 14, attackRange: 1.4, attackSpeed: 1100, moveSpeed: 3.0 },
+  guard:   { subType: 'barbarian',     label: 'たてロボ',   hp: 170, damage: 12, attackRange: 1.2, attackSpeed: 1300, moveSpeed: 1.7 },
+  medic:   { subType: 'healer',        label: 'しゅうりドローン', hp: 60, damage: 5, attackRange: 1.4, attackSpeed: 1400, moveSpeed: 2.0 },
+  kamikaze:{ subType: 'bomber',        label: 'ばくだんロボ', hp: 42, damage: 200, attackRange: 1.2, attackSpeed: 1000, moveSpeed: 3.0 },
   boss:    { subType: 'boss_overlord', label: '皇帝の親衛隊', hp: 700, damage: 45, attackRange: 1.8, attackSpeed: 2400, moveSpeed: 0.9 },
 };
 
@@ -92,6 +116,9 @@ export const ENEMY_UNIT_COST: Record<EnemyUnitKind, number> = {
   runner: 25,
   brute: 95,
   flyer: 60,
+  guard: 80,
+  medic: 70,
+  kamikaze: 48,
   boss: 500, // ボスは経済に乗せず bossAtSpawnCount で単発トリガーする
 };
 
@@ -142,7 +169,7 @@ export const ENEMY_SPAWN_BUILDINGS: BuildingType[] = [
 ];
 
 /** 兵舎が生きているあいだだけ出撃できる重量級 */
-export const BARRACKS_ONLY_UNITS: EnemyUnitKind[] = ['brute', 'flyer'];
+export const BARRACKS_ONLY_UNITS: EnemyUnitKind[] = ['brute', 'flyer', 'guard'];
 
 /**
  * 敵の増援ポイントがたまる速さ(毎秒)を、生き残っている敵施設から計算する。
@@ -181,6 +208,8 @@ export interface ChapterDifficulty {
   unitPool: EnemyUnitKind[];
   /** 通常湧きが何体め(0起算)でボスが1体だけ割りこんでくるか（未設定ならボスなし） */
   bossAtSpawnCount?: number;
+  /** ボスのシールドの枚数（0・未設定ならシールドなし）。復習の問題を解くと1枚われる */
+  bossShield?: number;
   /** 戦闘開始時に持っている⚡ */
   startEnergy: number;
   /** ⚡の自然回復（毎秒）。キャンペーンでは 0（問題を解いて手に入れる） */
@@ -441,10 +470,115 @@ export const PVP_DIFFICULTY: ChapterDifficulty = {
   startEnergy: 220, energyPerSec: 1.4,
 };
 
-/** サポート段階を反映した実効難易度を返す */
-export function effectiveDifficulty(ch: CampaignChapter, assist: 0 | 1 | 2): ChapterDifficulty {
-  const a = ASSIST_LEVELS[assist];
+// ── 難易度3段（ふつう・むずかしい・げきむず）と 脅威レベル（2026-11-15）─────────────
+//
+// ねらい：トップ層が「全章クリア」で終わらないこと。同じ章に、敵の強さ・数・種類・基地の配置がちがう3段を置く。
+// 星は段ごと（1章で最大9つ）。むずかしい＝その章の ふつう をクリアで開く。げきむず＝むずかしい をクリアで開く。
+//
+// 倍率は docs/REBUILD_SPEC.md §2（HP ×1.35／×1.8、出現 ×1.25／×1.5）が出発点。
+// 出現の倍率だけは、想定プレイヤーの勝率が目標帯に入るよう 章ごとに決めなおしている（TIER_SPAWN_MULT。`npm run test:balance`）。
+
+export type ChapterTier = 'normal' | 'hard' | 'extreme';
+export const TIER_ORDER: ChapterTier[] = ['normal', 'hard', 'extreme'];
+
+export const TIER_INFO: Record<ChapterTier, {
+  label: string; color: string;
+  hpMult: number; damageMult: number;
+  /** 勝利報酬（💠）の倍率 */
+  rewardMult: number;
+  /** ボスのシールドの枚数（ボスが出る章だけ） */
+  bossShield: number;
+  /** 手持ちのレベルの めやす に足す分（脅威レベルの基準） */
+  baseLevelPlus: number;
+}> = {
+  normal:  { label: 'ふつう',     color: '#38bdf8', hpMult: 1.0,  damageMult: 1.0,  rewardMult: 1.0, bossShield: 1, baseLevelPlus: 0 },
+  hard:    { label: 'むずかしい', color: '#f59e0b', hpMult: 1.35, damageMult: 1.1,  rewardMult: 1.5, bossShield: 2, baseLevelPlus: 12 },
+  extreme: { label: 'げきむず',   color: '#ef4444', hpMult: 1.8,  damageMult: 1.2,  rewardMult: 2.2, bossShield: 3, baseLevelPlus: 24 },
+};
+
+/** 段ごとに足す敵（その章の ふつう の敵に足す）。むずかしい＝1〜2種類、げきむず＝新しい敵がそろう */
+const TIER_EXTRA_POOL: Record<ChapterTier, (no: number) => EnemyUnitKind[]> = {
+  normal: () => [],
+  hard: (no) => (no <= 2 ? ['kamikaze'] : no <= 5 ? ['guard', 'kamikaze'] : ['guard', 'medic']),
+  extreme: (no) => (no <= 2 ? ['guard', 'kamikaze'] : ['guard', 'medic', 'kamikaze', 'flyer']),
+};
+
+/** ボスが割りこむ章（ふつう＝第8章だけ。むずかしい＝4・6・8章。げきむず＝全章）。値は「何体めで出るか」 */
+function tierBossAt(ch: CampaignChapter, tier: ChapterTier): number | undefined {
+  if (ch.difficulty.bossAtSpawnCount != null) return ch.difficulty.bossAtSpawnCount;
+  if (tier === 'hard' && (ch.no === 4 || ch.no === 6)) return 45;
+  if (tier === 'extreme') return 40 + ch.no * 3;
+  return undefined;
+}
+
+/**
+ * 段ごとの「出現の速さ」の倍率（章ごと）。仕様の ×1.25／×1.5 から、勝率が目標帯に入るよう決めなおした値。
+ * 変えたら `TIER=hard npm run test:balance`・`TIER=extreme npm run test:balance`。
+ */
+export const TIER_SPAWN_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<number, number>> = {
+  hard:    { 1: 1.25, 2: 1.25, 3: 1.25, 4: 1.25, 5: 1.25, 6: 1.25, 7: 1.25, 8: 1.25 },
+  extreme: { 1: 1.5,  2: 1.5,  3: 1.5,  4: 1.5,  5: 1.5,  6: 1.5,  7: 1.5,  8: 1.5 },
+};
+
+/** その章・その段の難易度（サポート・脅威レベルをかける前） */
+export function tierDifficulty(ch: CampaignChapter, tier: ChapterTier): ChapterDifficulty {
   const d = ch.difficulty;
+  const t = TIER_INFO[tier];
+  const bossAt = tierBossAt(ch, tier);
+  const base: ChapterDifficulty = { ...d, bossAtSpawnCount: bossAt, bossShield: bossAt != null ? t.bossShield : 0 };
+  if (tier === 'normal') return base;
+  const extra = TIER_EXTRA_POOL[tier](ch.no).filter(k => !d.unitPool.includes(k));
+  return {
+    ...base,
+    enemyHpMult: d.enemyHpMult * t.hpMult,
+    defenseHpMult: d.defenseHpMult * (1 + (t.hpMult - 1) * 0.5),
+    enemyDamageMult: d.enemyDamageMult * t.damageMult,
+    defenseDamageMult: d.defenseDamageMult * t.damageMult,
+    enemySpawnRatePerSec: d.enemySpawnRatePerSec * (TIER_SPAWN_MULT[tier][ch.no] ?? 1),
+    unitPool: [...d.unitPool, ...extra],
+  };
+}
+
+/** 章の「このくらい育っていれば ちょうどよい」レベル（手持ちの上位5系統の平均）。脅威レベルの基準 */
+export const CHAPTER_BASE_LEVEL: Record<number, number> = { 1: 1, 2: 3, 5: 12, 3: 6, 4: 9, 6: 16, 7: 20, 8: 24 };
+export function chapterBaseLevel(ch: CampaignChapter, tier: ChapterTier): number {
+  return (CHAPTER_BASE_LEVEL[ch.no] ?? 1) + TIER_INFO[tier].baseLevelPlus;
+}
+
+/**
+ * 脅威レベル：手持ちが章の基準より育っているぶん、敵も強くなる（育てすぎても楽勝にならない）。
+ * SANMON の「相手のレベルは自分に合わせて上がる」と同じ考え方。**画面に「脅威 Lv.n」を出す**（隠れた調整はしない）。
+ * 下がる方向には はたらかない（弱い手持ちで来た子を、さらに楽にはしない。そちらはサポートモード）。
+ */
+export const THREAT_PER_LEVEL = 0.9;
+export const THREAT_STEP = 0.025;
+export const THREAT_MAX_BONUS = 1.2;
+export function threatLevel(avgLevel: number, baseLevel: number): number {
+  return Math.max(0, Math.round(THREAT_PER_LEVEL * (avgLevel - baseLevel)));
+}
+export function threatMult(threat: number): number {
+  return 1 + Math.min(THREAT_MAX_BONUS, THREAT_STEP * Math.max(0, threat));
+}
+export function withThreat(d: ChapterDifficulty, threat: number): ChapterDifficulty {
+  if (threat <= 0) return d;
+  const m = threatMult(threat);
+  return {
+    ...d,
+    enemyHpMult: d.enemyHpMult * m, enemyDamageMult: d.enemyDamageMult * m,
+    defenseHpMult: d.defenseHpMult * m, defenseDamageMult: d.defenseDamageMult * m,
+  };
+}
+
+/** 星・クリアの記録の鍵。ふつう は章ID そのまま（前の記録と同じ）。ほかは「ch3:hard」 */
+export const tierKey = (chapterId: string, tier: ChapterTier): string =>
+  tier === 'normal' ? chapterId : `${chapterId}:${tier}`;
+
+/** サポート段階を反映した実効難易度を返す */
+export function effectiveDifficulty(
+  ch: CampaignChapter, assist: 0 | 1 | 2, tier: ChapterTier = 'normal', threat = 0,
+): ChapterDifficulty {
+  const a = ASSIST_LEVELS[assist];
+  const d = withThreat(tierDifficulty(ch, tier), threat);
   return {
     ...d,
     enemyDamageMult: d.enemyDamageMult * a.damageMult,

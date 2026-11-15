@@ -37,6 +37,8 @@ export type SimCommand =
   | { type: 'BUY_SPELL'; player: PlayerId; spell: 'HEAL' | 'RAGE' }
   /** 戦闘中クイズの正解報酬。PvPでも「自分で解いた量」は自分の資源になる */
   | { type: 'GRANT_ENERGY'; player: PlayerId; amount: number }
+  /** 復習の問題を まちがえずに解いた：相手のボスのシールドを1枚わる */
+  | { type: 'BREAK_SHIELD'; player: PlayerId }
   | { type: 'SURRENDER'; player: PlayerId };
 
 /** 1tick ぶんの、全プレイヤーのコマンド束 */

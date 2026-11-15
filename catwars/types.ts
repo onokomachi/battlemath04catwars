@@ -80,6 +80,10 @@ export interface BattleEntity {
    */
   focusId?: string | null;
   isHidden?: boolean; // For traps
+  /** 敵の種類（EnemyUnitKind）。特別なきまり（盾・回復・自爆・空中）の判定に使う。絵は subType */
+  kind?: string;
+  /** ボスのシールドの残り枚数。1枚でもあると、うけるダメージは1割。復習の問題を解くと1枚われる */
+  shield?: number;
 }
 
 // LAVA = 溶岩。乗っているあいだ継続ダメージ（敵味方・中立すべてに適用）。通行は可能。

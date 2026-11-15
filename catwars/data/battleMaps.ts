@@ -1,3 +1,5 @@
+import { BUILDING_STATS } from '../constants';
+import type { ChapterTier } from './campaign';
 import { BattleMap, TerrainTile, BuildingType, GRID_W, GRID_H } from '../types';
 
 // ── CAT-WARS 戦場フィールド（全8種・ストーリーの章と1対1）────────────────────
@@ -369,4 +371,56 @@ export function zoneSize(m: BattleMap): { w: number; h: number; cells: number } 
   const w = z.xMax - z.xMin + 1;
   const h = z.yMax - z.yMin + 1;
   return { w, h, cells: w * h };
+}
+
+// ── 難易度の段ごとの敵の基地（2026-11-15）──────────────────────────────
+//
+// むずかしい＝砲台を1つ、げきむず＝砲台2つと電撃トラップ1つを、敵のコアの手前に足す
+// （同じ章でも、段がちがうと 攻める道すじを 考えなおすことになる）。
+// 置く場所は、コアに近い順に「地形も施設も無いマス」をさがして決める（毎回同じ結果）。
+
+const TIER_EXTRA_DEFENSE: Record<ChapterTier, BuildingType[]> = {
+  normal: [],
+  hard: [BuildingType.CANNON],
+  extreme: [BuildingType.CANNON, BuildingType.CANNON, BuildingType.HIDDEN_TESLA],
+};
+
+export function tierEnemyBase(map: BattleMap, tier: ChapterTier): BattleMap['enemyBase'] {
+  const extra = TIER_EXTRA_DEFENSE[tier];
+  if (extra.length === 0) return map.enemyBase;
+  const base = map.enemyBase.slice();
+  const core = base.find(b => b.type === BuildingType.TOWN_HALL) ?? base[0];
+  if (!core) return base;
+  const terrain = new Set(map.terrain.filter(t => t.type !== 'GRASS').map(t => `${t.x},${t.y}`));
+  const taken = (): Set<string> => {
+    const s = new Set<string>();
+    for (const b of base) {
+      const st = BUILDING_STATS[b.type];
+      // 1マスの余白をあける（通り道をふさぎきらない・施設どうしが くっつかない）
+      for (let dy = -1; dy <= st.height; dy++) for (let dx = -1; dx <= st.width; dx++) s.add(`${b.x + dx},${b.y + dy}`);
+    }
+    return s;
+  };
+  const minX = map.playerDeployZone.xMax + 6;
+  for (const type of extra) {
+    const st = BUILDING_STATS[type];
+    const used = taken();
+    let best: { x: number; y: number; score: number } | null = null;
+    for (let x = minX; x <= core.x - 2; x++) {
+      for (let y = 1; y <= GRID_H - 1 - st.height; y++) {
+        let ok = true;
+        for (let dy = 0; dy < st.height && ok; dy++) for (let dx = 0; dx < st.width && ok; dx++) {
+          const k = `${x + dx},${y + dy}`;
+          if (terrain.has(k) || used.has(k)) ok = false;
+        }
+        if (!ok) continue;
+        // コアの3〜5マス手前を いちばんよい場所とする。同点は 上から・左から
+        const dx = core.x - x, dy = Math.abs(y - core.y);
+        const score = Math.abs(dx - 4) * 2 + Math.abs(dy - 3);
+        if (!best || score < best.score) best = { x, y, score };
+      }
+    }
+    if (best) base.push({ type, x: best.x, y: best.y });
+  }
+  return base;
 }

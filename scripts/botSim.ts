@@ -8,8 +8,11 @@
 import { SimRunner, CommandProvider } from '../catwars/sim/runner';
 import { buildSimConfig, ResolvedBuffs } from '../catwars/sim/setup';
 import { SimCommand, TICK_MS, TICKS_PER_SEC } from '../catwars/sim/types';
-import { CAMPAIGN, ChapterDifficulty, QUIZ_BASE_REWARD } from '../catwars/data/campaign';
-import { BATTLE_MAP_BY_ID } from '../catwars/data/battleMaps';
+import {
+  CAMPAIGN, ChapterDifficulty, QUIZ_BASE_REWARD, ChapterTier, tierDifficulty, withThreat, threatLevel, chapterBaseLevel,
+} from '../catwars/data/campaign';
+import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../catwars/data/battleMaps';
+import { stageForLevel } from '../catwars/data/characters';
 import { BuildingType } from '../catwars/types';
 import { DetRNG } from '../catwars/sim/rng';
 
@@ -110,6 +113,20 @@ export const LOADOUT_BY_CHAPTER: Record<number, Loadout> = {
   },
 };
 
+/**
+ * むずかしい・げきむず に来た子の想定装備：手持ちのレベルが「章の基準＋段のぶん」（chapterBaseLevel）まで育っている。
+ * plusLevel は、そこからさらに育てた分（脅威レベルの試験で使う）。
+ */
+const MAIN_FAMILIES = ['barbarian', 'archer', 'giant', 'bomber', 'magic', 'speed', 'flying', 'healer'];
+export function loadoutForLevel(level: number): Loadout {
+  const st = stageForLevel(Math.max(1, Math.round(level)));
+  return {
+    stages: Object.fromEntries(MAIN_FAMILIES.map(id => [id, st])),
+    buffs: { values: { POWER_BOOST: 15, GENIUS_COMMANDER: 10 } },
+    buildings: BASE_MID,
+  };
+}
+
 /** 何も育てていない最悪ケース（ここでも詰まないかの下限チェック用） */
 export const BARE_LOADOUT: Loadout = {
   stages: {}, buffs: { values: {} }, buildings: CORE_ONLY,
@@ -130,7 +147,7 @@ export class BotPlayer implements CommandProvider {
   problems = 0;
   corrects = 0;
 
-  constructor(private runner: SimRunner, private skill: Skill, seed: number) {
+  constructor(private runner: SimRunner, private skill: Skill, seed: number, private tiered = false) {
     this.rng = new DetRNG(seed);
   }
 
@@ -143,8 +160,22 @@ export class BotPlayer implements CommandProvider {
     if (!zone) return;
     // 人の速さでしか動かない
     if (st.tick < this.nextActionTick) return;
+    // ボスにシールドがあるときは、復習の問題を解いて わる（まちがえたら われない。1手ぶんの時間を使う）
+    if (st.entities.some(e => e.team === 'DEFENDER' && (e.shield ?? 0) > 0) && this.problems < this.skill.maxProblems) {
+      this.problems++;
+      if (this.rng.next() < this.skill.accuracy) {
+        this.corrects++; this.streak++;
+        this.queued.push({ type: 'BREAK_SHIELD', player: 'P1' });
+      } else this.streak = 0;
+      this.nextActionTick = st.tick + Math.round(this.skill.actionIntervalSec * TICKS_PER_SEC);
+      return;
+    }
     const roll = this.rng.next();
-    const order = roll < 0.18 ? ['bomber', 'giant', 'barbarian']
+    // むずかしい・げきむず では、新しい敵に合わせて 魔法（盾持ちに強い）・遠距離（空中にとどく）を混ぜる。
+    // 役割が分かっている子ほど（tankRatio を目安にする）よく混ぜる
+    const counter = this.tiered && this.rng.next() < 0.15 + this.skill.tankRatio;
+    const order = counter ? (this.rng.next() < 0.5 ? ['magic', 'archer', 'barbarian'] : ['archer', 'barbarian', 'giant'])
+                : roll < 0.18 ? ['bomber', 'giant', 'barbarian']
                 : roll < this.skill.tankRatio + 0.18 ? ['giant', 'barbarian', 'archer']
                 : ['barbarian', 'archer', 'giant'];
 
@@ -209,27 +240,42 @@ export interface PlayOptions {
   loadout?: Loadout;
   maxSeconds?: number;
   skill?: Skill;
+  /** 難易度の段（既定は ふつう） */
+  tier?: ChapterTier;
+  /** 章の基準より どれだけ育てたか（レベル）。脅威レベルの試験で使う */
+  plusLevel?: number;
+  /** 脅威レベルを はたらかせない（くらべるため） */
+  noThreat?: boolean;
 }
 
 /** 1試合ぶんシミュレーションして結果を返す（同じ seed なら必ず同じ結果） */
 export function playOnce(chapterIndex: number, seed: number, opts: PlayOptions = {}): PlayResult {
   const ch = CAMPAIGN[chapterIndex];
   const map = BATTLE_MAP_BY_ID[ch.mapId];
-  const kit = opts.loadout ?? LOADOUT_BY_CHAPTER[ch.no] ?? BARE_LOADOUT;
+  const tier = opts.tier ?? 'normal';
+  const plus = opts.plusLevel ?? 0;
+  const baseLevel = chapterBaseLevel(ch, tier);
+  const kit = opts.loadout
+    ?? (tier === 'normal' && plus === 0 ? LOADOUT_BY_CHAPTER[ch.no] : loadoutForLevel(baseLevel + plus))
+    ?? BARE_LOADOUT;
   const skill = opts.skill ?? NORMAL_SKILL;
+  const threat = opts.noThreat ? 0 : threatLevel(baseLevel + plus, baseLevel);
+  const difficulty = withThreat(opts.difficulty ?? tierDifficulty(ch, tier), threat);
 
   const cfg = buildSimConfig({
     mode: 'PVE', seed, chapter: ch,
-    difficulty: opts.difficulty ?? ch.difficulty,
+    difficulty,
     battleMap: map,
     p1: { stages: kit.stages, buffs: kit.buffs },
   });
   const runner = new SimRunner(cfg, {
-    defenderBuildings: map.enemyBase,
+    defenderBuildings: tierEnemyBase(map, tier),
     playerBuildings: kit.buildings,
     spellCharges: { P1: { HEAL: 2, RAGE: 2 }, P2: { HEAL: 0, RAGE: 0 } },
   });
-  const bot = new BotPlayer(runner, skill, seed ^ 0x5bf03635);
+  // 特別な敵（空中・盾持ち など）が出る章では、それに合う系統を混ぜる（章の画面に 敵の種類と たおし方を出している）
+  const special = difficulty.unitPool.some(k => k === 'flyer' || k === 'guard' || k === 'medic' || k === 'kamikaze');
+  const bot = new BotPlayer(runner, skill, seed ^ 0x5bf03635, special);
 
   const maxTicks = (opts.maxSeconds ?? 300) * TICKS_PER_SEC;
   let peak = 0;

@@ -20,7 +20,7 @@
  * 戦闘のエナジーは自動ではたまらず、問題を解いて手に入れる（catwars/data/campaign.ts の PLAYER_START_ENERGY・QUIZ_BASE_REWARD）。
  * ボットと「章ごとの想定装備」の定義は scripts/botSim.ts にある。
  */
-import { CAMPAIGN } from '../catwars/data/campaign';
+import { CAMPAIGN, ChapterTier, TIER_INFO } from '../catwars/data/campaign';
 import { playOnce, seedFor, BARE_LOADOUT, SKILL_LEVELS, NO_SOLVE_SKILL, PlayResult } from './botSim';
 
 const RUNS = Number(process.env.RUNS ?? 40);
@@ -29,12 +29,16 @@ const USE_BARE = process.env.BARE === '1';
 /** 「ふつう」が勝った試合で解いた問題の平均が、これを超えたら不合格 */
 const MAX_PROBLEMS_OK = Number(process.env.MAXPROB ?? 18);
 
-const TARGET: Record<number, number> = { 1: 85, 2: 85, 3: 70, 4: 70, 5: 70, 6: 70, 7: 55, 8: 55 };
+/** TIER=hard / TIER=extreme で、むずかしい・げきむず を測る（目標は ふつう −15／−30） */
+const TIER = (['normal', 'hard', 'extreme'].includes(process.env.TIER ?? '') ? process.env.TIER : 'normal') as ChapterTier;
+const TIER_MINUS: Record<ChapterTier, number> = { normal: 0, hard: 15, extreme: 30 };
+const BASE_TARGET: Record<number, number> = { 1: 85, 2: 85, 3: 70, 4: 70, 5: 70, 6: 70, 7: 55, 8: 55 };
+const TARGET: Record<number, number> = Object.fromEntries(Object.entries(BASE_TARGET).map(([k, v]) => [k, v - TIER_MINUS[TIER]]));
 
 console.log(
   '\nCAT-WARS バランス計測（' +
   (USE_BARE ? '進化なし・バフなし・拠点なしの素の条件' : '章ごとの想定装備で到達したプレイヤー') +
-  ', 各章 各上手さ ' + RUNS + '回）\n'
+  ', 各章 各上手さ ' + RUNS + '回・段：' + TIER_INFO[TIER].label + '）\n'
 );
 console.log('章  目標   じょうず  ふつう  にがて  とかない  判定  解いた問題(ふつう・勝ち)  正解  平均決着  敵の出現数');
 console.log('─'.repeat(100));
@@ -48,7 +52,7 @@ for (let i = 0; i < CAMPAIGN.length; i++) {
   if (ONLY.length > 0 && !ONLY.includes(ch.no)) continue;
   const run = (skill: typeof NO_SOLVE_SKILL): PlayResult[] =>
     Array.from({ length: RUNS }, (_, r) => playOnce(i, seedFor(r), {
-      skill, loadout: USE_BARE ? BARE_LOADOUT : undefined, maxSeconds: MAX_SECONDS,
+      skill, loadout: USE_BARE ? BARE_LOADOUT : undefined, maxSeconds: MAX_SECONDS, tier: TIER,
     }));
   const all = SKILL_LEVELS.map(run);
   const none = run(NO_SOLVE_SKILL);

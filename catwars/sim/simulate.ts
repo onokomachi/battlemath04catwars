@@ -19,6 +19,7 @@ import { CHARACTER_BY_ID } from '../data/characters';
 import {
   ENEMY_UNIT_STATS, ENEMY_UNIT_COST, enemySpawnRate, pickWeightedEnemyUnit,
   ENEMY_SPAWN_BUILDINGS, ENEMY_PRODUCTION_RATE, BARRACKS_ONLY_UNITS, EnemyUnitKind,
+  MEDIC_HEAL_PCT, MEDIC_HEAL_RADIUS, MEDIC_HEAL_INTERVAL_MS, GUARD_PHYSICAL_MULT, GUARD_MAGIC_MULT, SHIELD_DAMAGE_MULT,
 } from '../data/campaign';
 import { collectWallCells, hasLineOfSight, isFlying, pickDefenseTarget } from '../utils/combatRules';
 import { ALIEN_STATS, LAVA_DPS, collectLavaCells, makeAlienEntity, makeTitanEntity } from '../utils/stageHazards';
@@ -61,6 +62,26 @@ function isHostile(a: BattleEntity, b: BattleEntity): boolean {
   const pb = playerOf(b);
   if (pa === null || pb === null) return true;
   return pa !== pb;
+}
+
+/**
+ * 特別なきまりを通したダメージ（盾持ち・ボスのシールド）。攻撃は必ずここを通す。
+ * attackerSub は こうげきした側の subType（施設の こうげきは null）。
+ */
+function dealDamage(target: BattleEntity, amount: number, attackerSub: string | null): void {
+  let a = amount;
+  if (target.kind === 'guard' && attackerSub !== null) {
+    a *= attackerSub === 'magic' ? GUARD_MAGIC_MULT : GUARD_PHYSICAL_MULT;
+  }
+  if ((target.shield ?? 0) > 0) a *= SHIELD_DAMAGE_MULT;
+  target.hp -= a;
+}
+
+/** 空中の敵には、近接のネコ（射程2未満・飛行でない）の こうげきが とどかない */
+function canReach(attacker: BattleEntity, target: BattleEntity): boolean {
+  if (target.kind !== 'flyer') return true;
+  if (attacker.type === 'BUILDING') return true;
+  return attacker.attackRange >= 2 || isFlying(attacker.subType);
 }
 
 function emptyPlayerState(startEnergy: number, healCharges: number, rageCharges: number): PlayerSimState {
@@ -385,6 +406,26 @@ function applyCommand(
       return;
     }
 
+    case 'BREAK_SHIELD': {
+      // 相手のボスのシールドを1枚わる（id順でいちばん先のボス。決定論のため）
+      const foeTeam = TEAM_OF[OPPONENT[cmd.player]].troop;
+      let boss: BattleEntity | null = null;
+      for (const e of state.entities) {
+        if (e.team !== foeTeam || (e.shield ?? 0) <= 0 || e.hp <= 0) continue;
+        if (!boss || e.id < boss.id) boss = e;
+      }
+      if (!boss) return;
+      boss.shield = (boss.shield ?? 0) - 1;
+      out.push({ type: 'SFX', name: 'explosion' });
+      out.push({
+        type: 'MESSAGE', durationMs: 2600,
+        text: boss.shield > 0
+          ? `🛡️ シールドを1枚 わった！ あと${boss.shield}枚`
+          : '💥 シールドが ぜんぶ われた！ いまだ、こうげき！',
+      });
+      return;
+    }
+
     case 'SURRENDER': {
       state.result = OPPONENT[cmd.player];
       return;
@@ -470,6 +511,8 @@ function runEnemyAI(state: SimState, cfg: SimConfig, obstacles: Set<string>, sta
         hp, maxHp: hp,
         damage: Math.round(s.damage * d.enemyDamageMult),
         team: 'DEFENDER',
+        kind,
+        ...(isBoss && (d.bossShield ?? 0) > 0 ? { shield: d.bossShield } : {}),
         attackRange: s.attackRange, attackSpeed: s.attackSpeed,
         lastAttack: -999999, moveSpeed: s.moveSpeed,
         targetPreference: 'ANY', path: [],
@@ -478,7 +521,9 @@ function runEnemyAI(state: SimState, cfg: SimConfig, obstacles: Set<string>, sta
       out.push({
         type: 'MESSAGE', durationMs: 2200,
         text: isBoss
-          ? `👑 ${cfg.enemyName}の親衛隊が出現！ 総力をあげて食い止めろ！`
+          ? ((d.bossShield ?? 0) > 0
+              ? `👑 ${cfg.enemyName}の親衛隊が出現！ 🛡️シールドは「ふくしゅうカード」を といて わろう！`
+              : `👑 ${cfg.enemyName}の親衛隊が出現！ 総力をあげて食い止めろ！`)
           : fromLabel
             ? `⚠️ 敵の${fromLabel}から 増援（${s.label}）が出てきた！`
             : `⚠️ 敵の増援（${s.label}）が出現！`,
@@ -632,6 +677,18 @@ export function simulateTick(
     }
   }
 
+  // ── 9b. 回復役（敵のしゅうりドローン）──
+  if (state.tick % msToTicks(MEDIC_HEAL_INTERVAL_MS) === 0) {
+    for (const m of state.entities) {
+      if (m.kind !== 'medic' || m.hp <= 0) continue;
+      for (const e of state.entities) {
+        if (e === m || e.type !== 'TROOP' || e.team !== m.team || e.hp <= 0 || e.hp >= e.maxHp) continue;
+        if (dist2(e.x, e.y, m.x, m.y) > MEDIC_HEAL_RADIUS * MEDIC_HEAL_RADIUS) continue;
+        e.hp = Math.min(e.maxHp, e.hp + e.maxHp * MEDIC_HEAL_PCT);
+      }
+    }
+  }
+
   // ── 10. エンティティの更新 ──
   for (const entity of state.entities) {
     if (entity.type === 'BUILDING') {
@@ -694,7 +751,7 @@ function updateBuilding(
 
   const resist = CHARACTER_BY_ID[target.subType]?.defenseResist ?? 0;
   const dealt = Math.max(1, Math.round(entity.damage * (1 - resist)));
-  target.hp -= dealt;
+  dealDamage(target, dealt, null);
   out.push({ type: 'DAMAGED', entityId: target.id });
   entity.lastAttack = state.tick;
 }
@@ -705,7 +762,11 @@ function updateTroop(
   state: SimState, cfg: SimConfig, statics: SimStatics, entity: BattleEntity,
   obstacles: Set<string>, obstaclesNoWall: Set<string>, wallCells: Set<string>, out: SimEvent[],
 ): void {
-  const potential = state.entities.filter(o => o.hp > 0 && isHostile(entity, o) && !o.isHidden);
+  // 自爆ロボは施設だけをねらう（ネコは ねらわない）。空中の敵は、近接のネコには とどかない
+  const isKamikaze = entity.kind === 'kamikaze';
+  const potential = state.entities.filter(o =>
+    o.hp > 0 && isHostile(entity, o) && !o.isHidden && canReach(entity, o) &&
+    (!isKamikaze || o.type === 'BUILDING'));
   if (potential.length === 0) return;
 
   // ── 名指しターゲット（プレイヤーが敵をタップして指定したもの）──
@@ -784,8 +845,10 @@ function updateTroop(
       const bMult = target.type === 'BUILDING' && owner
         ? (cfg.unitStats[owner][entity.subType]?.buildingDamageMult ?? 1)
         : 1;
-      target.hp -= damage * bMult;
+      dealDamage(target, damage * bMult, entity.subType);
       entity.lastAttack = state.tick;
+      // 自爆ロボは1回きり
+      if (isKamikaze) entity.hp = 0;
       out.push({ type: 'DAMAGED', entityId: target.id });
       out.push({ type: 'SFX', name: 'hit' });
       const sub = entity.subType;
@@ -836,6 +899,7 @@ function updateTroop(
         if (wall && state.tick - entity.lastAttack >= msToTicks(atkSpeed)) {
           wall.hp -= damage;
           entity.lastAttack = state.tick;
+          if (isKamikaze) entity.hp = 0;
           out.push({ type: 'DAMAGED', entityId: wall.id });
           out.push({ type: 'SFX', name: 'hit' });
         }
