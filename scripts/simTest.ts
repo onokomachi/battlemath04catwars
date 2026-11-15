@@ -21,6 +21,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * この試験は 戦闘の計算（再現性・フレームの刻み・同期）を確かめるもので、経済は見ない。
+ * キャンペーンは 自動収入なし（問題を解いて手に入れる）なので、そのままだと 台本どおりにネコを出せず、
+ * 試験が見たい長さまで戦闘が続かない。試験用に、前と同じ エナジー（はじめ260・毎秒7.5）を持たせる。
+ */
+const SIM_TEST_DIFFICULTY = <T extends { startEnergy: number; energyPerSec: number }>(d: T): T =>
+  ({ ...d, startEnergy: 260, energyPerSec: 7.5 });
+
 let failures = 0;
 function check(name: string, ok: boolean, detail = ''): void {
   console.log(`${ok ? '  ✅' : '  ❌'} ${name}${detail ? '  ' + detail : ''}`);
@@ -35,7 +43,7 @@ function makeSetup(chapterIndex = CHAPTER_INDEX, seed = 424242) {
   const ch = CAMPAIGN[chapterIndex];
   const map = BATTLE_MAP_BY_ID[ch.mapId];
   const cfg = buildSimConfig({
-    mode: 'PVE', seed, chapter: ch, difficulty: ch.difficulty, battleMap: map,
+    mode: 'PVE', seed, chapter: ch, difficulty: SIM_TEST_DIFFICULTY(ch.difficulty), battleMap: map,
     p1: { stages: { barbarian: 2, giant: 2 }, buffs: { values: { POWER_BOOST: 10, HEAL_AURA: 5 } } },
   });
   const init = {
