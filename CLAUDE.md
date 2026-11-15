@@ -12,6 +12,7 @@ Vite 6 + React 19 + TypeScript + Tailwind 3 + Zustand 5。Next.js ではない�
 npm run dev
 npm run check   # 型・学年パックの検査・戦闘の試験・ビルド（終わる前に必ず）
 npm run test:balance   # 全章の勝率（数値を変えたら流す）
+npm run test:progress  # 進み方の計算（XP・値段を変えたら流す。数秒）
 ```
 
 ## 構成
@@ -22,6 +23,9 @@ npm run test:balance   # 全章の勝率（数値を変えたら流す）
 - `apps/` … 単元アプリの問題の作り方と解答画面の写し（SANMON の `apps/` と同じもの）
 - `docs/REBUILD_SPEC.md` … **作り直しの仕様（決めたこと・数値・合格条件）。実装の前に読む**
 - `catwars/components/game/ProblemCards.tsx` … 問題カード（戦闘の主役の操作）と星の決め方
+- `catwars/data/facilities.ts` … 基地の施設（持ちつづける・Lv1〜10・値段・その日に動かせる数）。`store/useBaseStore.ts` が持ち物
+- `catwars/learn/shards.ts` … かけら（レベルの上限＝20＋5×かけら）。いまは端末の中だけの数え方（`store/useStudyStore.ts`）。CW-5 で kit の `sanmonShards` に置きかえる
+- `catwars/components/army/FormationScreen.tsx` … 出撃の5枠（5枠の外の系統は sim の表に入らない＝出せない）
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
 ## 必ず守ること
@@ -30,8 +34,10 @@ npm run test:balance   # 全章の勝率（数値を変えたら流す）
 - **記録の名前は単元アプリの skill_id**（`PackRound.skillId`）。前に何かを足さない。
 - **解かずに勝てる作りに戻さない。** 戦闘のエナジーは自動ではたまらない（`energyPerSec: 0`）。問題カードを解いて手に入れる。
   数値を変えたら `npm run test:balance`（解かない想定プレイヤーが全章で0%・ふつうが勝つまでに解く問題が平均18問以下、でないと exit 1。全章で約10分かかるので `RUNS=12` や `CH=3` でしぼれる）。
-  戦闘・敵・難易度の段・脅威レベルの数値を変えたら **3段とも測る**：`npm run test:balance:all`（3段＋脅威・にがての帯も見る。約4分）。
+  戦闘・敵・難易度の段・脅威レベル・育ち方・施設のレベルの数値を変えたら **3段とも測る**：`npm run test:balance:all`（3段＋脅威・にがての帯・ふつうの帯も見る。RUNS=24）。
+  XP・💠の値段・報酬を変えたら `npm run test:progress`。
 - **速さを報酬にしない。** 星と報酬は「まちがえずに解けたか」で決める。
+- **放置で増える収入を作らない。** 施設は持ちつづけるが、その日に動かすには その日の学習が要る（`activeFacilityLimit`）。
 - 戦闘の計算（`catwars/sim/`）は決定的に保つ（乱数は `sim/rng.ts`。`Math.random` を使わない）。対戦を作り直すときに要る。
 - 他社ゲームの固有名（タウンホール・エリクサー・バーバリアンなど）を新しく足さない。残っているものは独自の名前に置きかえる。
 - `window.confirm()` / `alert()` を使わない（iPad で出ないことがある）。
