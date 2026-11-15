@@ -1,5 +1,5 @@
 {
-  "name": "battle-math-online",
+  "name": "cat-wars",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,15 +8,22 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:sim": "tsx scripts/simTest.ts",
-    "test:balance": "tsx scripts/balanceTest.ts"
+    "test:balance": "tsx scripts/balanceTest.ts",
+    "test:pack": "tsx scripts/verifyPack.ts",
+    "lint": "tsc --noEmit",
+    "check": "npm run lint && npm run test:pack && npm run test:sim && npm run build"
   },
   "dependencies": {
-    "firebase": "^12.2.1",
+    "canvas-confetti": "^1.9.4",
+    "learning-app-kit": "https://github.com/onokomachi/learning-app-kit/archive/ddcca1de00284aea350c39c9806e639ea0016b42.tar.gz",
+    "lucide-react": "^1.73.0",
+    "motion": "^14.14.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

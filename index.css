@@ -11,3 +11,16 @@
   display: block;
   margin: 0 auto;
 }
+
+/* 単元アプリの解答画面（apps/）を出す「白い紙」。暗い戦場の上でも、アプリで見たのと同じ見た目で読める（SANMON と同じ） */
+.app-paper {
+  --c-bg: #eef2f7; --c-surface: #ffffff; --c-surface-2: #f6f8fb; --c-surface-3: #eaeef4;
+  --c-content: #1e293b; --c-muted: #5b6b80; --c-faint: #94a3b8; --c-line: #e4e9f0;
+  --c-brand: #2563eb; --c-brand-strong: #1d4ed8; --c-on-brand: #ffffff;
+  background: #eef2f7; color: #1e293b; text-shadow: none; letter-spacing: normal;
+  font-family: "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+}
+/* 筆算シミュレーター（apps/hissan）：せまい紙では左の外の手順の段を出さない・はたらかないボタンを出さない */
+.app-paper .simulator-container .\-left-28 { display: none; }
+.app-paper .simulator-container > div:first-child > button:first-child { visibility: hidden; }
+.app-paper .simulator-container button.border-t { display: none; }

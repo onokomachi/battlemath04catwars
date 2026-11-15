@@ -16,7 +16,6 @@ import { ArmyRosterScreen } from './army/ArmyRosterScreen';
 import { DailyBuffsPanel } from './learn/DailyBuffsPanel';
 import { ExchangePanel } from './learn/ExchangePanel';
 import { BaseBuilder } from './BaseBuilder';
-import { CatWarsPvpScreen } from './pvp/CatWarsPvpScreen';
 import { sfx } from '../utils/audioEngine';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
@@ -25,10 +24,11 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 // 出撃導線: 範囲えらび → ステージえらび → 陣地づくり → 戦闘
 // 陣地はステージごとに組む（ゾーンの広さが章によって変わるため）。
 // 陣地づくりは常にこの導線の中でのみ行う（ハブから単独で開く入口は廃止・一本化ずみ）。
-type View = 'home' | 'army' | 'range' | 'stage' | 'prep' | 'battle' | 'buffs' | 'mercs' | 'pvp';
+type View = 'home' | 'army' | 'range' | 'stage' | 'prep' | 'battle' | 'buffs' | 'mercs';
 
 interface Props {
-  onExit: () => void;
+  /** 上の階のメニューがあるときだけ（いまは CAT-WARS だけで動くので無い） */
+  onExit?: () => void;
   playerName?: string;
 }
 
@@ -72,7 +72,6 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   };
 
   // ── サブ画面 ───────────────────────────────
-  if (view === 'pvp') return <CatWarsPvpScreen onBack={() => setView('home')} playerName={playerName ?? 'あなた'} />;
   if (view === 'army') return <ArmyRosterScreen onBack={() => setView('home')} />;
 
   if (view === 'range') {
@@ -152,7 +151,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-y-auto" style={font}>
       {/* Header */}
       <div className="flex items-center justify-between p-4">
-        <button onClick={onExit} className="text-white/60 hover:text-white text-sm">← メニュー</button>
+        {onExit ? <button onClick={onExit} className="text-white/60 hover:text-white text-sm">← メニュー</button> : <span />}
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {dailyStreak >= 1 && <StatChip icon="🔥" value={`${dailyStreak}`} color="#fb923c" />}
           <StatChip icon="💠" value={Math.floor(resources.gold)} color="#38bdf8" />
@@ -200,8 +199,6 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           onClick={() => setView('army')} />
         <HubButton icon="✨" label="出撃バフ" sub="⚡エナジーで今日の戦力UP" color="#facc15"
           onClick={() => setView('buffs')} />
-        <HubButton icon="🤝" label="たいせん" sub="ともだちと ネコ軍団で しょうぶ" color="#a855f7"
-          onClick={() => setView('pvp')} />
       </div>
 
       {/* Base mini-preview（陣地の編集は出撃フローの中でのみ行う。ここは今日のもちものの確認のみ） */}

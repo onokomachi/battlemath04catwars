@@ -13,6 +13,7 @@ import { stateChecksum } from '../../sim/checksum';
 import { SimCommand, SimEvent, SimConfig, PlayerId, TICK_MS } from '../../sim/types';
 import type { LockstepSession, LockstepStatus } from '../../net/lockstep';
 import { InBattleQuiz } from './InBattleQuiz';
+import { grantStudyReward } from '../../bridge';
 import { sfx } from '../../utils/audioEngine';
 import { useProgressStore, BUFF_LEVEL_INFO } from '../../store/useProgressStore';
 import { useArmyStore } from '../../store/useArmyStore';
@@ -1615,9 +1616,10 @@ export const BattleScene: React.FC<Props> = ({
            ③ 報酬は問題の難易度・所要工程に応じて傾斜配分される（InBattleQuiz 側で算出）。 */}
        {quizOpen && (
          <InBattleQuiz
-           subtopics={quizSubtopics}
+           unitKeys={quizSubtopics}
            baseReward={34}
            onReward={(en) => issue({ type: 'GRANT_ENERGY', player: localPlayer, amount: en })}
+          onAnswered={(item, perfect) => grantStudyReward(perfect, item.skillId, item.difficulty)}
            onClose={() => { setQuizOpen(false); setBattlePaused(false); }}
          />
        )}

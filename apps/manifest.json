@@ -1,0 +1,249 @@
+{
+  "$comment": "SANMON に写す単元アプリのソース。scripts/sync-app-sources.mjs が repo の src/ から apps/<app>/ へ写す。shims に書いたファイルは写さない（SANMON 用の代わりの部品）。",
+  "apps": {
+    "karakuri": {
+      "repo": "syo4-keisannokimari",
+      "files": [
+        "lib/problems.ts",
+        "lib/orderSteps.ts",
+        "lib/praise.ts",
+        "components/shared/AnswerEntry.tsx",
+        "components/shared/Keypad.tsx",
+        "components/shared/ExprBuilder.tsx",
+        "components/modules/OrderModule.tsx",
+        "components/modules/FirstPickRound.tsx",
+        "components/modules/ExpressModule.tsx",
+        "components/modules/KufuuModule.tsx",
+        "components/modules/LawCheckModule.tsx",
+        "components/modules/TimesModule.tsx",
+        "components/modules/DotModule.tsx",
+        "components/modules/ReadModule.tsx",
+        "components/modules/InverseModule.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "components/shared/AppShell.tsx",
+        "components/shared/AdaptiveBar.tsx",
+        "lib/useAdaptive.ts",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    },
+    "menseki4": {
+      "repo": "syo4-mennsekinokurabekatatoarawasikata",
+      "files": [
+        "lib/problems.ts",
+        "lib/question.ts",
+        "lib/shapes.ts",
+        "lib/praise.ts",
+        "components/shared/QuestionRound.tsx",
+        "components/shared/Keypad.tsx",
+        "components/shared/Figure.tsx",
+        "components/shared/StepViews.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    },
+    "kawari": {
+      "repo": "syo4-kawarikatasirabe",
+      "files": [
+        "types.ts",
+        "lib/problems.ts",
+        "lib/scenarios.ts",
+        "lib/praise.ts",
+        "components/shared/KawariRound.tsx",
+        "components/shared/FigureView.tsx",
+        "components/shared/AnswerViews.tsx",
+        "components/shared/Keypad.tsx"
+      ],
+      "shims": [
+        "lib/sound.ts"
+      ]
+    },
+    "rippoutai": {
+      "repo": "syo4-tyokuhoutaitorippoutai",
+      "files": [
+        "lib/problems.ts",
+        "lib/question.ts",
+        "lib/solid.ts",
+        "lib/grade.ts",
+        "lib/praise.ts",
+        "components/shared/QuestionRound.tsx",
+        "components/shared/Keypad.tsx",
+        "components/shared/Figure.tsx",
+        "components/shared/SolidInputs.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    },
+    "syousu": {
+      "repo": "syo4-syousu-v2",
+      "files": [
+        "lib/mulDivQuestions.ts",
+        "lib/decimalMulDiv.ts",
+        "lib/decimal.ts",
+        "lib/wordProblems.ts",
+        "components/modules/MulDivRounds.tsx",
+        "components/modules/DecimalMulDivModule.tsx",
+        "components/modules/WordProblemModule.tsx",
+        "components/shared/AnswerEntry.tsx",
+        "components/shared/Keypad.tsx",
+        "lib/numberLine.ts",
+        "lib/placeValue.ts",
+        "lib/errorHunter.ts",
+        "lib/missTags.ts",
+        "components/modules/DecimalAddSubModule.tsx",
+        "components/modules/NumberLineModule.tsx",
+        "components/modules/PlaceValueLab.tsx",
+        "components/modules/ErrorHunterModule.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "components/shared/AppShell.tsx",
+        "components/shared/AdaptiveBar.tsx",
+        "lib/useAdaptive.ts",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    },
+    "bunsuu4": {
+      "repo": "syo4-bunnsu",
+      "files": [
+        "lib/problems.ts",
+        "lib/errorHunter.ts",
+        "lib/frac.ts",
+        "components/modules/FractionRound.tsx",
+        "components/modules/ErrorHunterModule.tsx",
+        "components/shared/ProbScratch.tsx",
+        "components/shared/FigureView.tsx",
+        "components/shared/FracEntry.tsx",
+        "components/shared/ExprBuilder.tsx",
+        "components/shared/Frac.tsx",
+        "components/shared/Keypad.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "components/shared/AppShell.tsx",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    },
+    "suihei": {
+      "repo": "syo4-suityoku-heikotosikakkei",
+      "files": [
+        "types.ts",
+        "lib/problems.ts",
+        "lib/problemTypes.ts",
+        "lib/geometry.ts",
+        "lib/problems/diagonal.ts",
+        "lib/problems/draw.ts",
+        "lib/problems/errorHunter.ts",
+        "lib/problems/life.ts",
+        "lib/problems/name.ts",
+        "lib/problems/property.ts",
+        "lib/problems/relation.ts",
+        "lib/problems/rng.ts",
+        "lib/problems/shapes.ts",
+        "lib/problems/tiling.ts",
+        "components/shared/GeoRound.tsx",
+        "components/shared/GeoFigure.tsx",
+        "components/shared/GridDrawBoard.tsx",
+        "components/shared/PairPicker.tsx",
+        "components/shared/OrderCards.tsx",
+        "components/shared/AnswerEntry.tsx",
+        "components/shared/Keypad.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    },
+    "gaisu": {
+      "repo": "syo4-gaisu",
+      "files": [
+        "lib/problems.ts",
+        "lib/praise.ts",
+        "components/shared/AnswerEntry.tsx",
+        "components/shared/Keypad.tsx",
+        "components/modules/MeaningModule.tsx",
+        "components/modules/ProdQuotModule.tsx",
+        "components/modules/RangeModule.tsx",
+        "components/modules/RoundJudgeModule.tsx",
+        "components/modules/RoundModule.tsx",
+        "components/modules/SumDiffModule.tsx",
+        "components/modules/ErrorHunterModule.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "components/shared/AppShell.tsx",
+        "components/shared/AdaptiveBar.tsx",
+        "lib/useAdaptive.ts",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    },
+    "hissan": {
+      "repo": "wari-hissann3",
+      "files": [
+        "lib/problems.ts",
+        "components/shared/AnswerEntry.tsx",
+        "components/shared/Keypad.tsx",
+        "components/shared/QuotRemEntry.tsx",
+        "components/shared/HissanBracket.tsx",
+        "components/modules/MentalModule.tsx",
+        "components/modules/RulesModule.tsx",
+        "components/modules/CheckModule.tsx",
+        "components/modules/EstimateModule.tsx",
+        "components/modules/WordProblemModule.tsx",
+        "components/modules/ErrorHunterModule.tsx",
+        "types.ts",
+        "lib/hissanSteps.ts",
+        "components/ProblemGenerator.ts",
+        "components/DivisionSimulator.tsx",
+        "components/MasterDivisionBoard.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "components/shared/AppShell.tsx",
+        "components/shared/AdaptiveBar.tsx",
+        "lib/useAdaptive.ts",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    },
+    "bai": {
+      "repo": "syo4-bainomikata",
+      "files": [
+        "lib/problems.ts",
+        "components/shared/AnswerEntry.tsx",
+        "components/shared/Keypad.tsx",
+        "components/shared/ChoiceStage.tsx",
+        "components/shared/DiagramFillStage.tsx",
+        "components/shared/DoubleNumberLine.tsx",
+        "components/shared/roundTypes.ts",
+        "components/modules/KihonModule.tsx",
+        "components/modules/TimesModule.tsx",
+        "components/modules/CompareModule.tsx",
+        "components/modules/BaseModule.tsx",
+        "components/modules/RatioCompareModule.tsx",
+        "components/modules/WordProblemModule.tsx",
+        "components/modules/ErrorHunterModule.tsx"
+      ],
+      "shims": [
+        "components/ui/primitives.tsx",
+        "components/shared/AppShell.tsx",
+        "components/shared/AdaptiveBar.tsx",
+        "lib/useAdaptive.ts",
+        "lib/sound.ts",
+        "store/progressStore.ts"
+      ]
+    }
+  }
+}

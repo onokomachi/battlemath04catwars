@@ -30,62 +30,13 @@
 // 注: 既存の MP(mathPoints) システムには手を触れない。ここで傾斜をかけるのは
 //     CAT-WARS の 💠クレジット / ⚡エナジー / 部隊XP のみ。
 
-import { difficultyMap } from '../../constants';
-import type { Problem } from '../../types';
-
-/** 報酬倍率の下限・上限（極端な差でバランスが壊れないようにする） */
-export const MIN_MULTIPLIER = 0.6;
-export const MAX_MULTIPLIER = 2.0;
-
 /**
  * 難易度(1〜5) → 係数。
  * 差がつきすぎると「かんたんな単元をやる意味がない」と感じさせてしまうため、
  * 1段階あたり +0.14 のゆるやかな傾斜にしている（難度1と5で約1.65倍）。
+ * 戦闘中の問題の重みは learn/gradePack.ts の rewardWeight（単元アプリの項目のむずかしさ）。
  */
 export function difficultyFactor(difficulty: number): number {
   const d = Math.max(1, Math.min(5, difficulty || 3));
   return 0.72 + 0.14 * d;
-}
-
-/** サブトピック名 → 難易度(1〜5)。未知の項目は中庸の3として扱う。 */
-export function difficultyOfSubtopic(subtopic?: string): number {
-  if (!subtopic) return 3;
-  return difficultyMap[subtopic] ?? 3;
-}
-
-/**
- * 問題タイプ → 所要工程係数。
- * 「答えを出すまでに何回の判断・入力を要するか」の近似。
- */
-export function stepFactor(problem?: Problem | null): number {
-  if (!problem) return 1;
-  const data = (problem.data ?? {}) as { options?: unknown; svg?: unknown };
-
-  // 選択肢問題は「読む→選ぶ」の1工程。一瞬で答えられるので軽い。
-  if (Array.isArray(data.options)) return 0.78;
-
-  // guided は筆算シミュレーター等。位ごとに複数回の入力・判定を行う多工程タイプ。
-  if (problem.type === 'guided') return 1.45;
-
-  // 図（角度・面積・数直線・展開図など）は読み取りの工程が1つ増える。
-  if (data.svg) return 1.12;
-
-  return 1;
-}
-
-/**
- * この問題1問ぶんの報酬倍率（0.6〜2.0）。
- * subtopic は `getMixedProblemSet` が付与する `category`、または学習記録の単元名。
- */
-export function problemRewardMultiplier(problem?: Problem | null, subtopic?: string): number {
-  const sub = subtopic ?? (problem as { category?: string } | null | undefined)?.category;
-  const m = difficultyFactor(difficultyOfSubtopic(sub)) * stepFactor(problem);
-  return Math.max(MIN_MULTIPLIER, Math.min(MAX_MULTIPLIER, m));
-}
-
-/** 子どもに見せる用の短いラベル（なぜ多くもらえたのかを可視化する） */
-export function rewardTierLabel(multiplier: number): { label: string; color: string } | null {
-  if (multiplier >= 1.6) return { label: 'むずかしい問題ボーナス', color: '#f472b6' };
-  if (multiplier >= 1.25) return { label: 'てごたえボーナス', color: '#facc15' };
-  return null;
 }
