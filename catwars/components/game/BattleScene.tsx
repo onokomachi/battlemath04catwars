@@ -589,6 +589,14 @@ export const BattleScene: React.FC<Props> = ({
     }
   }, []);
 
+  // 開発のときだけ：画面の確かめ（Playwright）で 結果画面を出す。__cwEndBattle(true)＝勝ち・false＝負け（本番のビルドには入らない）
+  useEffect(() => {
+    if (!import.meta.env.DEV || isPvp) return;
+    const w = window as unknown as { __cwEndBattle?: (win: boolean) => void };
+    w.__cwEndBattle = (win: boolean) => issue({ type: 'SURRENDER', player: win ? 'P2' : localPlayer });
+    return () => { delete w.__cwEndBattle; };
+  }, [issue, isPvp, localPlayer]);
+
   const handleGridClick = (x: number, y: number) => {
     const r = runnerRef.current!;
     if (r.state.result) return;

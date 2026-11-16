@@ -27,6 +27,7 @@ npm run test:progress  # 進み方の計算（XP・値段を変えたら流す�
 - `catwars/learn/shards.ts` … かけら（レベルの上限＝20＋5×かけら）。いまは端末の中だけの数え方（`store/useStudyStore.ts`）。CW-5 で kit の `sanmonShards` に置きかえる
 - `catwars/components/army/FormationScreen.tsx` … 出撃の5枠（5枠の外の系統は sim の表に入らない＝出せない）
 - `catwars/data/skills.ts` … スキル（8系統×3。かけら 2／4／8 で開く・いつも効く）。効き目のきまりは `sim/simulate.ts`（`applyHit` など）
+- `catwars/collection/`・`store/useCollectionStore.ts` … 収集（図鑑・バッジ34・シール60のカプセル・称号・はた）。保存は `catwars-collection-v1` の1つ（`exportSave`/`importSave`）。画面は `components/collection/`。くわしくは 仕様 §3d、絵の表は `docs/ART_LIST.md`
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
 ## 必ず守ること
@@ -42,6 +43,7 @@ npm run test:progress  # 進み方の計算（XP・値段を変えたら流す�
 - **放置で増える収入を作らない。** 施設は持ちつづけるが、その日に動かすには その日の学習が要る（`activeFacilityLimit`）。
 - 戦闘の計算（`catwars/sim/`）は決定的に保つ（乱数は `sim/rng.ts`。`Math.random` を使わない）。対戦を作り直すときに要る。
 - 他社ゲームの固有名（タウンホール・エリクサー・バーバリアンなど）を新しく足さない。残っているものは独自の名前に置きかえる。
+- **収集（バッジ・シールコイン）は学習の量と質だけで手に入る。** 速さ・勝ち負けの数・ログイン時間・放置・💠・お金 を条件や通貨にしない。カプセルは 確率を出す・10回で天井・そろえても ごほうびなし。数を変えたら `npm run test:collection` と `npm run test:progress`（エンジョイ勢が毎日1つ・28日で シール4〜6割、トップ層が28日で8割未満）。
 - `window.confirm()` / `alert()` を使わない（iPad で出ないことがある）。
 - 子どもの氏名は扱わない。APIキー・トークン・パスワードはファイルにも知識集にも書かない。
 
