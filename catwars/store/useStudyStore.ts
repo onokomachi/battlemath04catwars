@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 // ── 学習の記録（端末の中だけ。2026-11-15 CW-4a）──────────────────────────────
 //
@@ -44,7 +45,7 @@ export const useStudyStore = create<StudyStore>()(
       reset: () => set({ perfect: {}, todayPerfect: 0, todayDate: '' }),
     }),
     {
-      name: 'catwars-study',
+      name: SAVE_KEYS.study,
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<StudyStore>;
         return {

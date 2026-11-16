@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 // ── スキルの「見せた」記録（2026-11-15 CW-4b）──────────────────────────────
 // 新しく開いたスキルは、戦闘のあとの結果画面か 図鑑で「✨ あたらしい スキル！」を1回だけ出す。
@@ -17,7 +18,7 @@ export const useSkillStore = create<SkillSeenStore>()(
       markSeen: (ids) => set(s => ({ seen: [...new Set([...s.seen, ...ids])] })),
     }),
     {
-      name: 'catwars-skills-seen',
+      name: SAVE_KEYS.skillsSeen,
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<SkillSeenStore>;
         return { ...current, seen: Array.isArray(p.seen) ? p.seen.filter((x): x is string => typeof x === 'string') : [] };

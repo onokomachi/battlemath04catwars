@@ -7,6 +7,7 @@ import { coinsForPerfect, COIN_RULES, BADGE_COINS } from '../collection/coins';
 import { BADGE_BY_ID, coinTierOf } from '../collection/badges';
 import { markKey } from '../collection/dex';
 import { TITLE_BY_ID, DECOR_BY_ID } from '../collection/titles';
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 // ── 収集の記録（2026-11-16 CW-4c。端末の中だけ）─────────────────────────────
 //
@@ -328,7 +329,7 @@ export const useCollectionStore = create<CollectionStore>()(
       reset: () => set(emptySave()),
     }),
     {
-      name: 'catwars-collection-v1',
+      name: SAVE_KEYS.collection,
       partialize: (s) => pick(s as CollectionStore),
       merge: (persisted, current) => ({ ...current, ...sanitizeSave(persisted) }),
     },

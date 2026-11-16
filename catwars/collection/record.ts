@@ -11,7 +11,7 @@ import { useArmyStore } from '../store/useArmyStore';
 import { useBaseStore } from '../store/useBaseStore';
 import { useProgressStore } from '../store/useProgressStore';
 import { PACK_UNITS } from '../learn/gradePack';
-import { localShards, familyShards } from '../learn/shards';
+import { unitShards as unitShardsOf, familyShards } from '../learn/shards';
 import { CHARACTERS } from '../data/characters';
 import { skillsForFamily, unlockedSkillIds } from '../data/skills';
 import { unlockedFamilies } from '../utils/battleLoadout';
@@ -30,7 +30,7 @@ export function buildBadgeInput(starsOverride?: Record<string, number>): BadgeIn
     perfectTotal += v;
   }
   const unitShards: Record<string, number> = {};
-  for (const u of PACK_UNITS) unitShards[u.key] = localShards(u.key, perfect);
+  for (const u of PACK_UNITS) unitShards[u.key] = unitShardsOf(u.key, perfect);
   const fams = CHARACTERS.filter((f) => skillsForFamily(f.id).length > 0);
   let skillsOpen = 0;
   let familiesWithSkill = 0;

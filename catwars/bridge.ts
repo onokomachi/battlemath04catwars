@@ -19,6 +19,24 @@ import { difficultyFactor } from './data/problemWeights';
 import { CREDIT_PER_CORRECT, ENERGY_PER_CORRECT, STUDY_XP_PER_CORRECT } from './data/rewards';
 import { recordCollectionAnswer } from './collection/record';
 
+/**
+ * 学級ポータルへ 1問の記録を送る **入口だけ**（CW-5a・2026-11-16）。**いまは 何も送らない**。
+ *
+ * 戦闘の中の答えを どう数えるか（送る／送らない・スタミナに数えない形）は 持ち主と決める（docs/CW5B_SERVER_PLAN.md の「記録」）。
+ * 決めたら ここで 名乗っているとき（getStudent()）だけ kit の flushEvents に わたす。
+ * おためし・体験版は 送らない（SANMON の syncLearningToPortal と同じ）。
+ */
+export interface PortalAnswer {
+  unitKey: string;
+  skillId: string;
+  perfect: boolean;
+  difficulty?: number;
+  ts: number;
+}
+export function sendAnswerToPortal(_a: PortalAnswer): void {
+  /* まだ送らない（CW-5b で決める） */
+}
+
 /** むずかしさ3を 1.0 とした倍率（1で約0.75倍、5で約1.25倍） */
 function studyMultiplier(difficulty = 3): number {
   return difficultyFactor(difficulty) / difficultyFactor(3);
@@ -41,6 +59,8 @@ export function grantStudyReward(
   useStudyStore.getState().record(item.unitKey, item.skillId, perfect);
   // 収集：シールコイン（学習の成果だけ）・ふくしゅう・れんぞく学習の記録（collection/）
   try { recordCollectionAnswer({ unitKey: item.unitKey, skillId: item.skillId, difficulty: item.difficulty, perfect }); } catch { /* noop */ }
+  // 学級ポータルへの記録（いまは何もしない。上の sendAnswerToPortal）
+  sendAnswerToPortal({ unitKey: item.unitKey, skillId: item.skillId, perfect, difficulty: item.difficulty, ts: Date.now() });
   if (!perfect) return;
 
   const m = studyMultiplier(item.difficulty ?? 3);

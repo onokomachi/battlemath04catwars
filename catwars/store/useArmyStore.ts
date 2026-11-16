@@ -4,6 +4,7 @@ import { syncProgressState } from '../utils/syncToSupabase';
 import { CHARACTERS, stageForLevel, xpToNext, MAX_LEVEL } from '../data/characters';
 import { BATTLE_XP_LOSS, BATTLE_XP_WIN } from '../data/rewards';
 import { familyLevelCap } from '../learn/shards';
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 export interface ArmyEntry {
   level: number;
@@ -150,7 +151,7 @@ export const useArmyStore = create<ArmyStore>()(
       },
     }),
     {
-      name: 'neo-academia-army',
+      name: SAVE_KEYS.army,
       // 古いセーブ（Lv50まで・formation 無し）でも落ちないように うめる
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<ArmyStore>;

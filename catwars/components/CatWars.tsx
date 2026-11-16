@@ -29,6 +29,8 @@ import { useCollectionStore } from '../store/useCollectionStore';
 import { refreshCollection } from '../collection/record';
 import { CAPSULE_RULES } from '../collection/stickers';
 import { sfx } from '../utils/audioEngine';
+import { usePortalLifecycle, startSortie, usePortal, sortieLock } from '../portal/usePortal';
+import { PortalCard, SortieStamina } from '../portal/PortalCard';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
@@ -81,10 +83,42 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   useEffect(() => { if (view === 'home') { try { refreshCollection(); } catch { /* noop */ } } }, [view]);
   const coins = useCollectionStore((s) => s.coins);
 
+  // 学級ポータル（名乗り・スタミナ・モードの開け閉め・サーバのかけら）。CW-5a
+  usePortalLifecycle();
+  const portalStudent = usePortal((s) => s.student);
+  const portalModes = usePortal((s) => s.modes);
+  /** 出撃が閉じているときの文（名乗っている子だけ。おためしは閉じない） */
+  const homeLock = portalStudent ? sortieLock(portalModes) : null;
+  const [homeNotice, setHomeNotice] = useState<string | null>(null);
+  /**
+   * 戦闘の きっぷ。出撃の関門（portal/gate.ts）を通ったときだけ できる。戦闘の画面は これが無いと出さない
+   * （関門を通らずに戦闘を始める道を残さない）。戦闘が おわったら 消す。
+   */
+  const [battleTicket, setBattleTicket] = useState<{ chapterId: string; tier: ChapterTier } | null>(null);
+  const [sortieBusy, setSortieBusy] = useState(false);
+  const [sortieMsg, setSortieMsg] = useState<string | null>(null);
+
+  /** 出撃の関門。ここだけが battleTicket を作る */
+  const beginBattle = async (chapterId: string) => {
+    if (sortieBusy) return;
+    setSortieBusy(true);
+    setSortieMsg(null);
+    try {
+      const r = await startSortie(formation);
+      if (r.ok === false) { setSortieMsg(r.message); return; }
+      campaign.recordAttempt(chapterId, activeTier);
+      setBattleTicket({ chapterId, tier: activeTier });
+      setView('battle');
+    } finally {
+      setSortieBusy(false);
+    }
+  };
+
   const handleEndBattle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
     if (win) addResources(Math.round(loot.gold));
     // 章の結果を記録（勝敗で連敗数が更新され、サポートモードの判定に反映される）
     campaign.recordResult(activeChapterId, win, stars, activeTier);
+    setBattleTicket(null);
     setView('home');
   };
 
@@ -130,17 +164,16 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     return (
       <BaseBuilder
         chapter={chapter}
-        onBack={() => setView('formation')}
-        onProceed={() => {
-          campaign.recordAttempt(chapter.id, activeTier);
-          setView('battle');
-        }}
+        onBack={() => { setSortieMsg(null); setView('formation'); }}
+        onProceed={() => { void beginBattle(chapter.id); }}
+        proceedBusy={sortieBusy}
+        proceedSlot={<SortieStamina formation={formation} message={sortieMsg} />}
       />
     );
   }
 
-  if (view === 'battle') {
-    const chapter = CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
+  if (view === 'battle' && battleTicket) {
+    const chapter = CHAPTER_BY_ID[battleTicket.chapterId] ?? CAMPAIGN[0];
     const map = BATTLE_MAP_BY_ID[chapter.mapId] ?? BATTLE_MAPS[0];
     // サポートモードは段ごとの連敗で決まる
     const assist = campaign.assistLevelFor(chapter.id, activeTier);
@@ -211,6 +244,17 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       {/* あたらしい バッジ（1回だけ） */}
       <NewBadgeNotice />
 
+      {/* 学級ポータル：名乗りの入口・スタミナ（つないでいないビルドでは出さない） */}
+      <PortalCard />
+      {homeNotice && (
+        <div className="px-4 pt-3" role="status">
+          <div className="rounded-xl border border-[#fca5a5]/50 p-3 text-center" style={{ background: 'rgba(127,29,29,0.25)' }}>
+            <p className="text-white text-sm font-bold">{homeNotice}</p>
+            <button onClick={() => setHomeNotice(null)} className="mt-1 text-[11px] text-white/60 underline">とじる</button>
+          </div>
+        </div>
+      )}
+
       {/* Daily goal */}
       <div className="px-5">
         <div className="flex items-center justify-between mb-1">
@@ -239,8 +283,13 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
 
       {/* Big actions */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4 pt-4">
-        <HubButton icon="⚔️" label="出撃！" sub={allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`} color="#ef4444"
-          onClick={() => { resetBattleSession(); setView('range'); }} big />
+        <HubButton icon="⚔️" label="出撃！" sub={homeLock ? `🔒 ${homeLock}` : allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`} color="#ef4444"
+          locked={!!homeLock}
+          onClick={() => {
+            // 閉じていても 押せる形のまま。押すと わけを出す（SANMON と同じ）
+            if (homeLock) { setHomeNotice(homeLock); return; }
+            setSortieMsg(null); resetBattleSession(); setView('range');
+          }} big />
         <HubButton icon="🐱" label="ネコ部隊" sub="レベル・進化・スキル" color="#a3e635"
           onClick={() => setView('army')} />
         <HubButton icon="📖" label="あつめる" sub={coins >= CAPSULE_RULES.cost ? `🪙${coins} カプセルを まわせる！` : '図鑑・バッジ・シール'} color="#7dd3fc"
@@ -303,10 +352,10 @@ export function topFamiliesAvgLevel(army: Record<string, { level: number }>): nu
 }
 
 const HubButton: React.FC<{
-  icon: string; label: string; sub: string; color: string; onClick: () => void; big?: boolean;
-}> = ({ icon, label, sub, color, onClick, big }) => (
-  <button onClick={() => { sfx.select(); onClick(); }}
-    className={`relative overflow-hidden rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${big ? 'col-span-2 md:col-span-3 py-6' : 'py-5'}`}
+  icon: string; label: string; sub: string; color: string; onClick: () => void; big?: boolean; locked?: boolean;
+}> = ({ icon, label, sub, color, onClick, big, locked }) => (
+  <button onClick={() => { sfx.select(); onClick(); }} aria-disabled={locked || undefined}
+    className={`relative overflow-hidden rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${big ? 'col-span-2 md:col-span-3 py-6' : 'py-5'} ${locked ? 'opacity-60 grayscale' : ''}`}
     style={{ borderColor: `${color}`, background: `${color}18`, boxShadow: big ? `0 0 22px ${color}55` : `0 0 10px ${color}33` }}>
     <span className={big ? 'text-4xl' : 'text-3xl'}>{icon}</span>
     <span className="font-black text-white tracking-wide" style={{ ...fontMono, fontSize: big ? 18 : 15 }}>{label}</span>

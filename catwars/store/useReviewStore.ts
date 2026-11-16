@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 /**
  * まちがえた項目（ふくしゅうの もと。2026-11-15）。
@@ -45,7 +46,7 @@ export const useReviewStore = create<ReviewStore>()(
       reset: () => set({ misses: [] }),
     }),
     {
-      name: 'catwars-review',
+      name: SAVE_KEYS.review,
       merge: (persisted, current) => ({ ...current, misses: ((persisted ?? {}) as Partial<ReviewStore>).misses ?? [] }),
     },
   ),

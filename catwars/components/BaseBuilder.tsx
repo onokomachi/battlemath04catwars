@@ -42,6 +42,10 @@ interface Props {
   onBack: () => void;
   /** 出撃フローから来たときだけ渡される（ハブから来た場合は無し） */
   onProceed?: () => void;
+  /** 出撃ボタンの上に出すもの（スタミナ・ことわられたわけ。CW-5a） */
+  proceedSlot?: React.ReactNode;
+  /** 出撃の関門に聞いているあいだ（ボタンを止める） */
+  proceedBusy?: boolean;
 }
 
 /**
@@ -51,7 +55,7 @@ interface Props {
  * ・その日に戦闘で動かせるのは「2 + きょう まちがえずに解いた数 ÷ 5」個まで（コアは いつも）。先に置いた順
  * ・置ける範囲（自陣ゾーン）はステージごとに違う
  */
-export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => {
+export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proceedSlot, proceedBusy }) => {
   const map: BattleMap = BATTLE_MAP_BY_ID[chapter.mapId];
   const base = useBaseStore();
   const credits = Math.floor(usePlayerStore(s => s.resources.gold));
@@ -381,15 +385,17 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
             : '💠で 施設を 買って レベルを 上げよう。施設は ずっと のこるよ。きょう 動かせる数は、まちがえずに といた数で ふえる'}
         </p>
 
+        {onProceed && proceedSlot}
         {onProceed && (
-          <button onClick={() => { sfx.select(); onProceed(); }}
-            className="w-full py-3.5 rounded-xl font-bold text-base transition-all active:scale-95 mb-1"
+          <button onClick={() => { if (proceedBusy) return; sfx.select(); onProceed(); }}
+            disabled={proceedBusy} data-testid="sortie-go"
+            className="w-full py-3.5 rounded-xl font-bold text-base transition-all active:scale-95 mb-1 disabled:opacity-50"
             style={{
               ...fontMono,
               background: 'rgba(239,68,68,0.2)', border: '2px solid #ef4444', color: '#f87171',
               boxShadow: '0 0 14px rgba(239,68,68,0.45)',
             }}>
-            ⚔️ この陣地で 出撃！
+            {proceedBusy ? '⏳ じゅんびちゅう…' : '⚔️ この陣地で 出撃！'}
           </button>
         )}
       </div>

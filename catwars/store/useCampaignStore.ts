@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { CAMPAIGN, assistLevelForLosses, tierKey, type ChapterTier } from '../data/campaign';
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 interface CampaignStore {
   /** クリアずみの章ID（**ふつう だけ**。章の開放・「n/8章クリア」に使う） */
@@ -102,7 +103,7 @@ export const useCampaignStore = create<CampaignStore>()(
       reset: () => set({ clearedChapters: [], tierCleared: [], lossStreak: {}, attempts: {}, stars: {}, lastChapterId: CAMPAIGN[0].id }),
     }),
     {
-      name: 'catwars-campaign',
+      name: SAVE_KEYS.campaign,
       // 古いセーブ（段の無いころ）に新しい項目が無くても落ちないように
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<CampaignStore>;

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { BuildingType, DeployedBuilding } from '../types';
+import { SAVE_KEYS } from '../portal/saveKeys';
 import {
   FACILITY_MAX_COUNT, MAX_FACILITY_LEVEL, buyCost, upgradeCost,
 } from '../data/facilities';
@@ -83,7 +84,7 @@ export const useBaseStore = create<BaseStore>()(
       reset: () => set({ owned: {}, levels: {}, layouts: {} }),
     }),
     {
-      name: 'catwars-base-v2',
+      name: SAVE_KEYS.base,
       // 形が合わないセーブ（手でいじった等）でも落ちないように、足りない所を空でうめる
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<BaseStore>;

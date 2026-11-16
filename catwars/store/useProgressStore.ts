@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { syncProgressState } from '../utils/syncToSupabase';
 import { BuffType, BuffTier, ActiveDailyBuff } from '../types';
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 export interface MasteryEntry {
   seen: number;
@@ -456,6 +457,6 @@ export const useProgressStore = create<ProgressStore>()(
         return set(next);
       },
     }),
-    { name: 'neo-academia-progress' }
+    { name: SAVE_KEYS.progress }
   )
 );

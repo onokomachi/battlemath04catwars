@@ -5,6 +5,7 @@ import { BUILDING_STATS, INITIAL_TROOPS } from '../constants';
 import { syncPlayerState } from '../utils/syncToSupabase';
 
 import { START_CREDITS, MAX_CREDITS } from '../data/rewards';
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 const INITIAL_PLAYER_STATE: GameState = {
   // 💠 のはじめの額。施設は 💠 で買って持ちつづける（2026-11-15 CW-4a）。上限は事実上なし
@@ -110,7 +111,7 @@ export const usePlayerStore = create<PlayerStore>()(
       },
     }),
     {
-      name: 'neo-academia-player',
+      name: SAVE_KEYS.player,
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.troops = mergeTroops(Array.isArray(state.troops) ? state.troops : []);

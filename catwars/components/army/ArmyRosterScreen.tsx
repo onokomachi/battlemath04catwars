@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CHARACTERS, getCharacterSprite, stageForLevel, xpToNext, levelMult, MAX_LEVEL, CharacterFamily } from '../../data/characters';
 import { useArmyStore } from '../../store/useArmyStore';
 import { useStudyStore } from '../../store/useStudyStore';
-import { familyShards, familyLevelCap, weakestUnitForFamily, skillsToNextShard, MAX_SHARDS } from '../../learn/shards';
+import { familyShards, familyLevelCap, weakestUnitForFamily, nextShardHint, shardsFromServer, useShardSource, MAX_SHARDS } from '../../learn/shards';
 import { loadPack, packLoaded, UNIT_NAME_BY_KEY, unitsForFamily } from '../../learn/gradePack';
 import { skillsForFamily, unlockedSkillIds } from '../../data/skills';
 import { SkillList, NewSkillNotice } from './SkillParts';
@@ -15,7 +15,7 @@ function capInfo(familyId: string, perfect: Record<string, number>) {
   return {
     shards, cap,
     nextUnit: weak ? UNIT_NAME_BY_KEY[weak] ?? weak : null,
-    nextSkills: weak ? skillsToNextShard(weak, perfect) : 0,
+    nextHint: weak ? nextShardHint(UNIT_NAME_BY_KEY[weak] ?? weak, weak, perfect) : '',
     units: unitsForFamily(familyId),
   };
 }
@@ -30,6 +30,8 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
   const { army } = useArmyStore();
   const perfect = useStudyStore(s => s.perfect);
+  // サーバの かけら（名乗っているとき）が 読めたら かぞえなおす
+  useShardSource(s => s.server);
   const [selected, setSelected] = useState<CharacterFamily | null>(null);
   // かけらは「その単元の出せる問題」で数える。問題の一覧を読みこんだら、もう一度かぞえる
   const [, setReady] = useState(packLoaded());
@@ -86,7 +88,7 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
               </div>
               {atCap && ci.cap < MAX_LEVEL && ci.nextUnit && (
                 <div className="w-full mt-0.5 text-[10px] leading-tight text-[#fde68a]">
-                  つぎの上限：『{ci.nextUnit}』を まちがえずに とこう
+                  {shardsFromServer() ? `つぎの上限：『${ci.nextUnit}』の 単元アプリで がんばろう` : `つぎの上限：『${ci.nextUnit}』を まちがえずに とこう`}
                 </div>
               )}
             </button>
@@ -96,7 +98,9 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
 
       <p className="text-center text-white/30 text-xs px-6 pb-4">
         戦闘に出すと ネコに 経験値が 入って レベルアップ！ Lv10と Lv30で すがたが 進化するニャ。<br />
-        レベルの上限は、そのネコの単元を まちがえずに とくと 上がる（💎かけら 1つで +5・Lv60まで）。<br />
+        {shardsFromServer()
+          ? <>レベルの上限は、そのネコの単元の 単元アプリで 本番テスト・実力の階段を がんばると 上がる（💎かけら 1つで +5・Lv60まで。SANMON と同じ かけら）。<br /></>
+          : <>レベルの上限は、そのネコの単元を まちがえずに とくと 上がる（💎かけら 1つで +5・Lv60まで）。<br /></>}
         💎かけらが 2・4・8こに なると スキル（★）が ひらく。
       </p>
 
@@ -155,7 +159,7 @@ const DetailModal: React.FC<{
           </div>
           {info.cap < MAX_LEVEL && info.nextUnit && (
             <div className="text-[#fde68a] text-[11px] mt-1 leading-relaxed">
-              つぎの上限：『{info.nextUnit}』を まちがえずに とこう（あと {info.nextSkills}こうもくを 3回ずつ）
+              {info.nextHint}
             </div>
           )}
         </div>
