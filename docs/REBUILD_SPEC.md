@@ -323,6 +323,18 @@ CW-4b で 0.99 にした（1手の速さを そろえたら「にがて」の +0
   「エナジー増産（GOLD_BOOST）」は「カード エナジー」に作り直した：**問題カードで もらえる ⚡ が +20／35／50％**（BattleScene の `baseReward`。sim は さわっていない＝決定性・数値は そのまま。対戦では効かない）。
 - 試験：`npm run test:portal`（`npm run check` に入れた）。`BAND=1 RUNS=12` の勝率は 前と同じ（想定プレイヤーはバフなし）。
 
+### 4b. 実装ずみ（CW-5b 第2段・2026-11-16）：鍵 catwars・記録の送信・セーブのサーバ保存
+くわしくは `docs/PORTAL.md`。kit を 0.36.0（`df7ec52`）に上げた。**サーバの SQL は 持ち主が流すのを待っている**（PRISM `supabase/sql/2026-11-16-catwars-*.sql`）。
+- 鍵：`CATWARS_MODE_KEY = 'catwars'`（**はじめ閉じている**。先生が PRISM の SANMON タブで開ける）。閉じているわけは kit の `modeLockMessage`。平日モードで閉じた出撃を押したら `reportLockHit(…, 'catwars')`。
+- **遊んでいる とちゅう（出撃の準備・戦闘）で閉じたら すぐホーム**（SANMON と同じ）。やさしい1行（「じゅぎょうの じかんに なったよ。つづきは 15:30から あそべるよ」など）。
+  その戦闘の勝ちの ごほうび・章の記録は無し・スタミナは もどらない。解いた問題の ごほうびと記録は のこる。
+- 出撃1回の数：kit の `sanmonBattleCost`／`sanmonTownMastery`（CAT-WARS の写しを消した）。
+- 記録：`PORTAL_SEND_ENABLED = true`。名乗っているときだけ。app_id `catwars`・skill_id は単元アプリのまま・module_id は カタログ `catwars` の町・カタログに無い項目は送らない・detail なし。
+  送れなかった分は端末に直近500件（`SAVE_KEYS.outbox`）。1問ごとに通信しない（15秒まとめ・戦闘の おわり・タブを かくしたとき）。ことわられても遊びは止めず、あとで送りなおす。
+- セーブ：`catwars_save`（kit の `saveCatwarsSave`／`loadCatwarsSave`）。SANMON の push/pull と同じ考え方。**最後にサーバへ送った方が勝つ**。
+  `progress.mastery` を ストアから消して 4週間で 15.3KB → 約6.1KB（めやす 6KB）。
+- 合格条件：`npm run test:portal` の [10]〜[14]（鍵・とちゅうで閉じる・送信・セーブ）、`npm run check`・`test:progress`・`test:collection`。
+
 ## 5. 遠征・対戦（CW-6）
 - **週がわりの遠征**：毎週月曜に、種（seed）とルール（例：空中の敵だけ・霧で射程−1・敵の出現2倍）が変わる。学級の合計スコア（星の合計）で目標を目指す。個人の順位は出さない。
 - **同時対戦（本命）**：決定的な戦闘の計算（`catwars/sim/`）とロックステップ（`catwars/net/lockstep.ts`）を Supabase Realtime Broadcast に載せかえる（`net/transport.ts` の実装を1つ足す）。

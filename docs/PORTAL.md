@@ -1,20 +1,25 @@
-# 学級ポータルとのつながり（CW-5a・2026-11-16〜）
+# 学級ポータルとのつながり（CW-5a・CW-5b・2026-11-16〜）
 
-CAT-WARS は **端末の側だけ** 学級ポータル（Supabase `gakkyu-portal`）につないだ。サーバ・kit・PRISM・SANMON・SOL は変えていない。
-サーバ側（専用の鍵・セーブの表・記録）は CW-5b。下書きは `docs/CW5B_SERVER_PLAN.md`。
+CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
+- CW-5a：端末の側（名乗り・おためし・SANMON と共通のスタミナ・サーバのかけら）。
+- CW-5b 第1段（kit 0.36.0・PRISM の SQL `supabase/sql/2026-11-16-catwars-*.sql`）と 第2段（この CAT-WARS）：専用の鍵 `catwars`・記録の送信・セーブのサーバ保存。
+  **サーバの SQL は 持ち主が これから流す**。流す前は：鍵 `catwars` が返らないので 名乗った子は「先生が まだ ひらいていないよ」で出撃できない（おためしは あそべる）・記録は ことわられて 端末に たまる（あとで送る）・セーブは とどかない（端末には ある）。
+計画と戻し方は `docs/CW5B_SERVER_PLAN.md`。
 
 ## つなぎ方
 - 環境変数は SANMON と同じ名前：`VITE_SUPABASE_URL`／`VITE_SUPABASE_PUBLISHABLE_KEY`（publishable キーだけ。値は Vercel の環境変数だけに置く）。
   **値が無いビルドは「つないでいない」**：名乗りの画面も スタミナも出ず、今までどおり 全部あそべる（`portal/config.ts` の `isPortalConfigured`）。
 - 置き場所：`catwars/portal/`
-  - `config.ts` … つなぎ先・モードの鍵（`CATWARS_MODE_KEY`）・reason の前の部分（`CATWARS_SPEND_REASON`）
-  - `saveKeys.ts` … セーブ（persist）の鍵の一覧。**ストアの鍵は ここだけに書く**
+  - `config.ts` … つなぎ先・モードの鍵（`CATWARS_MODE_KEY = 'catwars'`）・reason の前の部分（`CATWARS_SPEND_REASON`）
+  - `saveKeys.ts` … セーブ（persist）の鍵の一覧。**ストアの鍵は ここだけに書く**。ストアでない鍵（送れていない記録 `outbox`）は `NON_STORE_KEYS` にも
   - `saveProfile.ts` … 学級／おためし の セーブの入れかえ（`index.tsx` で いちばん先に読む）
-  - `stamina.ts` … 町のえらび方・出撃1回の数（純粋な関数）
-  - `gate.ts` … 出撃の関門（`createSortieGate` → `startBattle`）
-  - `usePortal.ts` … 名乗り・スタミナ・モード・サーバのかけら の いまのようす（zustand）と `startSortie`
+  - `stamina.ts` … 町のえらび方・出撃の前に出す スタミナのようす（純粋な関数。1回の数は kit の `sanmonBattleCost`）
+  - `gate.ts` … 出撃の関門（`createSortieGate` → `startBattle`）・閉じているときの文（`lockMessage`・`closedWhilePlayingMessage`）
+  - `usePortal.ts` … 名乗り・スタミナ・モード・サーバのかけら の いまのようす（zustand）・`startSortie`・記録とセーブを いつ送るか（`usePortalLifecycle`・`afterBattle`）
+  - `outbox.ts`・`answerSync.ts` … 1問の記録を 端末に のこして まとめて送る（CW-5b）
+  - `saveSync.ts` … セーブを サーバ（`catwars_save`）に しまう・取りこむ（CW-5b）
   - `PortalCard.tsx` … ホームの「がっきゅうコード」とスタミナ、陣地づくりの「出撃！」の上のスタミナ
-  - `saveBundle.ts` … セーブを1つの JSON に まとめる・もどす・大きさを測る（**まだサーバに送らない**）
+  - `saveBundle.ts` … セーブを1つの JSON に まとめる・もどす・大きさを測る（`saveSync.ts` が送る）
 - 名乗り：kit の `JoinGate`（学級コード＋出席番号。はじめの1回）と、SOL からの `#c=&n=`（`adoptStudentFromUrl`）。氏名は扱わない。
   右下の入口（chip）は出さない（戦闘の下のバーに重なる）。あとから名乗る入口は ホームの「がっきゅうコード」（kit の `JoinSettingsRow`）。
 
@@ -30,7 +35,7 @@ CAT-WARS は **端末の側だけ** 学級ポータル（Supabase `gakkyu-portal
 ## スタミナ（SANMON と共通）
 - 数えるのは サーバ（`sanmon_status`／`sanmon_spend`）。CAT-WARS は 数を決めない。
 - **出撃1回 ＝ SANMON の ぼうけんのバトル1回**。サーバの `sanmon_spend` は reason に「@町」があると、その町の達成度で 数を決めなおす（100％→2・75％→3・50％→4・それより下→5。**送った数は使わない**）。
-  画面の「1回 n」は `stamina.ts` の `sortieCost`（SANMON の `utils/townCost.ts` と同じ数え方の写し。2つのアプリに同じものがあるので kit に移すのが よい）。
+  画面の「1回 n」は kit の `sanmonBattleCost`（達成度は `sanmonTownMastery`。SANMON と同じもの。CW-5b で CAT-WARS の写しを消した）。
 - reason は `catwars@<町の key>`。町は **出撃メンバーの系統に結びついた単元のうち、町のスタミナが いちばん多い町**（同じなら 1回の数が少ない町、それも同じなら 学習の順で先）。サーバが 町 → 共通 の順に使う。
 - eventId は 1出撃に1つ（`catwars-<時刻>-<乱数>`）。通らなかったら 同じ eventId で やりなおす（二重に引かれない）。通ったら次は新しい id。2回おしても 1回ぶん。
 - 出す場所：ホーム（共通・町のスタミナの多い順）と、陣地づくりの「出撃！」の上（その出撃の町・町・共通・1回の数・あと何回）。
@@ -39,26 +44,53 @@ CAT-WARS は **端末の側だけ** 学級ポータル（Supabase `gakkyu-portal
   - 通信できない → 出撃させない（SANMON と同じ：`sanmon_spend` に とどかないと バトルは始まらない）
   - おためし・体験版・つないでいないビルド → スタミナを使わずに通す
 
-## モードの鍵（いまは ぼうけん）
-- CAT-WARS 専用の鍵は まだ無いので、**SANMON の「ぼうけん」（`adventure`）の鍵にしたがう**（`config.ts` の `CATWARS_MODE_KEY`。CW-5b で `catwars` にする）。
-  先生の開け閉め・平日モード・番号ごとの停止が そのまま効く。サーバの `sanmon_spend` も reason の `catwars` を ぼうけんとして確かめる。
-- 閉じているとき：ホームの「出撃！」は押せる形のまま（灰色）。押すと わけ（kit の `modeLockMessage`。番号ごとの停止は「せんせいと おはなししてね」）。
+## モードの鍵（`catwars`・CW-5b）
+- **CAT-WARS 専用の鍵 `catwars`**（`config.ts` の `CATWARS_MODE_KEY`）。先生が PRISM の SANMON タブで 学級ごとに開ける。**はじめは閉じている**
+  （kit の `SANMON_MODES_DEFAULT_CLOSED`。サーバも 書いていなければ false）。平日モードの対象・番号ごとの停止も効く。サーバの `sanmon_spend` も reason の `catwars` を この鍵で確かめる。
+  SANMON の「ぼうけん」の開け閉めとは べつ（ぼうけんが閉じていても CAT-WARS は開けられる・その逆も）。
+- 閉じているとき：ホームの「出撃！」は押せる形のまま（灰色）。押すと わけ（`gate.ts` の `lockMessage`＝kit の `modeLockMessage`。先生が まだ → 「先生が まだ ひらいていないよ」・授業の時間 → 「いまは じゅぎょうの じかん。15:30から…」・番号ごとの停止 → 「せんせいと おはなししてね」）。
+  **平日モードで閉じているときに押したら `reportLockHit(…, 'catwars')`**（PRISM の「押した回数」。サーバが3分に1回だけ残す。SANMON と同じ）。
   出撃の とちゅうで サーバに ことわられたら、モードを読みなおして わけを出す。
 - モードは 名乗ったとき・アプリにもどってきたとき・2分ごと に読む（SANMON と同じ）。
-- SANMON とちがう：**戦闘の とちゅうで閉じても メニューにもどさない**（その1戦は最後まで）。平日モードの「押した回数」（`reportLockHit`）は送らない（PRISM で SANMON の ぼうけんとして数えられてしまうため。CW-5b で専用の鍵にしてから）。
+- **遊んでいる とちゅうで閉じたら、すぐ ホームにもどす**（CW-5b。SANMON の App.tsx と同じ。2分ごと・タブにもどったときの読みなおしで気づく＝新しい通信は ふえない）。
+  とちゅう＝出撃の準備（範囲・ステージ・メンバー・陣地づくり）と戦闘。ネコ部隊・あつめる・出撃バフ の画面は そのまま。
+  ホームに「じゅぎょうの じかんに なったよ。つづきは 15:30から あそべるよ」／「先生が CAT-WARS を とじたよ。つづきは また こんどね」／「せんせいと おはなししてね」（`closedWhilePlayingMessage`）。
+  その戦闘の 勝ちの ごほうび（💠・章の記録・星・図鑑・バッジ）は 無し・出撃で使った スタミナは もどらない（SANMON の ぼうけんも同じ）。
+  それまでに解いた問題の ごほうび（💠・⚡・XP・シールコイン）と 記録は のこる（1問ごとに 入るため）。
+
+## 記録の送信（CW-5b）
+- 戦闘の中で解いた問題を 1問1行で `learning_event` に送る（kit の `flushEvents({ appId: 'catwars', ...PORTAL }, logs)`。SANMON と同じ呼び方）。**名乗っているときだけ**（おためし・体験版・つないでいないビルドは のこしも しない）。
+- 形（`bridge.ts` の `buildPortalLog`）：app_id `catwars`・skill_id は 単元アプリのまま・**module_id は カタログ `catwars`（kit）で その項目が入っている町**・label「たたかい：[単元アプリ] 項目名」・detail なし。
+  **カタログ `catwars` に無い skill_id は送らない**。カタログは 1つの項目を 1つの町にだけ入れる（わり算の筆算の 検算などは ÷1けた）ので、戦闘の単元と module_id が ずれる項目がある（いまは 29項目。`npm run test:portal` の [10]）。
+- スタミナに数えない しくみは サーバ（`apps.subject='ゲーム'`＋`_sanmon_pools` で `app_id <> 'catwars'`）。CAT-WARS の側は 単元アプリの app_id で送らないこと。
+- **送れなかった分は 端末に のこす**（`outbox.ts`・鍵 `SAVE_KEYS.outbox`＝`catwars-portal-outbox`・直近500件・学級／おためし の入れかえの対象・サーバのセーブには入れない）。
+  1件ごとに 名乗っていた子の id を付け、送るのは いま名乗っている子の分だけ（同じ端末で番号を変えても まざらない）。
+  どこまで送れたかは kit の高水位（`lak_sent_ts_catwars`）、二重は サーバが event_id で はじく。
+- **ことわられても 遊びは止めない**（SQL を流す前は `apps` に `catwars` が無いので `sync_events` が ことわる）。次の機会に 送りなおす。
+- 間のあけ方（`answerSync.ts`）：1問ごとには 通信しない。解いたら **15秒あと**に まとめて（待っているあいだの問題も いっしょに。待ちは のばさない）・戦闘の おわり 0.5秒・タブを かくしたら すぐ・名乗ったとき。1度に送るのは1つだけ。
+  SANMON は 2秒（れんしゅうの1問が長い）。CAT-WARS は 戦闘の中で 数秒ごとに解くので 長くした。
+
+## セーブのサーバ保存（CW-5b）
+- 表 `catwars_save`（kit の `saveCatwarsSave`／`loadCatwarsSave`）。中身は `saveBundle.ts` の `{ v, savedAt, stores }`。`saveSync.ts`。SANMON の `pushSave`／`pullSaveIfNewer` と同じ考え方：
+  - **名乗っているときだけ**。送るのは 中身が変わったときだけ。いつ：問題を解いて10秒あと・1分ごと・タブを かくしたとき・戦闘の おわり・名乗ったとき（サーバの方が新しくなければ）。
+  - 取りこむのは サーバの `savedAt` が この端末の `catwars_portal_saved_at`（最後に送った／取りこんだ時刻）より新しいとき。取りこんだら 画面を読みなおす。いつ：名乗ったとき・タブにもどったとき。
+  - サーバを見ているあいだは 送らない（古いセーブで 新しいセーブを上書きしない）。
+- **端末を変えて名乗ったとき**：サーバの方が新しいので 前の端末の つづきから 遊べる（試験 [14]）。
+- **2台で同時に遊んだとき**：**最後にサーバへ送った方が勝つ**（`savedAt` は送った端末の時計）。もう1台は タブに もどったときに それを取りこみ、その端末で まだ送っていなかった分は なくなる。
+  どちらも開いたまま遊びつづけると、1分ごとに送りあって 上書きしあう（SANMON と同じ。1人1台の運用で起きにくい）。
+- 送る前に 使っていない `progress.mastery` を外した（CW-5b で ストアからも消した。古いセーブに のこっていても `merge` で すてる）。
 
 ## かけら
 - 入口は `learn/shards.ts` の `unitShards` の1つ。スキル・レベルの上限・バッジ・図鑑は どれも ここを通る。
 - 名乗っているとき：サーバの記録（kit の `sanmonShards`＝本番テスト8割の日・実力の階段の段。SANMON と同じ かけら）。`usePortal.ts` が `setServerShards` で わたす。
 - おためし・つないでいないビルド・まだ読めていない：端末の数え方（まちがえずに3回 解けた項目の割合）。
 
-## まだ していないこと（CW-5b）
-- **記録の送信**：持ち主の決定（2026-11-16）で「送る」。中身は `bridge.ts` の `buildPortalLog` で組み立ててあり、`PORTAL_SEND_ENABLED` を true にすれば送る（いまは false）。
-  app_id は `catwars`・skill_id は 単元アプリのまま・module_id は 町・label は「たたかい：」・detail は付けない。サーバの準備（apps への登録・スタミナに数えない しるし）が先。
-- **セーブのサーバ保存**：`saveBundle.ts` まで。いまの大きさは めやす（5KB）を こえる（`progress.mastery` が 大部分。下）。
-- CAT-WARS 専用の開け閉めのスイッチ（PRISM）・平日モードの対象。
+## まだ していないこと
+- サーバの SQL（持ち主が流す。`docs/CW5B_SERVER_PLAN.md` §5）。流したら：先生が SANMON タブで CAT-WARS を開ける → 名乗った子が出撃できる・たまっていた記録が送られる。
+- デモモード（0000・0）。
 - 1問の最初のまちがいの型：いまの `apps/` の `onMiss` は 何も わたさないので 入れていない。
 
 ## saveBundle の大きさ（`npm run test:portal` の [8]）
-4週間ぶん（まちがえずに 約1500問・59項目・全章3段）で **15.3KB**：progress 9.6KB（そのうち `mastery` 9.2KB）・study 1.6KB・player 1.4KB（`troops` 1KB）・campaign 1.2KB・collection 0.7KB・army 0.5KB。
-`useProgressStore` の `mastery`（項目ごとの くりかえしの記録）は CAT-WARS の どこからも読まれていない（古い本体の名残）。ぬくと 約6KB。`interval`・`nextReviewAt` が 1e39 などに ふくらむ（同じ日に れんぞくで正解すると かけ算が つづく）。
+4週間ぶん（まちがえずに 約1500問・59項目・全章3段）で **6,061 バイト**（めやす 6KB 以下。サーバは 64KB まで）：study 1.6KB・player 1.4KB（`troops` 1KB）・campaign 1.2KB・collection 0.7KB・army 0.5KB・progress 0.35KB。
+CW-5a のときは 15.3KB（`progress.mastery` が 9.2KB。どこからも読まれていなかったので CW-5b で消した）。
+`study`（項目ごとの まちがえずに解いた回数）は 項目の数だけ ふえる（全314項目で 約8KB の見こみ）。ぜんぶ あそびきっても 15KB くらい。
