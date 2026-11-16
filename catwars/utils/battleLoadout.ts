@@ -1,42 +1,66 @@
-import { BuildingType, BattleLoadout } from '../types';
+import { BuildingType, BattleLoadout, DeployedBuilding } from '../types';
 import type { FacilityCounts } from '../store/useBaseStore';
+import { CHARACTERS } from '../data/characters';
+import { BARRACKS_UNLOCKS, PLACEABLE_FACILITIES } from '../data/facilities';
+
+/** はじめから使える系統（近接・遠距離・タンク） */
+export const STARTER_IDS = CHARACTERS.filter(c => c.isStarter).map(c => c.id);
 
 /**
- * 「今日建てた施設」から、戦闘で使える能力を算出する。
- *
- * 施設は当日リセット制（useBaseStore）なので、今日たくさん問題を解いて
- * 施設をそろえた日ほど、出撃できる兵種も持ち込める防衛も増える。
- * ＝ 学習量がそのまま その日の戦力になる。
+ * 使える系統：はじめから の3つ＋**持っている兵舎の数**で開く系統＋傭兵召集（💠）で開いた系統。
+ * 兵舎は戦場に置かない施設なので、その日に動かせる数には数えない（持っていれば いつも はたらく）。
  */
-export function computeBattleLoadout(built: FacilityCounts): BattleLoadout {
-  const n = (type: BuildingType) => built[type] ?? 0;
+export function unlockedFamilies(owned: FacilityCounts, permanentUnlocks: string[] = []): string[] {
+  const barracks = owned[BuildingType.BARRACKS] ?? 0;
+  const out = [...STARTER_IDS];
+  for (const u of BARRACKS_UNLOCKS) if (barracks >= u.need) out.push(...u.ids);
+  for (const id of permanentUnlocks) if (!out.includes(id)) out.push(id);
+  return CHARACTERS.map(c => c.id).filter(id => out.includes(id));
+}
 
-  const barracks = n(BuildingType.BARRACKS);
-  const armyCamps = n(BuildingType.ARMY_CAMP);
-  const cannons = n(BuildingType.CANNON);
-  const teslas = n(BuildingType.HIDDEN_TESLA);
-  const walls = n(BuildingType.WALL);
+/**
+ * 配置のうち、きょう動かせるもの（コアは いつも。ほかは 先に置いた順に limit 個まで）。
+ * 動かせない（止まっている）ものは inactive に入る（画面で うすく出す）。
+ */
+export function splitActiveLayout(layout: DeployedBuilding[], limit: number): {
+  active: DeployedBuilding[]; inactive: DeployedBuilding[];
+} {
+  const active: DeployedBuilding[] = [];
+  const inactive: DeployedBuilding[] = [];
+  let n = 0;
+  for (const d of layout) {
+    if (d.type === BuildingType.TOWN_HALL || !PLACEABLE_FACILITIES.includes(d.type)) { active.push(d); continue; }
+    if (n < limit) { active.push(d); n++; } else inactive.push(d);
+  }
+  return { active, inactive };
+}
 
-  // 兵舎を建てるほど使える系統が増える（近接・タンクは常時開放）
-  const unlockedTroopTypes = ['barbarian', 'giant'];
-  if (barracks >= 1) unlockedTroopTypes.push('archer');
-  if (barracks >= 2) unlockedTroopTypes.push('bomber');
-  if (barracks >= 3) unlockedTroopTypes.push('magic');
+/**
+ * 持っている施設と、きょう動かせる配置から、戦闘で使える能力を出す。
+ * @param owned 持っている数
+ * @param activeLayout きょう動かせる配置（splitActiveLayout の active）
+ */
+export function computeBattleLoadout(
+  owned: FacilityCounts, activeLayout: DeployedBuilding[] = [], permanentUnlocks: string[] = [],
+): BattleLoadout {
+  const n = (type: BuildingType) => activeLayout.filter(d => d.type === type).length;
+  const camps = n(BuildingType.ARMY_CAMP);
+  const cannons = owned[BuildingType.CANNON] ?? 0;
+  const teslas = owned[BuildingType.HIDDEN_TESLA] ?? 0;
 
   const availableBuildingTypes: BuildingType[] = [BuildingType.WALL];
   if (cannons > 0) availableBuildingTypes.push(BuildingType.CANNON);
   if (teslas > 0) availableBuildingTypes.push(BuildingType.HIDDEN_TESLA);
 
   return {
-    unlockedTroopTypes,
-    // 防衛スロット＝実際に建てた防衛施設の数（キャンプぶんの余裕を足す）
-    maxBuildingSlots: cannons + teslas + armyCamps,
+    unlockedTroopTypes: unlockedFamilies(owned, permanentUnlocks),
+    maxBuildingSlots: cannons + teslas + (owned[BuildingType.ARMY_CAMP] ?? 0),
     canBringCannon: cannons > 0,
     canBringTesla: teslas > 0,
-    maxWallSlots: walls,
-    // 呪文はキャンプの数で増える（基本2 + キャンプ1つにつき1）
-    healCharges: 2 + armyCamps,
-    rageCharges: 2 + armyCamps,
+    maxWallSlots: owned[BuildingType.WALL] ?? 0,
+    // 呪文は きょう動いているキャンプの数で増える（基本2 + キャンプ1つにつき1）
+    healCharges: 2 + camps,
+    rageCharges: 2 + camps,
     availableBuildingTypes,
   };
 }

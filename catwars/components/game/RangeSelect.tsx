@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { MATH_CATEGORIES } from '../../../constants';
+import { PACK_UNITS } from '../../learn/gradePack';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
@@ -7,7 +7,8 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 interface Props {
   lockedUnits?: Set<string>;
   onBack: () => void;
-  onConfirm: (subtopics: string[]) => void;
+  /** えらんだ単元の鍵 */
+  onConfirm: (unitKeys: string[]) => void;
 }
 
 /**
@@ -16,27 +17,24 @@ interface Props {
  * 既定は解放ずみ全単元。単元(ワールド)単位でオン/オフを切り替える簡潔なUI。
  */
 export const RangeSelect: React.FC<Props> = ({ lockedUnits, onBack, onConfirm }) => {
+  // 単元アプリのある単元（SOL の単元アプリと同じ問題を出す）。閉じている単元は出さない
   const openCategories = useMemo(
-    () => MATH_CATEGORIES.filter(c => !lockedUnits?.has(c.name)),
+    () => PACK_UNITS.filter(c => !lockedUnits?.has(c.key)),
     [lockedUnits],
   );
-  const subtopicsOf = (catName: string): string[] =>
-    openCategories.find(c => c.name === catName)?.groups.flatMap(g => g.subtopics) ?? [];
+  const [selected, setSelected] = useState<Set<string>>(new Set(openCategories.map(c => c.key)));
 
-  const [selected, setSelected] = useState<Set<string>>(new Set(openCategories.map(c => c.name)));
-
-  const toggle = (name: string) =>
+  const toggle = (key: string) =>
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(name)) { if (next.size > 1) next.delete(name); }
-      else next.add(name);
+      if (next.has(key)) { if (next.size > 1) next.delete(key); }
+      else next.add(key);
       return next;
     });
 
   const allOn = selected.size === openCategories.length;
-  const chosenSubtopics = openCategories
-    .filter(c => selected.has(c.name))
-    .flatMap(c => subtopicsOf(c.name));
+  /** えらんだ単元の鍵（gradePack の PackUnit.key） */
+  const chosenSubtopics = openCategories.filter(c => selected.has(c.key)).map(c => c.key);
 
   return (
     <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-y-auto" style={font}>
@@ -45,23 +43,22 @@ export const RangeSelect: React.FC<Props> = ({ lockedUnits, onBack, onConfirm })
         <button onClick={onBack} className="text-white/60 hover:text-white text-sm">← もどる</button>
         <h2 className="text-[#f87171] font-bold text-base" style={fontMono}>出題範囲をえらぶ</h2>
         <button
-          onClick={() => setSelected(allOn ? new Set([openCategories[0].name]) : new Set(openCategories.map(c => c.name)))}
+          onClick={() => setSelected(allOn ? new Set([openCategories[0].key]) : new Set(openCategories.map(c => c.key)))}
           className="ml-auto text-[11px] px-3 py-1 rounded-full border border-white/20 text-white/70 hover:text-white">
           {allOn ? 'ぜんぶ外す' : 'ぜんぶ選ぶ'}
         </button>
       </div>
 
       <p className="px-4 pt-3 text-white/60 text-xs leading-relaxed">
-        えらんだ単元の問題が、<span className="text-[#facc15] font-bold">戦闘中にランダム出題</span>されます。
+        えらんだ単元の問題（SOL のアプリと同じ問題）が、<span className="text-[#facc15] font-bold">戦闘中にランダム出題</span>されます。
         正解すると <span className="text-[#facc15] font-bold">⚡エナジー</span> が手に入り、ネコをどんどん出撃させられる！
       </p>
 
       <div className="flex-1 overflow-y-auto px-3 py-3 grid grid-cols-2 gap-2.5">
         {openCategories.map(c => {
-          const on = selected.has(c.name);
-          const n = subtopicsOf(c.name).length;
+          const on = selected.has(c.key);
           return (
-            <button key={c.name} onClick={() => toggle(c.name)}
+            <button key={c.key} onClick={() => toggle(c.key)}
               className="flex items-center gap-2 p-3 rounded-xl border-2 transition-all active:scale-95 text-left"
               style={{
                 borderColor: on ? '#f87171' : 'rgba(255,255,255,0.12)',
@@ -70,7 +67,6 @@ export const RangeSelect: React.FC<Props> = ({ lockedUnits, onBack, onConfirm })
               <span className="text-lg">{on ? '✅' : '⬜'}</span>
               <div className="min-w-0">
                 <div className="text-white font-bold text-xs truncate">{c.name}</div>
-                <div className="text-white/40 text-[10px]" style={fontMono}>{n}項目</div>
               </div>
             </button>
           );

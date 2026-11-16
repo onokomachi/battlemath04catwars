@@ -2,16 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { syncProgressState } from '../utils/syncToSupabase';
 import { BuffType, BuffTier, ActiveDailyBuff } from '../types';
-
-export interface MasteryEntry {
-  seen: number;
-  correct: number;
-  streak: number;
-  lastSeenAt?: number;
-  easeFactor?: number;
-  interval?: number;
-  nextReviewAt?: number;
-}
+import { SAVE_KEYS } from '../portal/saveKeys';
 
 export interface LoginBonusResult {
   dailyStarsGained: number;
@@ -26,7 +17,6 @@ interface ProgressStore {
   dailyStarsDate: string;
   totalCorrect: number;
   totalAnswered: number;
-  mastery: Record<string, MasteryEntry>;
   dailyStreak: number;
   lastPlayDate: string;
   todayAnswered: number;
@@ -71,17 +61,6 @@ function endOfToday(): number {
   return d.getTime();
 }
 
-function sm2Update(entry: MasteryEntry, correct: boolean): Partial<MasteryEntry> {
-  const ef = entry.easeFactor ?? 2.5;
-  const interval = entry.interval ?? 0;
-  if (!correct) {
-    return { interval: 1, easeFactor: Math.max(1.3, ef - 0.2), nextReviewAt: Date.now() + 86400000 };
-  }
-  const newInterval = interval === 0 ? 1 : interval === 1 ? 6 : Math.round(interval * ef);
-  const newEf = Math.max(1.3, ef + 0.1);
-  return { interval: newInterval, easeFactor: newEf, nextReviewAt: Date.now() + newInterval * 86400000 };
-}
-
 export interface BuffTierInfo {
   tier: BuffTier;
   name: string;
@@ -90,51 +69,51 @@ export interface BuffTierInfo {
 }
 
 export const BUFF_TIERS: Record<BuffTier, BuffTierInfo> = {
-  1: { tier: 1, name: '一般',   color: '#94a3b8', unlockLabel: 'いつでも' },
-  2: { tier: 2, name: '上級',   color: '#38bdf8', unlockLabel: '本日10問' },
-  3: { tier: 3, name: '精鋭',   color: '#a78bfa', unlockLabel: '本日25問 or 連続5日' },
-  4: { tier: 4, name: '伝説',   color: '#facc15', unlockLabel: '本日40問 かつ 連続3日' },
+  1: { tier: 1, name: 'ブロンズ',   color: '#94a3b8', unlockLabel: 'いつでも' },
+  2: { tier: 2, name: 'シルバー',   color: '#38bdf8', unlockLabel: 'きょう10問' },
+  3: { tier: 3, name: 'ゴールド',   color: '#a78bfa', unlockLabel: 'きょう25問 か 5日つづけて' },
+  4: { tier: 4, name: 'でんせつ',   color: '#facc15', unlockLabel: 'きょう40問 と 3日つづけて' },
 };
 
 export const BUFF_CONFIG: Record<BuffType, { label: string; icon: string; description: string; cost: number; tier: BuffTier }> = {
   // T1 一般
-  FAST_DEPLOY:    { tier: 1, label: '即時出撃',       icon: '⚡',  description: '兵士のインターバルがゼロになる',         cost: 15 },
-  COST_REDUCTION: { tier: 1, label: 'コスト30%オフ',  icon: '💸',  description: '戦闘中の兵士補充コストが30%安くなる',   cost: 20 },
-  GOLD_RUSH:      { tier: 1, label: 'ゴールドラッシュ', icon: '💰', description: '戦闘開始時にゴールド+150',              cost: 15 },
-  GOLD_BOOST:     { tier: 1, label: 'ゴールド増産',   icon: '📈',  description: '戦闘中のゴールド湧きが50%アップ',       cost: 18 },
+  FAST_DEPLOY:    { tier: 1, label: 'すぐに 出撃',     icon: '⚡',  description: 'ネコを 出したあとの まち時間が みじかくなる',         cost: 15 },
+  COST_REDUCTION: { tier: 1, label: 'ネコ やすうり',  icon: '💸',  description: 'ネコを 出す ⚡ が やすくなる',   cost: 20 },
+  GOLD_RUSH:      { tier: 1, label: 'エナジー ラッシュ', icon: '⚡', description: 'はじめの ⚡ が ふえる',              cost: 15 },
+  GOLD_BOOST:     { tier: 1, label: 'カード エナジー',  icon: '📈',  description: 'もんだいカードで もらえる ⚡ が ふえる',       cost: 18 },
   // T2 上級
-  RARE_BARBARIAN: { tier: 2, label: 'レア・バーバリアン', icon: '⚔️💥', description: '近接系のHP+50% 攻撃力+40%',          cost: 30 },
-  RARE_ARCHER:    { tier: 2, label: 'レア・アーチャー',   icon: '🏹✨', description: '遠距離系の射程+ 速度+30%',           cost: 25 },
-  POWER_BOOST:    { tier: 2, label: '全軍強化',          icon: '💪',  description: '全兵士の攻撃力が40%アップ',           cost: 35 },
-  EXTRA_TROOPS:   { tier: 2, label: '援軍パック',        icon: '🪖',  description: '戦闘開始ゴールド+120',                cost: 40 },
-  SWIFT_ARMY:     { tier: 2, label: '俊足の軍勢',        icon: '👟',  description: '全兵士の移動速度が40%アップ',         cost: 28 },
+  RARE_BARBARIAN: { tier: 2, label: 'レア・近接系', icon: '⚔️💥', description: '近接系の HPと こうげきが アップ',          cost: 30 },
+  RARE_ARCHER:    { tier: 2, label: 'レア・遠距離系', icon: '🏹✨', description: '遠距離系の しゃていが のびて、うつのが はやくなる',           cost: 25 },
+  POWER_BOOST:    { tier: 2, label: 'みんな パワーアップ',          icon: '💪',  description: 'ぜんぶの ネコの こうげきが アップ',           cost: 35 },
+  EXTRA_TROOPS:   { tier: 2, label: 'おうえん エナジー',        icon: '🪖',  description: 'はじめの ⚡ が ふえる',                cost: 40 },
+  SWIFT_ARMY:     { tier: 2, label: 'はやあし ぐんだん',        icon: '👟',  description: 'ぜんぶの ネコが はやく うごく',         cost: 28 },
   // T3 精鋭
-  HEAL_AURA:      { tier: 3, label: 'ヒーリングオーラ', icon: '💚',  description: '全兵士が3秒ごとにHPを回復する',        cost: 50 },
-  GIANT_FORTRESS: { tier: 3, label: '鋼の要塞',         icon: '🛡️', description: 'タンク系のHPが2倍になる',             cost: 55 },
-  DOUBLE_LOOT:    { tier: 3, label: 'ダブルリターン',   icon: '💎',  description: '勝利時の戦利品が2倍になる',            cost: 65 },
-  WIZARD_SUPPORT: { tier: 3, label: '魔導士の援護',     icon: '🔮',  description: '戦闘開始ゴールド+140',                cost: 60 },
+  HEAL_AURA:      { tier: 3, label: 'かいふく オーラ', icon: '💚',  description: 'ぜんぶの ネコが 3びょうごとに すこし かいふく',        cost: 50 },
+  GIANT_FORTRESS: { tier: 3, label: 'てつの とりで',         icon: '🛡️', description: 'タンク系の HPが アップ',             cost: 55 },
+  DOUBLE_LOOT:    { tier: 3, label: 'ごほうび アップ',   icon: '💎',  description: '勝ったときの 💠 が ふえる',            cost: 65 },
+  WIZARD_SUPPORT: { tier: 3, label: 'まほうの おうえん',     icon: '🔮',  description: 'はじめの ⚡ が ふえる',                cost: 60 },
   // T4 伝説
-  DRAGON_SUMMON:  { tier: 4, label: 'ドラゴンの宝庫',   icon: '🐉',  description: '戦闘開始ゴールド+160',                cost: 100 },
-  ARMAGEDDON:     { tier: 4, label: 'アルマゲドン',     icon: '☄️', description: '全兵士の攻撃力が70%アップ',           cost: 90 },
-  GENIUS_COMMANDER:{tier: 4, label: '天才指揮官',       icon: '👑',  description: '全兵士のHP・攻撃力が20%アップ',        cost: 80 },
+  DRAGON_SUMMON:  { tier: 4, label: 'ドラゴンの たから',   icon: '🐉',  description: 'はじめの ⚡ が たくさん ふえる',                cost: 100 },
+  ARMAGEDDON:     { tier: 4, label: 'アルマゲドン',     icon: '☄️', description: 'ぜんぶの ネコの こうげきが 大きく アップ',           cost: 90 },
+  GENIUS_COMMANDER:{tier: 4, label: 'てんさい たいちょう',       icon: '👑',  description: 'ぜんぶの ネコの HPと こうげきが アップ',        cost: 80 },
 };
 
 // 各バフのレベル別効果量（小・中・大）。表示と戦闘計算の両方で使う。
 export const BUFF_LEVEL_INFO: Record<BuffType, { values: [number, number, number]; unit: string }> = {
   FAST_DEPLOY:     { values: [30, 60, 100], unit: '%短縮' },
   COST_REDUCTION:  { values: [10, 20, 30],  unit: '%オフ' },
-  GOLD_RUSH:       { values: [50, 100, 150], unit: '💰' },
+  GOLD_RUSH:       { values: [50, 100, 150], unit: '⚡' },
   GOLD_BOOST:      { values: [20, 35, 50],  unit: '%' },
   RARE_BARBARIAN:  { values: [20, 35, 50],  unit: '%' },
   RARE_ARCHER:     { values: [15, 30, 45],  unit: '%' },
   POWER_BOOST:     { values: [15, 30, 45],  unit: '%' },
-  EXTRA_TROOPS:    { values: [60, 110, 160], unit: '💰' },
+  EXTRA_TROOPS:    { values: [60, 110, 160], unit: '⚡' },
   SWIFT_ARMY:      { values: [15, 30, 45],  unit: '%' },
   HEAL_AURA:       { values: [3, 5, 8],     unit: '%/3秒' },
   GIANT_FORTRESS:  { values: [50, 100, 150], unit: '%' },
   DOUBLE_LOOT:     { values: [50, 100, 150], unit: '%' },
-  WIZARD_SUPPORT:  { values: [70, 130, 200], unit: '💰' },
-  DRAGON_SUMMON:   { values: [80, 160, 240], unit: '💰' },
+  WIZARD_SUPPORT:  { values: [70, 130, 200], unit: '⚡' },
+  DRAGON_SUMMON:   { values: [80, 160, 240], unit: '⚡' },
   ARMAGEDDON:      { values: [25, 50, 75],  unit: '%' },
   GENIUS_COMMANDER:{ values: [10, 20, 30],  unit: '%' },
 };
@@ -166,7 +145,6 @@ function pickSync(s: ProgressStore) {
     stars: s.stars,
     total_correct: s.totalCorrect,
     total_answered: s.totalAnswered,
-    mastery: s.mastery,
     daily_streak: s.dailyStreak,
     last_play_date: s.lastPlayDate,
     today_answered: s.todayAnswered,
@@ -187,7 +165,6 @@ export const useProgressStore = create<ProgressStore>()(
       dailyStarsDate: '',
       totalCorrect: 0,
       totalAnswered: 0,
-      mastery: {},
       dailyStreak: 0,
       lastPlayDate: '',
       todayAnswered: 0,
@@ -302,33 +279,16 @@ export const useProgressStore = create<ProgressStore>()(
         return activeDailyBuffs.filter(b => b.expiresAt > Date.now());
       },
 
-      recordAnswer: (unitId, correct, subTopicId) =>
+      // 学習の量（きょうの問題数・正解の数）。項目ごとの くりかえしの記録（mastery）は CW-5b で消した
+      // （どこからも読まれず、サーバのセーブを ふくらませていた。項目ごとの記録は useStudyStore とサーバの learning_event）
+      recordAnswer: (_unitId, correct) =>
         set((s) => {
-          // 単元とサブトピックの両方の粒度で習熟度・SM-2を更新する。
-          // サブトピック粒度が弱点特定と足場フェーディングの単位になる（設計書 P1/P2）。
-          const updateEntry = (key: string) => {
-            const prev = s.mastery[key] ?? { seen: 0, correct: 0, streak: 0 };
-            return {
-              [key]: {
-                seen: prev.seen + 1,
-                correct: prev.correct + (correct ? 1 : 0),
-                streak: correct ? prev.streak + 1 : 0,
-                lastSeenAt: Date.now(),
-                ...sm2Update(prev, correct),
-              },
-            };
-          };
           const today = todayString();
           const next = {
             totalAnswered: s.totalAnswered + 1,
             totalCorrect: s.totalCorrect + (correct ? 1 : 0),
             todayAnswered: s.lastPlayDate === today ? s.todayAnswered + 1 : 1,
             lastPlayDate: today,
-            mastery: {
-              ...s.mastery,
-              ...updateEntry(unitId),
-              ...(subTopicId ? updateEntry(subTopicId) : {}),
-            },
           };
           pickSync({ ...s, ...next });
           return next;
@@ -429,7 +389,6 @@ export const useProgressStore = create<ProgressStore>()(
           dailyStarsDate: (data.dailyStarsDate as string) ?? s.dailyStarsDate,
           totalCorrect: (data.totalCorrect as number) ?? s.totalCorrect,
           totalAnswered: (data.totalAnswered as number) ?? s.totalAnswered,
-          mastery: (data.mastery as Record<string, MasteryEntry>) ?? s.mastery,
           dailyStreak: (data.dailyStreak as number) ?? s.dailyStreak,
           lastPlayDate: (data.lastPlayDate as string) ?? s.lastPlayDate,
           todayAnswered: (data.todayAnswered as number) ?? s.todayAnswered,
@@ -447,15 +406,22 @@ export const useProgressStore = create<ProgressStore>()(
       reset: () => {
         const next = {
           stars: 0, dailyStars: 0, dailyStarsDate: '',
-          totalCorrect: 0, totalAnswered: 0, mastery: {},
+          totalCorrect: 0, totalAnswered: 0,
           dailyStreak: 0, lastPlayDate: '', todayAnswered: 0, dailyGoal: 10, dueUnitIds: [],
           lastLoginDate: '', loginStreak: 0, activeDailyBuffs: [], lastBuffDate: '',
           unlockedToday: [], unlockedTodayDate: '', permanentUnlocks: [], specialItems: [],
         };
-        syncProgressState({ stars: 0, total_correct: 0, total_answered: 0, mastery: {}, daily_streak: 0, last_play_date: '', today_answered: 0, daily_goal: 10, daily_stars: 0 });
+        syncProgressState({ stars: 0, total_correct: 0, total_answered: 0, daily_streak: 0, last_play_date: '', today_answered: 0, daily_goal: 10, daily_stars: 0 });
         return set(next);
       },
     }),
-    { name: 'neo-academia-progress' }
+    {
+      name: SAVE_KEYS.progress,
+      // CW-5b より前の セーブに のこっている mastery（項目ごとの くりかえしの記録。もう使わない）は 読みこまない
+      merge: (persisted, current) => {
+        const { mastery: _old, ...rest } = (persisted ?? {}) as Partial<ProgressStore> & { mastery?: unknown };
+        return { ...current, ...rest };
+      },
+    }
   )
 );

@@ -12,14 +12,24 @@ import { buildSimConfig } from '../../sim/setup';
 import { stateChecksum } from '../../sim/checksum';
 import { SimCommand, SimEvent, SimConfig, PlayerId, TICK_MS } from '../../sim/types';
 import type { LockstepSession, LockstepStatus } from '../../net/lockstep';
-import { InBattleQuiz } from './InBattleQuiz';
+import { ProblemCards, starsFor } from './ProblemCards';
+import { QUIZ_BASE_REWARD, cardLimitFor } from '../../data/campaign';
+import { familySkillIds } from '../../learn/shards';
+import { NewSkillNotice } from '../army/SkillParts';
+import { grantStudyReward } from '../../bridge';
+import { useCollectionStore } from '../../store/useCollectionStore';
+import { useCampaignStore } from '../../store/useCampaignStore';
+import { refreshCollection } from '../../collection/record';
+import { unitDexKey, bossDexKey } from '../../collection/dex';
+import { GainsSummary, type Gains } from '../collection/CollectionParts';
 import { sfx } from '../../utils/audioEngine';
 import { useProgressStore, BUFF_LEVEL_INFO } from '../../store/useProgressStore';
 import { useArmyStore } from '../../store/useArmyStore';
-import { CHARACTERS, CHARACTER_BY_ID, STAGE_MULT, getCharacterSprite, spriteFamilyForSubType, stageForLevel } from '../../data/characters';
+import { CHARACTERS, CHARACTER_BY_ID, getCharacterSprite, spriteFamilyForSubType, stageForLevel } from '../../data/characters';
 import { PinchZoomLayer } from './PinchZoomLayer';
 import {
   CampaignChapter, ChapterDifficulty, ENEMY_UNIT_STATS, ENEMY_UNIT_COST, ASSIST_LEVELS,
+  ENEMY_TRAIT_NOTE, TIER_INFO, tierKey, type ChapterTier,
   EnemyUnitKind, pickWeightedEnemyUnit, enemySpawnRate,
   ENEMY_SPAWN_BUILDINGS, ENEMY_PRODUCTION_RATE, BARRACKS_ONLY_UNITS,
 } from '../../data/campaign';
@@ -206,6 +216,18 @@ interface Props {
   difficulty: ChapterDifficulty;
   /** 0=通常 / 1,2=サポートモード（プレイヤーに明示する） */
   assistLevel?: 0 | 1 | 2;
+  /** 難易度の段（ふつう いがいは 上の帯に出す。勝利報酬の倍率） */
+  tier?: ChapterTier;
+  /** 脅威レベル（1以上なら 上の帯に「脅威 Lv.n」を出す。隠れた調整はしない） */
+  threat?: number;
+  /** 脅威レベルで 敵が強くなっている割合（%。帯の説明に出す） */
+  threatPct?: number;
+  /** 出撃の5枠（下のバーには これだけを出す。sim の表にも これだけを入れる＝5枠の外は出せない） */
+  formation: string[];
+  /** 発電所による 勝利の 💠 の上乗せ（0.1＝+10%） */
+  creditBonus?: number;
+  /** 施設の種類 → レベルの倍率（HP・こうげき。試合の前に決めて sim に渡す） */
+  facilityMults?: Partial<Record<BuildingType, number>>;
   /** 出撃前に選んだ出題範囲（戦闘中クイズで使う。空なら「といて⚡」は無効） */
   quizSubtopics?: string[];
   /**
@@ -221,7 +243,13 @@ interface Props {
     init: SimInit;
     opponentName: string;
   };
-  onEndBattle: (win: boolean, loot: { gold: number }) => void;
+  /**
+   * 勝ち負けが決まった瞬間に1回だけ呼ぶ（勝ちの 💠・章の記録を ここで入れる。結果画面のまま 読みなおしても のこるように）。
+   * 二重に入れない しくみは 呼ぶ側（utils/settleBattle.ts）。対戦（pvp）では 呼ばない。
+   */
+  onSettle?: (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => void;
+  /** 結果画面のボタン・退却（画面を閉じる）。stars＝勝ったときの星（1〜3。まちがえずに解けた割合で決まる） */
+  onEndBattle: (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => void;
 }
 
 export const BattleScene: React.FC<Props> = ({
@@ -233,8 +261,15 @@ export const BattleScene: React.FC<Props> = ({
   chapter,
   difficulty,
   assistLevel = 0,
+  tier = 'normal',
+  threat = 0,
+  threatPct = 0,
+  formation,
+  facilityMults = {},
+  creditBonus = 0,
   quizSubtopics = [],
   pvp,
+  onSettle,
   onEndBattle,
 }) => {
   /** 自分がどちらのプレイヤーか。PvEでは常に P1 */
@@ -264,6 +299,15 @@ export const BattleScene: React.FC<Props> = ({
   const [briefingOpen, setBriefingOpen] = useState(true);
   const [battlePaused, setBattlePaused] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
+  /** この戦闘で解いた問題の数・うち まちがえずに解けた数（星と結果の画面に使う） */
+  const quizStatsRef = useRef({ answered: 0, perfect: 0 });
+  // ── 図鑑（CW-4c）：見た敵・たおした敵を 盤上の出入りから拾う（sim の外。sim には手を入れない）──
+  const dexSeenRef = useRef<Set<string>>(new Set(isPvp ? [] : [bossDexKey(chapter.id)]));
+  const dexAliveRef = useRef<Map<string, { key: string; x: number; y: number; kamikaze: boolean }>>(new Map());
+  const dexDefeatedRef = useRef<Record<string, number>>({});
+  const shieldsBrokenRef = useRef(0);
+  const coinsAtStartRef = useRef(useCollectionStore.getState().coinsTotal);
+  const [gains, setGains] = useState<Gains | null>(null);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [damagedEntities, setDamagedEntities] = useState<Set<string>>(new Set());
   const [projectiles, setProjectiles] = useState<{ id: string; fromX: number; fromY: number; toX: number; toY: number; startedAt: number; duration: number; type: 'CANNON' | 'TESLA' }[]>([]);
@@ -271,8 +315,8 @@ export const BattleScene: React.FC<Props> = ({
   const [levelUps, setLevelUps] = useState<import('../../store/useArmyStore').LevelUpEvent[]>([]);
   const [, forceRender] = useState(0);
 
-  const { getTodayBuffs, unlockCharacterToday, permanentUnlocks, unlockedToday, unlockedTodayDate } = useProgressStore();
-  const { getStage, grantBattleXp } = useArmyStore();
+  const { getTodayBuffs } = useProgressStore();
+  const { getStage, getLevel, grantBattleXp } = useArmyStore();
   const activeBuffs = getTodayBuffs();
   const hasBuff = (t: string) => activeBuffs.some(b => b.type === t);
   const buffLvl = (t: string): 0 | 1 | 2 | 3 => {
@@ -306,8 +350,11 @@ export const BattleScene: React.FC<Props> = ({
       const lv = ((b as { level?: number }).level ?? 2) as 1 | 2 | 3;
       if (info) values[b.type] = info.values[lv - 1];
     }
-    const stages: Record<string, 1 | 2 | 3> = {};
-    for (const c of CHARACTERS) stages[c.id] = getStage(c.id);
+    const levels: Record<string, number> = {};
+    for (const c of CHARACTERS) levels[c.id] = getLevel(c.id);
+    // スキル：かけらで開いているものを 試合開始時に決めて sim に焼きこむ（戦闘中に開いても この試合には効かない）
+    const skills: Record<string, string[]> = {};
+    for (const id of formation) skills[id] = familySkillIds(id);
 
     const cfg = buildSimConfig({
       mode: 'PVE',
@@ -316,11 +363,11 @@ export const BattleScene: React.FC<Props> = ({
       // ——クライアントが選べると有利な乱数を引くまで作り直せてしまうため。
       seed: (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0,
       chapter, difficulty, battleMap: battleMap ?? null,
-      p1: { stages, buffs: { values } },
+      p1: { levels, buffs: { values }, formation, skills },
     });
     runnerRef.current = new SimRunner(cfg, {
       defenderBuildings: defenderBuildings.map(b => ({ type: b.type, x: b.x, y: b.y })),
-      playerBuildings: playerDeployments.map(b => ({ type: b.type, x: b.x, y: b.y })),
+      playerBuildings: playerDeployments.map(b => ({ type: b.type, x: b.x, y: b.y, mult: facilityMults[b.type] ?? 1 })),
       spellCharges: {
         P1: { HEAL: loadout?.healCharges ?? 2, RAGE: loadout?.rageCharges ?? 2 },
         P2: { HEAL: 0, RAGE: 0 },
@@ -334,6 +381,8 @@ export const BattleScene: React.FC<Props> = ({
   const me = simState.players[localPlayer];
   const entities = simState.entities;
   const gold = me.energy;
+  /** いま盤上にいる敵の シールドの合計（ふくしゅうカードを出す） */
+  const shieldLayers = entities.reduce((a, e) => a + (e.team === 'DEFENDER' ? (e.shield ?? 0) : 0), 0);
   const battleResult: 'WIN' | 'LOSE' | null =
     simState.result === null ? null : simState.result === localPlayer ? 'WIN' : 'LOSE';
   const battleStarted = simState.started;
@@ -355,10 +404,13 @@ export const BattleScene: React.FC<Props> = ({
     resolved: m.resolved,
   })).filter(m => m.zone);
 
-  const availableTroops: Troop[] = useMemo(() => CHARACTERS.map(c => ({
-    id: c.id, name: c.forms[0].name, count: 1,
-    damage: c.base.damage, hp: c.base.hp, target: c.base.target, moveSpeed: c.base.moveSpeed,
-  })), []);
+  // 下のバーは 出撃の5枠だけ（えらんだ順）
+  const availableTroops: Troop[] = useMemo(() => formation
+    .map(id => CHARACTER_BY_ID[id]).filter((c): c is NonNullable<typeof c> => !!c)
+    .map(c => ({
+      id: c.id, name: c.forms[0].name, count: 1,
+      damage: c.base.damage, hp: c.base.hp, target: c.base.target, moveSpeed: c.base.moveSpeed,
+    })), [formation]);
 
   const showMessage = (text: string, ms = 2000) => {
     setTriggerMessage(text);
@@ -411,6 +463,28 @@ export const BattleScene: React.FC<Props> = ({
     if (message) showMessage(message.text, message.ms);
   }, []);
 
+  /**
+   * 図鑑のために 敵の兵の出入りを見る（見た目の側だけ。sim の状態は読むだけ）。
+   * 盤上から消えた兵は「たおした」。自爆ロボが 施設のそばで消えたときは 自分で ばくはつした ので 数えない。
+   */
+  const trackEnemies = (ents: BattleEntity[]) => {
+    const alive = dexAliveRef.current;
+    const now = new Set<string>();
+    for (const e of ents) {
+      if (e.team !== 'DEFENDER' || e.type !== 'TROOP' || !e.kind) continue;
+      now.add(e.id);
+      const key = unitDexKey(e.kind);
+      if (!alive.has(e.id)) dexSeenRef.current.add(key);
+      alive.set(e.id, { key, x: e.x, y: e.y, kamikaze: e.kind === 'kamikaze' });
+    }
+    for (const [id, v] of alive) {
+      if (now.has(id)) continue;
+      alive.delete(id);
+      if (v.kamikaze && ents.some(b => b.type === 'BUILDING' && b.team === 'ATTACKER_BUILDING' && Math.hypot(b.x - v.x, b.y - v.y) <= 1.8)) continue;
+      dexDefeatedRef.current[v.key] = (dexDefeatedRef.current[v.key] ?? 0) + 1;
+    }
+  };
+
   // ── メインループ（固定タイムステップ）──
   const pvpRef = useRef(pvp);
   pvpRef.current = pvp;
@@ -441,6 +515,7 @@ export const BattleScene: React.FC<Props> = ({
         }
         const res = r.advance(dt, session ?? providerRef.current);
         if (res.events.length > 0) applyEvents(res.events);
+        if (res.ticks > 0 && !session) trackEnemies(r.state.entities);
         if (session) {
           session.recordChecksum(r.tick, stateChecksum(r.state));
           session.prune(r.tick);
@@ -473,6 +548,15 @@ export const BattleScene: React.FC<Props> = ({
     if (!pausedRef.current) lastRealRef.current = 0;
   }, [battlePaused, briefingOpen]);
 
+  /** 勝ったときの 💠（章・段・きょうの「💠 2ばい」・発電所） */
+  const lootFor = (win: boolean): number => {
+    if (!win) return 0;
+    const lootMult = hasBuff('DOUBLE_LOOT') ? 1 + buffVal('DOUBLE_LOOT') / 100 : 1;
+    return Math.round(chapter.rewardCredits * TIER_INFO[tier].rewardMult * lootMult * (1 + creditBonus));
+  };
+  /** 勝ち負けが決まったときに入れた 💠 と ★（結果画面は これを出す） */
+  const [settled, setSettled] = useState<{ gold: number; stars?: 1 | 2 | 3 } | null>(null);
+
   // 戦闘終了時：出撃した系統にXPを付与
   const xpGrantedRef = useRef(false);
   useEffect(() => {
@@ -482,6 +566,31 @@ export const BattleScene: React.FC<Props> = ({
     if (families.length > 0) {
       const events = grantBattleXp(families, battleResult === 'WIN');
       if (events.length > 0) setLevelUps(events);
+    }
+    // 収集（CW-4c）：図鑑・章の星・げきむず パーフェクト → バッジ・ネコの図鑑を決めなおす → 結果画面に「あたらしく 手に入れたもの」
+    if (!isPvp) {
+      try {
+        const win = battleResult === 'WIN';
+        const { answered, perfect } = quizStatsRef.current;
+        const k = tierKey(chapter.id, tier);
+        const prevStars = useCampaignStore.getState().stars[k] ?? 0;
+        const stars = win ? starsFor(answered, perfect) : undefined;
+        const col = useCollectionStore.getState();
+        const rb = col.recordBattle({
+          chapterId: chapter.id, tier, win, stars, prevStars, answered, perfect,
+          shields: shieldsBrokenRef.current, seen: [...dexSeenRef.current], defeated: { ...dexDefeatedRef.current },
+        });
+        const rf = refreshCollection(win && stars && stars > prevStars ? { [k]: stars } : undefined);
+        const after = useCollectionStore.getState();
+        const badges = Object.entries(after.badges).filter(([id, t]) => t > (after.badgesSeen[id] ?? 0)).map(([id, t]) => ({ id, tier: t }));
+        after.markBadgesSeen(badges.map(b => b.id));
+        setGains({ coins: after.coinsTotal - coinsAtStartRef.current, badges, dex: [...rb.newDex, ...rf.cats] });
+      } catch { /* 収集の記録で 戦いの結果を止めない */ }
+      // 勝ちの 💠・章の記録（クリア・★・連敗）も ここで入れる（ボタンを待たない）。★の前の値を 収集が読んだあと
+      const win = battleResult === 'WIN';
+      const r = { gold: lootFor(win), stars: win ? starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect) : undefined };
+      setSettled(r);
+      onSettle?.(win, { gold: r.gold }, r.stars);
     }
   }, [battleResult]);
 
@@ -500,6 +609,14 @@ export const BattleScene: React.FC<Props> = ({
     }
   }, []);
 
+  // 開発のときだけ：画面の確かめ（Playwright）で 結果画面を出す。__cwEndBattle(true)＝勝ち・false＝負け（本番のビルドには入らない）
+  useEffect(() => {
+    if (!import.meta.env.DEV || isPvp) return;
+    const w = window as unknown as { __cwEndBattle?: (win: boolean) => void };
+    w.__cwEndBattle = (win: boolean) => issue({ type: 'SURRENDER', player: win ? 'P2' : localPlayer });
+    return () => { delete w.__cwEndBattle; };
+  }, [issue, isPvp, localPlayer]);
+
   const handleGridClick = (x: number, y: number) => {
     const r = runnerRef.current!;
     if (r.state.result) return;
@@ -508,7 +625,7 @@ export const BattleScene: React.FC<Props> = ({
       const cost = IN_BATTLE_BUILD_COSTS[buildMode] ?? 999;
       if (Math.floor(gold) < cost) { showMessage('⚡ エナジーがたりない！', 1400); setBuildMode(null); return; }
       if (!canDeployAt(r.state, r.statics, localPlayer, x, y)) {
-        showMessage('⛔ ここには建設できない！お城の近くに置こう', 1600); setBuildMode(null); return;
+        showMessage('⛔ ここには たてられない！ コアの ちかくに おこう', 1600); setBuildMode(null); return;
       }
       issue({ type: 'BUILD', player: localPlayer, building: buildMode, x, y });
       setBuildMode(null);
@@ -533,12 +650,12 @@ export const BattleScene: React.FC<Props> = ({
     if (!selectedTroopId) return;
     if (isBlockedCell(r.state, r.statics, x, y)) return;
     if (!canDeployAt(r.state, r.statics, localPlayer, x, y)) {
-      showMessage('⛔ ここには出せないよ！ お城やキャンプの近くから出そう', 1800);
+      showMessage('⛔ ここには 出せないよ！ コアや キャンプの ちかくから 出そう', 1800);
       return;
     }
     const line = r.cfg.unitStats[localPlayer][selectedTroopId];
     if (line && gold < Math.round(line.cost * r.cfg.costMult[localPlayer])) {
-      showMessage('⚡ エナジーがたりない！ 問題を解くか、待ってためよう', 1600);
+      showMessage('⚡ エナジーが たりない！ 問題カードを といて ためよう', 1600);
       return;
     }
     issue({ type: 'DEPLOY', player: localPlayer, troopId: selectedTroopId, x, y });
@@ -563,17 +680,6 @@ export const BattleScene: React.FC<Props> = ({
     }
   }
 
-  const isCharUnlocked = (id: string): boolean => {
-    const fam = CHARACTER_BY_ID[id];
-    if (fam?.isStarter) return true;
-    // 兵舎を建てた日は、その解放ぶんを無料で使える（＝施設を建てる意味がここに出る）
-    if (loadout?.unlockedTroopTypes?.includes(id)) return true;
-    if (permanentUnlocks.includes(id)) return true;
-    // reset unlockedToday if date changed
-    const today = new Date().toISOString().slice(0, 10);
-    if (unlockedTodayDate !== today) return false;
-    return unlockedToday.includes(id);
-  };
 
   const buildingAccentColor: Record<string, string> = {
     TOWN_HALL: 'rgba(250,204,21,0.25)',
@@ -662,6 +768,14 @@ export const BattleScene: React.FC<Props> = ({
            0%, 100% { transform: scale(1); }
            50% { transform: scale(1.06); }
          }
+         @keyframes cw-shield-glow {
+           0%, 100% { box-shadow: 0 0 10px rgba(103,232,249,0.6); }
+           50% { box-shadow: 0 0 22px rgba(103,232,249,1); }
+         }
+         @keyframes cw-shield-ring {
+           0%, 100% { opacity: 0.7; transform: scale(1); }
+           50% { opacity: 1; transform: scale(1.06); }
+         }
          @keyframes cw-quiz-urgent {
            0%, 100% { transform: scale(1) rotate(0deg); }
            25% { transform: scale(1.12) rotate(-4deg); }
@@ -718,6 +832,19 @@ export const BattleScene: React.FC<Props> = ({
             <span className="text-white/60 text-xs truncate hidden sm:inline" style={{ fontFamily: '"M PLUS Rounded 1c", sans-serif' }}>
               {chapter.title}
             </span>
+            {tier !== 'normal' && (
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
+                style={{ background: `${TIER_INFO[tier].color}22`, borderColor: TIER_INFO[tier].color, color: TIER_INFO[tier].color }}>
+                {TIER_INFO[tier].label}
+              </span>
+            )}
+            {threat >= 1 && (
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
+                title={`手持ちが育っているぶん、敵も強くなっているよ（+${threatPct}%）`}
+                style={{ background: 'rgba(244,114,182,0.14)', borderColor: 'rgba(244,114,182,0.6)', color: '#f472b6' }}>
+                ⚠️ 脅威 Lv.{threat}
+              </span>
+            )}
             {assistLevel > 0 && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
                 style={{ background: 'rgba(163,230,53,0.12)', borderColor: 'rgba(163,230,53,0.45)', color: '#a3e635' }}>
@@ -726,7 +853,7 @@ export const BattleScene: React.FC<Props> = ({
             )}
             {selectedSpell && (
               <span className="text-xs bg-purple-600/50 text-purple-200 px-2 py-0.5 rounded-full select-none animate-bounce border border-purple-400/30">
-                🔮 呪文投下ポインター
+                🔮 まほうを おく 場所を タップ
               </span>
             )}
           </div>
@@ -738,48 +865,30 @@ export const BattleScene: React.FC<Props> = ({
               <span className="text-[#facc15] font-bold text-sm">{Math.floor(gold)}</span>
             </div>
             <Button variant="secondary" size="xs" onClick={() => onEndBattle(false, { gold: 0 })}>
-              全軍撤退（降伏）
+              たいきゃく する
             </Button>
           </div>
        </div>
 
-       {/* ④ 「といて⚡」を大きな浮かぶボタンにする。
-           絶対配置なのでレイアウトの高さを一切食わず、画面を圧迫しないまま
-           いちばん押してほしい行動をいちばん目立たせられる。
-           ⚡が少ないときは色と文言が変わり、「いま解くべき」ことが伝わる。 */}
-       {quizSubtopics.length > 0 && !battleResult && (() => {
-         const cheapest = runner.cfg.minTroopCost[localPlayer];
-         const poor = Math.floor(gold) < cheapest;
-         return (
-           <button
-             onClick={() => { setBattlePaused(true); setQuizOpen(true); }}
-             className="absolute z-[60] flex flex-col items-center justify-center rounded-full shadow-2xl active:scale-95 transition-transform"
-             style={{
-               // 右下はズーム操作(＋/−/リセット)が居るので、左下に置いて重なりを避ける
-               left: 16,
-               bottom: 150,
-               width: 92, height: 92,
-               background: poor
-                 ? 'radial-gradient(circle at 30% 25%, #fde68a, #f59e0b 70%)'
-                 : 'radial-gradient(circle at 30% 25%, #67e8f9, #0891b2 70%)',
-               border: `3px solid ${poor ? '#fff7ed' : '#a5f3fc'}`,
-               boxShadow: poor
-                 ? '0 0 26px rgba(245,158,11,0.85), 0 6px 18px rgba(0,0,0,0.55)'
-                 : '0 0 22px rgba(34,211,238,0.65), 0 6px 18px rgba(0,0,0,0.55)',
-               animation: poor ? 'cw-quiz-urgent 1s ease-in-out infinite' : 'cw-quiz-idle 2.6s ease-in-out infinite',
-             }}
-           >
-             <span className="text-3xl leading-none drop-shadow">📚</span>
-             <span className="text-[13px] font-black text-white leading-tight mt-0.5"
-               style={{ fontFamily: 'Orbitron, monospace', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
-               といて⚡
-             </span>
-             <span className="text-[9px] font-bold text-white/90 leading-none">
-               {poor ? 'エナジー不足！' : 'ためる'}
-             </span>
-           </button>
-         );
-       })()}
+       {/* 問題カード（戦闘の主役の操作）。エナジーは自動ではたまらず、カードを解いて手に入れる。
+           解いている間は戦闘を止める（対戦のときは止めない）。 */}
+       {quizSubtopics.length > 0 && !battleResult && !briefingOpen && (
+         <ProblemCards
+           unitKeys={quizSubtopics}
+           baseReward={Math.round(QUIZ_BASE_REWARD * (1 + (isPvp ? 0 : buffVal('GOLD_BOOST')) / 100))}
+           poor={Math.floor(gold) < runner.cfg.minTroopCost[localPlayer]}
+           onOpenChange={(open) => { setQuizOpen(open); setBattlePaused(open); }}
+           onReward={(en) => issue({ type: 'GRANT_ENERGY', player: localPlayer, amount: en })}
+           onAnswered={(item, perfect) => {
+             quizStatsRef.current.answered += 1;
+             if (perfect) quizStatsRef.current.perfect += 1;
+             grantStudyReward(perfect, item, formation);
+           }}
+           shieldLayers={shieldLayers}
+           onShieldBreak={() => { shieldsBrokenRef.current += 1; issue({ type: 'BREAK_SHIELD', player: localPlayer }); }}
+           cardLimit={isPvp ? null : cardLimitFor(chapter, tier, assistLevel)}
+         />
+       )}
 
        {/* Temporary visual dynamic notification banner inside combat */}
        {triggerMessage && (
@@ -896,7 +1005,7 @@ export const BattleScene: React.FC<Props> = ({
                  }}
               >
                 <span className={`text-[9px] font-black tracking-widest uppercase scale-75 ${s.type === 'HEAL' ? 'text-emerald-400' : 'text-purple-300'}`}>
-                  {s.type === 'HEAL' ? '💚 HEAL ZONE' : '⚡ RAGE ZONE'}
+                  {s.type === 'HEAL' ? '💚 かいふく' : '⚡ げきおこ'}
                 </span>
               </div>
             ))}
@@ -1311,7 +1420,7 @@ export const BattleScene: React.FC<Props> = ({
                                 {(
                                   [
                                     { order: 'RUSH' as const, label: '🏃突撃', color: '#ef4444' },
-                                    { order: 'DEFENSE' as const, label: '🛡防衛', color: '#22d3ee' },
+                                    { order: 'DEFENSE' as const, label: '🛡まもる', color: '#22d3ee' },
                                     { order: 'HOLD' as const, label: '⏸待機', color: '#94a3b8' },
                                   ] as { order: 'RUSH' | 'DEFENSE' | 'HOLD'; label: string; color: string }[]
                                 ).map(({ order, label, color }) => (
@@ -1359,6 +1468,28 @@ export const BattleScene: React.FC<Props> = ({
                               }}
                             ></div>
                         </div>
+                        {/* 特別な敵のしるし（空中・盾持ち・回復役・自爆）。たおし方は ステージえらびの画面に出している */}
+                        {e.team === 'DEFENDER' && e.kind && ENEMY_TRAIT_NOTE[e.kind as EnemyUnitKind] && (
+                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-[12px] leading-none pointer-events-none select-none"
+                            style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.9))' }}>
+                            {ENEMY_TRAIT_NOTE[e.kind as EnemyUnitKind]!.icon}
+                          </div>
+                        )}
+                        {/* ボスのシールド（ふくしゅうカードを といて わる） */}
+                        {e.team === 'DEFENDER' && (e.shield ?? 0) > 0 && (
+                          <>
+                            <div className="absolute rounded-full pointer-events-none"
+                              style={{
+                                inset: -8, border: '3px solid rgba(103,232,249,0.9)',
+                                boxShadow: '0 0 14px rgba(103,232,249,0.85), inset 0 0 10px rgba(103,232,249,0.5)',
+                                animation: 'cw-shield-ring 1.4s ease-in-out infinite',
+                              }} />
+                            <div className="absolute -top-9 left-1/2 -translate-x-1/2 text-[10px] font-black px-1.5 rounded-full whitespace-nowrap pointer-events-none"
+                              style={{ background: 'rgba(8,47,73,0.95)', border: '1px solid #67e8f9', color: '#67e8f9' }}>
+                              🛡️×{e.shield}
+                            </div>
+                          </>
+                        )}
                         {e.team === 'ATTACKER' && (tempRank[e.subType] ?? 0) > 0 && (
                           <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-[8px] font-black text-[#facc15] bg-black/80 px-1 rounded-full border border-[#facc15]/60 whitespace-nowrap" style={{ fontFamily: 'Orbitron, monospace' }}>
                             ⬆+{tempRank[e.subType]}
@@ -1372,7 +1503,7 @@ export const BattleScene: React.FC<Props> = ({
             {!battleStarted && (
                <div className="absolute inset-0 border-4 border-dashed border-teal-400/40 pointer-events-none flex items-center justify-center iso-item">
                   <span className="text-white text-xs font-black bg-slate-950/90 py-3 px-6 rounded-full border border-teal-400/30 shadow-2xl backdrop-blur-md animate-pulse">
-                     👈 外側の空地（砂地）をタップして、味方部隊やアクティブ呪文を投入せよ
+                     👈 自分の じんち（すなの ところ）を タップして、ネコや まほうを 出そう
                   </span>
                </div>
             )}
@@ -1382,10 +1513,10 @@ export const BattleScene: React.FC<Props> = ({
 
        {/* Result Modal display */}
        {battleResult && (() => {
-         const lootMult = hasBuff('DOUBLE_LOOT') ? 1 + buffVal('DOUBLE_LOOT') / 100 : 1;
          const win = battleResult === 'WIN';
-         // 戦利品は章ごとに設定（難しい章ほど多い）
-         const loot = win ? { gold: Math.round(chapter.rewardCredits * lootMult) } : { gold: 0 };
+         // 戦利品は章ごとに設定（難しい章ほど多い）。勝ち負けが決まったときに もう入れてある（settled）
+         const loot = { gold: settled ? settled.gold : lootFor(win) };
+         const winStars = settled?.stars ?? starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect);
          // fixed + z-[160] にして、下部のキャラ出撃バー(z-50)より確実に手前へ出す。
          // 以前は両方 z-50 の兄弟要素で、DOM順が後のバーがリザルトを覆っていた。
          return (
@@ -1394,13 +1525,16 @@ export const BattleScene: React.FC<Props> = ({
                <div className="text-center p-6 bg-slate-900/70 border border-yellow-500/30 rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto backdrop-blur-md shadow-2xl">
                  <Trophy className="w-16 h-16 text-yellow-400 mx-auto mb-3 animate-bounce" />
                  <div className="text-[10px] tracking-[0.25em] text-yellow-400/70 mb-1" style={{ fontFamily: 'Orbitron, monospace' }}>
-                   CHAPTER {chapter.no} CLEAR
+                   だい{chapter.no}しょう クリア！
                  </div>
                  <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
                  <p className="text-sm text-gray-200 mb-4 leading-relaxed">{chapter.victoryLine}</p>
+                 <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} win />
+                 <GainsSummary gains={gains} />
+                 <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
-                 <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot)}>
-                   戦利品を獲得して帰還 (💠{loot.gold} クレジット){hasBuff('DOUBLE_LOOT') && ' ×2!'}
+                 <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, winStars)}>
+                   {settled ? `基地へ もどる（💠${loot.gold} ゲット！${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}）` : `ごほうびを もらって かえる（💠${loot.gold}）${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}`}
                  </Button>
                </div>
             ) : (
@@ -1413,11 +1547,14 @@ export const BattleScene: React.FC<Props> = ({
                  </p>
                  {/* 連敗時は次回サポートが入ることを先に伝える（隠れた調整はしない） */}
                  <div className="text-[11px] text-[#a3e635] mb-3 leading-relaxed">
-                   まけても部隊の経験値は手に入るよ。何回かまけると「サポートモード」で やさしくなるので、あきらめずにもう一回！
+                   まけても ネコたちの けいけんちは 手に入るよ。何回か まけると「サポートモード」で やさしく なるので、あきらめずに もう一回！
                  </div>
+                 <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
+                 <GainsSummary gains={gains} />
+                 <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" variant="secondary" onClick={() => onEndBattle(false, { gold: 0 })}>
-                   村へ撤退する
+                   基地へ もどる
                  </Button>
                </div>
             )}
@@ -1430,7 +1567,7 @@ export const BattleScene: React.FC<Props> = ({
        <div className="bg-gray-950/95 border-t border-gray-800 px-3 py-1.5 z-50 relative shadow-2xl flex flex-col gap-1.5 flex-shrink-0">
          {/* Row 1: 魔法カード（選択＋補充を1行にまとめた） */}
          <div className="flex gap-2 items-center justify-center flex-wrap">
-           <span className="text-[10px] font-black text-gray-400 self-center uppercase pr-1">魔法カード:</span>
+           <span className="text-[10px] font-black text-gray-400 self-center uppercase pr-1">まほう:</span>
            <button
              onClick={() => {
                setSelectedSpell('HEAL');
@@ -1444,9 +1581,9 @@ export const BattleScene: React.FC<Props> = ({
              } ${spellCounts.HEAL <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
            >
              <Heart size={13} className="text-emerald-400" />
-             <span className="font-bold">回復(HEAL)</span>
+             <span className="font-bold">かいふく</span>
              <span className="text-[10px] bg-slate-850 text-stone-300 px-1.5 py-0.2 rounded font-mono">
-               残: {spellCounts.HEAL}
+               のこり {spellCounts.HEAL}
              </span>
            </button>
 
@@ -1463,9 +1600,9 @@ export const BattleScene: React.FC<Props> = ({
              } ${spellCounts.RAGE <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
            >
              <Zap size={13} className="text-purple-400" />
-             <span className="font-bold">激怒(RAGE)</span>
+             <span className="font-bold">げきおこ</span>
              <span className="text-[10px] bg-slate-850 text-stone-300 px-1.5 py-0.2 rounded font-mono">
-               残: {spellCounts.RAGE}
+               のこり {spellCounts.RAGE}
              </span>
            </button>
 
@@ -1486,7 +1623,7 @@ export const BattleScene: React.FC<Props> = ({
            </button>
 
            {/* 建設（旧・独立した行を、この行に統合） */}
-           <span className="text-[10px] font-black text-gray-400 self-center uppercase pl-2">建設:</span>
+           <span className="text-[10px] font-black text-gray-400 self-center uppercase pl-2">たてる:</span>
            {IN_BATTLE_BUILD_OPTIONS.map(type => {
              const bCost = IN_BATTLE_BUILD_COSTS[type] ?? 0;
              const canAfford = Math.floor(gold) >= bCost;
@@ -1520,7 +1657,7 @@ export const BattleScene: React.FC<Props> = ({
            )}
          </div>
 
-         {/* Row 2: 出撃（ゴールド消費・にゃんこ式）+ 一時ランクアップ */}
+         {/* Row 2: 出撃（えらんだ5枠・エナジーで出す）+ 一時ランクアップ */}
          <div className="relative flex items-center gap-2 overflow-x-auto px-1">
             {availableTroops.map(troop => {
                const fam = CHARACTER_BY_ID[troop.id];
@@ -1537,15 +1674,6 @@ export const BattleScene: React.FC<Props> = ({
                   <button
                     key={troop.id}
                     onClick={() => {
-                      if (!isCharUnlocked(troop.id)) {
-                        if (unlockCharacterToday(troop.id)) {
-                          sfx.correct();
-                        } else {
-                          setTriggerMessage('⚡ エナジーが15たりない！まず「といて⚡」で問題をとこう！');
-                          setTimeout(() => setTriggerMessage(null), 2000);
-                        }
-                        return;
-                      }
                       setSelectedTroopId(troop.id);
                       setSelectedSpell(null);
                     }}
@@ -1572,17 +1700,11 @@ export const BattleScene: React.FC<Props> = ({
                          <span className="text-white text-xs font-bold">{(cdLeft/1000).toFixed(1)}</span>
                        </div>
                      )}
-                     {!isCharUnlocked(troop.id) && (
-                       <div className="absolute inset-0 rounded-xl bg-black/70 flex flex-col items-center justify-center gap-0.5">
-                         <span className="text-base">🔒</span>
-                         <span className="text-[8px] text-[#facc15] font-bold">15⚡</span>
-                       </div>
-                     )}
                   </button>
                );
             })}
 
-            {/* 一時ランクアップ（選択中の兵種をゴールドで強化） */}
+            {/* 一時ランクアップ（選択中の兵種をエナジーで強化） */}
             {selectedTroopId && (() => {
               const fam = CHARACTER_BY_ID[selectedTroopId];
               if (!fam) return null;
@@ -1611,17 +1733,6 @@ export const BattleScene: React.FC<Props> = ({
 
        </div>
 
-       {/* 戦闘中クイズ（出撃前に選んだ範囲からランダム出題 → ⚡エナジー獲得）
-           ③ 報酬は問題の難易度・所要工程に応じて傾斜配分される（InBattleQuiz 側で算出）。 */}
-       {quizOpen && (
-         <InBattleQuiz
-           subtopics={quizSubtopics}
-           baseReward={34}
-           onReward={(en) => issue({ type: 'GRANT_ENERGY', player: localPlayer, amount: en })}
-           onClose={() => { setQuizOpen(false); setBattlePaused(false); }}
-         />
-       )}
-
        {/* 開戦ブリーフィング（②: 戦いのタイトル・敵の背景・作戦の一言） */}
        {briefingOpen && (
          <div className="absolute inset-0 z-[130] flex items-center justify-center p-4"
@@ -1649,6 +1760,12 @@ export const BattleScene: React.FC<Props> = ({
 
              <p className="text-white/85 text-xs leading-relaxed mb-2">▸ {chapter.briefing}</p>
              <p className="text-[#facc15]/90 text-[11px] leading-relaxed mb-4">💡 {chapter.hint}</p>
+             {!isPvp && cardLimitFor(chapter, tier, assistLevel) != null && (
+               <p className="text-[#fecaca] text-[11px] leading-relaxed mb-4 p-2 rounded-lg" data-testid="briefing-card-limit"
+                 style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.4)' }}>
+                 🃏 この たたかいの カードは {cardLimitFor(chapter, tier, assistLevel)} まいまで。まちがえずに とくほど ⚡ が ふえて、たくさん 出撃できるよ
+               </p>
+             )}
 
              {assistLevel > 0 && (
                <div className="p-2.5 rounded-xl mb-4 text-[11px] leading-relaxed"
@@ -1676,10 +1793,32 @@ export const BattleScene: React.FC<Props> = ({
 };
 
 // 戦闘リザルトのレベルアップ/進化サマリー
+/** この戦闘で解いた問題のまとめ。勝ったときは星（まちがえずに解けた割合で決まる。速さでは決まらない） */
+const QuizSummary: React.FC<{ answered: number; perfect: number; win?: boolean }> = ({ answered, perfect, win }) => {
+  const stars = starsFor(answered, perfect);
+  return (
+    <div className="mb-3 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-left">
+      {win && (
+        <div className="text-center text-2xl mb-1" aria-label={`星 ${stars}つ`}>
+          {[1, 2, 3].map((n) => <span key={n} style={{ color: n <= stars ? '#facc15' : 'rgba(255,255,255,0.18)' }}>★</span>)}
+        </div>
+      )}
+      <div className="text-[12px] text-gray-200 text-center">
+        といた問題 <b className="text-white">{answered}</b>問 ・ まちがえずに とけた <b className="text-[#a3e635]">{perfect}</b>問
+      </div>
+      {win && stars < 3 && (
+        <div className="text-[10px] text-white/50 text-center mt-1">
+          ★3は「8問いじょう といて、9わり まちがえない」。★2は「5問いじょうで 7わり」。はやさは かんけいないよ
+        </div>
+      )}
+    </div>
+  );
+};
+
 const LevelUpSummary: React.FC<{ events: import('../../store/useArmyStore').LevelUpEvent[] }> = ({ events }) => {
   if (!events || events.length === 0) {
     return (
-      <div className="text-xs text-cyan-300/80 mb-2">出撃したネコに経験値が入りました！</div>
+      <div className="text-xs text-cyan-300/80 mb-2">出撃した ネコに けいけんちが 入ったよ！</div>
     );
   }
   return (

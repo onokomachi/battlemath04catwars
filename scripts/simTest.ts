@@ -11,8 +11,16 @@ import { SimRunner, CommandProvider } from '../catwars/sim/runner';
 import { buildSimConfig } from '../catwars/sim/setup';
 import { stateChecksum, dumpState } from '../catwars/sim/checksum';
 import { SimCommand, TICK_MS, PlayerId } from '../catwars/sim/types';
-import { CAMPAIGN } from '../catwars/data/campaign';
-import { BATTLE_MAP_BY_ID } from '../catwars/data/battleMaps';
+import {
+  CAMPAIGN, ENEMY_UNIT_STATS, EnemyUnitKind, GUARD_MAGIC_MULT, GUARD_PHYSICAL_MULT, MEDIC_HEAL_PCT,
+  SHIELD_DAMAGE_MULT, tierDifficulty,
+} from '../catwars/data/campaign';
+import { levelMult, CHARACTER_BY_ID } from '../catwars/data/characters';
+import { SKILLS, SKILL_SHARDS, unlockedSkillIds } from '../catwars/data/skills';
+import { facilityMult } from '../catwars/data/facilities';
+import { BUILDING_STATS as BSTATS } from '../catwars/constants';
+import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../catwars/data/battleMaps';
+import type { BattleEntity } from '../catwars/types';
 import { BuildingType } from '../catwars/types';
 import { DetRNG } from '../catwars/sim/rng';
 import { LockstepSession, BUCKET_TICKS, recommendedInputDelayTicks } from '../catwars/net/lockstep';
@@ -20,6 +28,14 @@ import { LocalBus } from '../catwars/net/transport';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/**
+ * この試験は 戦闘の計算（再現性・フレームの刻み・同期）を確かめるもので、経済は見ない。
+ * キャンペーンは 自動収入なし（問題を解いて手に入れる）なので、そのままだと 台本どおりにネコを出せず、
+ * 試験が見たい長さまで戦闘が続かない。試験用に、前と同じ エナジー（はじめ260・毎秒7.5）を持たせる。
+ */
+const SIM_TEST_DIFFICULTY = <T extends { startEnergy: number; energyPerSec: number }>(d: T): T =>
+  ({ ...d, startEnergy: 260, energyPerSec: 7.5 });
 
 let failures = 0;
 function check(name: string, ok: boolean, detail = ''): void {
@@ -35,8 +51,8 @@ function makeSetup(chapterIndex = CHAPTER_INDEX, seed = 424242) {
   const ch = CAMPAIGN[chapterIndex];
   const map = BATTLE_MAP_BY_ID[ch.mapId];
   const cfg = buildSimConfig({
-    mode: 'PVE', seed, chapter: ch, difficulty: ch.difficulty, battleMap: map,
-    p1: { stages: { barbarian: 2, giant: 2 }, buffs: { values: { POWER_BOOST: 10, HEAL_AURA: 5 } } },
+    mode: 'PVE', seed, chapter: ch, difficulty: SIM_TEST_DIFFICULTY(ch.difficulty), battleMap: map,
+    p1: { levels: { barbarian: 10, giant: 10 }, buffs: { values: { POWER_BOOST: 10, HEAL_AURA: 5 } } },
   });
   const init = {
     defenderBuildings: map.enemyBase,
@@ -305,12 +321,12 @@ console.log('\n[6] PvP対戦セットアップ（ホストとゲストが同じ�
     seed: 3141592653,
     mapId: 'pvp-mirror',
     host: {
-      name: 'ホスト', stages: { barbarian: 2 as const }, buffs: { POWER_BOOST: 10 },
+      name: 'ホスト', levels: { barbarian: 10 }, buffs: { POWER_BOOST: 10 },
       base: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }, { type: BuildingType.CANNON, x: 3, y: 4 }],
       spells: { HEAL: 2, RAGE: 2 },
     },
     guest: {
-      name: 'ゲスト', stages: { archer: 3 as const }, buffs: { SWIFT_ARMY: 8 },
+      name: 'ゲスト', levels: { archer: 30 }, buffs: { SWIFT_ARMY: 8 },
       base: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }, { type: BuildingType.CANNON, x: 2, y: 11 }],
       spells: { HEAL: 2, RAGE: 2 },
     },
@@ -323,8 +339,8 @@ console.log('\n[6] PvP対戦セットアップ（ホストとゲストが同じ�
       mode: 'PVP', seed: roomDoc.seed,
       chapter: { enemyName: roomDoc.guest.name },
       difficulty: PVP_DIFFICULTY, battleMap: map,
-      p1: { stages: roomDoc.host.stages, buffs: { values: roomDoc.host.buffs } },
-      p2: { stages: roomDoc.guest.stages, buffs: { values: roomDoc.guest.buffs } },
+      p1: { levels: roomDoc.host.levels, buffs: { values: roomDoc.host.buffs } },
+      p2: { levels: roomDoc.guest.levels, buffs: { values: roomDoc.guest.buffs } },
     });
     const widthOf = (t: BuildingType) => BUILDING_STATS[t].width;
     return {
@@ -393,6 +409,418 @@ console.log('\n[6] PvP対戦セットアップ（ホストとゲストが同じ�
     `P1側=${r1.state.result ?? '継続'} P2側=${r2.state.result ?? '継続'}`);
   check('決着がついた（PvPの勝利条件が機能している）', r1.state.result !== null,
     `勝者=${r1.state.result}`);
+}
+
+// ── テスト7: 新しい敵のきまり（盾持ち・空中・自爆・回復役）とボスのシールド ─────────
+
+console.log('\n[7] 新しい敵のきまり（盾持ち・空中・自爆・回復役・ボスのシールド）');
+{
+  // 小さな試合場：敵の増援は出さない（firstSpawnDelayMs を大きく）。敵の基地はコアだけ、自軍もコアだけ
+  const ch = CAMPAIGN[0];
+  const map = BATTLE_MAP_BY_ID[ch.mapId];
+  const arena = () => {
+    const cfg = buildSimConfig({
+      mode: 'PVE', seed: 99, chapter: ch,
+      difficulty: { ...ch.difficulty, firstSpawnDelayMs: 99999999, enemyHpMult: 1, enemyDamageMult: 1, startEnergy: 0, energyPerSec: 0 },
+      battleMap: map,
+      p1: { levels: {}, buffs: { values: {} } },
+    });
+    const runner = new SimRunner(cfg, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 13 }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    runner.state.started = true;
+    return runner;
+  };
+  let n = 0;
+  /** 敵を置く（still＝動かない・こうげきしない） */
+  const enemy = (r: SimRunner, kind: EnemyUnitKind, x: number, y: number, still = true, extra: Partial<BattleEntity> = {}): BattleEntity => {
+    const st = ENEMY_UNIT_STATS[kind];
+    const e: BattleEntity = {
+      id: `zz-e${n++}`, type: 'TROOP', subType: st.subType, x, y, hp: st.hp, maxHp: st.hp,
+      damage: still ? 0 : st.damage, team: 'DEFENDER', kind,
+      attackRange: st.attackRange, attackSpeed: st.attackSpeed, lastAttack: -999999,
+      moveSpeed: still ? 0 : st.moveSpeed, targetPreference: 'ANY', path: [], ...extra,
+    };
+    r.state.entities.push(e);
+    return e;
+  };
+  /** ネコを置く（cfg の性能のまま。still＝動かない） */
+  const cat = (r: SimRunner, id: string, x: number, y: number, extra: Partial<BattleEntity> = {}): BattleEntity => {
+    const line = r.cfg.unitStats.P1[id];
+    const e: BattleEntity = {
+      id: `zz-c${n++}`, type: 'TROOP', subType: id, x, y, hp: line.hp, maxHp: line.hp,
+      damage: line.damage, team: 'ATTACKER', attackRange: line.attackRange,
+      attackSpeed: Math.round(line.attackSpeed), lastAttack: -999999, moveSpeed: 0,
+      targetPreference: 'ANY', path: [], ...extra,
+    };
+    r.state.entities.push(e);
+    return e;
+  };
+  const NONE = new TickScript(new Map());
+  const run = (r: SimRunner, ticks: number, provider: CommandProvider = NONE) => { for (let i = 0; i < ticks; i++) r.advance(TICK_MS, provider); };
+  /** 最初に こうげきを うけるまで進めて、へった HP を返す */
+  const firstHit = (r: SimRunner, target: BattleEntity, max = 80): number => {
+    const hp0 = target.hp;
+    for (let i = 0; i < max && target.hp === hp0; i++) r.advance(TICK_MS, NONE);
+    return hp0 - target.hp;
+  };
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.01;
+
+  // 盾持ち：魔法いがいは半分、魔法は1.5倍
+  {
+    const r = arena();
+    const g = enemy(r, 'guard', 14, 7);
+    const a = cat(r, 'archer', 12, 7);
+    const lost = firstHit(r, g);
+    check('盾持ち：遠距離（魔法いがい）の こうげきは 半分', near(lost, a.damage * GUARD_PHYSICAL_MULT), `うけた=${lost.toFixed(1)} 元=${a.damage}`);
+  }
+  {
+    const r = arena();
+    const g = enemy(r, 'guard', 14, 7);
+    const m = cat(r, 'magic', 12, 7);
+    const lost = firstHit(r, g);
+    check('盾持ち：魔法は 1.5倍', near(lost, m.damage * GUARD_MAGIC_MULT), `うけた=${lost.toFixed(1)} 元=${m.damage}`);
+  }
+
+  // 空中：近接のネコは こうげきしない・遠距離は当たる
+  {
+    const r = arena();
+    const f = enemy(r, 'flyer', 14, 7);
+    cat(r, 'barbarian', 13.2, 7);
+    run(r, 60);
+    check('空中：近接のネコ（射程2未満）は 空中の敵を こうげきしない', f.hp === f.maxHp, `HP ${f.hp}/${f.maxHp}`);
+  }
+  {
+    const r = arena();
+    const f = enemy(r, 'flyer', 14, 7);
+    cat(r, 'archer', 12, 7);
+    run(r, 60);
+    check('空中：遠距離のネコの こうげきは 当たる', f.hp < f.maxHp, `HP ${f.hp.toFixed(0)}/${f.maxHp}`);
+  }
+
+  // 自爆：ネコは ねらわず、施設に当たって消える
+  {
+    const r = arena();
+    const core = r.state.entities.find(e => e.team === 'ATTACKER_BUILDING')!;
+    const coreHp = core.hp;
+    const k = enemy(r, 'kamikaze', 6, 13, false);
+    // 施設より近くに、こうげきしないネコを置く（ねらわれないこと。通り道には置かない＝体でとめてしまうため）
+    const c = cat(r, 'giant', 6, 11, { damage: 0 });
+    run(r, 120);
+    const gone = !r.state.entities.includes(k);
+    check('自爆：施設に つっこんで ダメージを与える', core.hp < coreHp, `コア ${coreHp} → ${core.hp.toFixed(0)}`);
+    check('自爆：ばくはつしたら 消える（1回きり）', gone);
+    check('自爆：ネコは ねらわない', c.hp === c.maxHp, `ネコ HP ${c.hp}/${c.maxHp}`);
+  }
+
+  // 回復役：2.5マスの中の味方を 最大HPの8% 回復。外は回復しない
+  {
+    const r = arena();
+    enemy(r, 'medic', 14, 7);
+    const inside = enemy(r, 'grunt', 15, 7);
+    const outside = enemy(r, 'grunt', 14, 12);
+    inside.hp = inside.maxHp / 2; outside.hp = outside.maxHp / 2;
+    run(r, 45); // 2.25秒（2秒ごとに1回）
+    const healed = inside.hp - inside.maxHp / 2;
+    check('回復役：まわりの味方を 最大HPの8% 回復する', near(healed, inside.maxHp * MEDIC_HEAL_PCT),
+      `+${healed.toFixed(1)}（1回=${(inside.maxHp * MEDIC_HEAL_PCT).toFixed(1)}）`);
+    check('回復役：はなれた味方は回復しない', outside.hp === outside.maxHp / 2);
+  }
+
+  // ボスのシールド：あるあいだは1割しか通らない。BREAK_SHIELD で1枚へる
+  {
+    const r = arena();
+    const b = enemy(r, 'boss', 14, 7, true, { shield: 2 });
+    const a = cat(r, 'archer', 12, 7);
+    const lost = firstHit(r, b);
+    check('シールド：あるあいだは ダメージが1割', near(lost, a.damage * SHIELD_DAMAGE_MULT), `うけた=${lost.toFixed(2)} 元=${a.damage}`);
+    const t = r.tick + 1;
+    run(r, 2, new TickScript(new Map([[t, [{ type: 'BREAK_SHIELD', player: 'P1' }]]])));
+    check('シールド：BREAK_SHIELD で1枚へる', b.shield === 1, `のこり ${b.shield}`);
+    run(r, 2, new TickScript(new Map([[r.tick + 1, [{ type: 'BREAK_SHIELD', player: 'P1' }]]])));
+    const lost2 = firstHit(r, b);
+    check('シールド：ぜんぶ われたら ふつうに通る', b.shield === 0 && near(lost2, a.damage), `うけた=${lost2.toFixed(1)}`);
+  }
+}
+
+// ── テスト8: 難易度の段（新しい敵・ボスのシールドつき）でも決定論 ─────────────────
+
+console.log('\n[8] げきむず（新しい敵・ボスのシールド・足した砲台）でも、同じseed＋同じコマンド列 → 同じ結果');
+{
+  const run8 = (seed: number) => {
+    const ch = CAMPAIGN[7];
+    const map = BATTLE_MAP_BY_ID[ch.mapId];
+    const d = tierDifficulty(ch, 'extreme');
+    const cfg = buildSimConfig({
+      mode: 'PVE', seed, chapter: ch, difficulty: SIM_TEST_DIFFICULTY({ ...d, bossAtSpawnCount: 6 }), battleMap: map,
+      p1: { levels: { barbarian: 10, archer: 10, magic: 10 }, buffs: { values: {} } },
+    });
+    const runner = new SimRunner(cfg, {
+      defenderBuildings: tierEnemyBase(map, 'extreme'),
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }],
+      spellCharges: { P1: { HEAL: 2, RAGE: 2 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    const script = makeScript(4242, 2400);
+    for (let t = 300; t < 2400; t += 97) script.set(t, [...(script.get(t) ?? []), { type: 'BREAK_SHIELD', player: 'P1' }]);
+    const provider = new TickScript(script);
+    const sums: number[] = [];
+    const sawKinds = new Set<string>();
+    let sawShield = false;
+    for (let i = 0; i < 2400; i++) {
+      runner.advance(TICK_MS, provider);
+      sums.push(stateChecksum(runner.state));
+      for (const e of runner.state.entities) { if (e.kind) sawKinds.add(e.kind); if ((e.shield ?? 0) > 0) sawShield = true; }
+      if (runner.state.result) break;
+    }
+    return { sums, sawKinds, sawShield };
+  };
+  const a = run8(8080), b = run8(8080);
+  const same = a.sums.length === b.sums.length && a.sums.every((v, i) => v === b.sums[i]);
+  check('全tickのチェックサムが一致', same, `${a.sums.length} tick`);
+  check('新しい敵が出ている（試験が意味を持っている）',
+    ['guard', 'medic', 'kamikaze', 'flyer'].filter(k => a.sawKinds.has(k)).length >= 3, [...a.sawKinds].join(','));
+  check('シールドつきのボスが出ている', a.sawShield);
+}
+
+// ── テスト9: 育ち方・施設のレベル・自爆のダメージ・出撃の5枠（2026-11-15 CW-4a）─────────────
+
+console.log('\n[9] レベルの倍率・施設のレベル・自爆ロボのダメージ・5枠の外は出せない');
+{
+  const ch = CAMPAIGN[0];
+  const map = BATTLE_MAP_BY_ID[ch.mapId];
+  const cfgFor = (levels: Record<string, number>, formation?: string[]) => buildSimConfig({
+    mode: 'PVE', seed: 7, chapter: ch,
+    difficulty: { ...ch.difficulty, firstSpawnDelayMs: 99999999, enemyHpMult: 1, enemyDamageMult: 1, startEnergy: 5000, energyPerSec: 0 },
+    battleMap: map, p1: { levels, buffs: { values: {} }, formation },
+  });
+
+  // levelMult：Lv1=1・Lv10≒1.32・Lv30≒2.0・Lv60≒3.07。sim の表にそのまま効く
+  check('levelMult：Lv10≒1.32・Lv30≒2.0・Lv60≒3.07',
+    Math.abs(levelMult(10) - 1.315) < 0.001 && Math.abs(levelMult(30) - 2.015) < 0.001 && Math.abs(levelMult(60) - 3.065) < 0.001,
+    `${levelMult(10).toFixed(3)} / ${levelMult(30).toFixed(3)} / ${levelMult(60).toFixed(3)}`);
+  const c1 = cfgFor({}), c30 = cfgFor({ barbarian: 30 });
+  const b = CHARACTER_BY_ID.barbarian.base;
+  check('レベルが sim のHP・こうげきに効く（Lv30 の近接系）',
+    c1.unitStats.P1.barbarian.hp === b.hp && c30.unitStats.P1.barbarian.hp === Math.round(b.hp * levelMult(30))
+    && c30.unitStats.P1.barbarian.damage === Math.round(b.damage * levelMult(30)),
+    `HP ${c1.unitStats.P1.barbarian.hp} → ${c30.unitStats.P1.barbarian.hp}`);
+  check('レベルは1ずつ少しずつ（Lv9→Lv10 で段差がない）',
+    cfgFor({ barbarian: 10 }).unitStats.P1.barbarian.hp - cfgFor({ barbarian: 9 }).unitStats.P1.barbarian.hp <= 3);
+
+  // 施設のレベル：SimInit の playerBuildings の mult が HP・こうげきに効く
+  {
+    const mk = (mult?: number) => new SimRunner(c1, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 13, mult }, { type: BuildingType.CANNON, x: 3, y: 4, mult }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    const m5 = facilityMult(BuildingType.CANNON, 5);
+    const a = mk(), z = mk(m5);
+    const core = (r: SimRunner) => r.state.entities.find(e => e.team === 'ATTACKER_BUILDING' && e.subType === BuildingType.TOWN_HALL)!;
+    const cannon = (r: SimRunner) => r.state.entities.find(e => e.team === 'ATTACKER_BUILDING' && e.subType === BuildingType.CANNON)!;
+    check('施設のレベル：Lv5（×1.4）でコアと砲台のHP・こうげきが上がる',
+      core(a).maxHp === BSTATS[BuildingType.TOWN_HALL].hp && core(z).maxHp === Math.round(BSTATS[BuildingType.TOWN_HALL].hp * m5)
+      && cannon(z).damage === Math.round((BSTATS[BuildingType.CANNON].damage ?? 0) * m5),
+      `コア ${core(a).maxHp} → ${core(z).maxHp}・砲台 こうげき ${cannon(a).damage} → ${cannon(z).damage}`);
+  }
+
+  // 自爆ロボ：1回のダメージは ENEMY_UNIT_STATS.kamikaze.damage のまま（ネコの ぼむにゃー の ×4 が掛からない）
+  {
+    const r = new SimRunner(c1, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 13 }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    r.state.started = true;
+    const st = ENEMY_UNIT_STATS.kamikaze;
+    r.state.entities.push({
+      id: 'zz-k', type: 'TROOP', subType: st.subType, x: 6, y: 13, hp: st.hp, maxHp: st.hp, damage: st.damage,
+      team: 'DEFENDER', kind: 'kamikaze', attackRange: st.attackRange, attackSpeed: st.attackSpeed,
+      lastAttack: -999999, moveSpeed: st.moveSpeed, targetPreference: 'ANY', path: [],
+    });
+    const core = r.state.entities.find(e => e.team === 'ATTACKER_BUILDING')!;
+    const hp0 = core.hp;
+    for (let i = 0; i < 160 && core.hp === hp0; i++) r.advance(TICK_MS, new TickScript(new Map()));
+    const lost = hp0 - core.hp;
+    check('自爆ロボ：ダメージは 1倍（4倍になっていない）', Math.abs(lost - st.damage) < 0.01, `コアが ${lost.toFixed(0)} へった（もと ${st.damage}）`);
+    check('自爆ロボ：1回で コアの最大HPの 約2割', lost / core.maxHp >= 0.15 && lost / core.maxHp <= 0.25, `${((lost / core.maxHp) * 100).toFixed(0)}%`);
+  }
+
+  // 5枠：表に入るのは5枠の系統だけ。外の系統は DEPLOY しても出ない（sim の中で止める）
+  {
+    const form = ['barbarian', 'archer', 'giant', 'bomber', 'magic'];
+    const cfg = cfgFor({}, form);
+    check('5枠：sim の表には 5枠の系統だけ', Object.keys(cfg.unitStats.P1).sort().join(',') === [...form].sort().join(','),
+      Object.keys(cfg.unitStats.P1).join(','));
+    const r = new SimRunner(cfg, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    const zone = r.statics.deployZones.P1!;
+    const x = zone.xMax, y = zone.yMin + 1;
+    r.advance(TICK_MS, new TickScript(new Map([[1, [
+      { type: 'DEPLOY', player: 'P1', troopId: 'flying', x, y },
+      { type: 'DEPLOY', player: 'P1', troopId: 'barbarian', x, y: y + 2 },
+    ]]])));
+    const mine = r.state.entities.filter(e => e.team === 'ATTACKER');
+    check('5枠：外の系統（飛行系）は DEPLOY しても出ない・中の系統（近接系）は出る',
+      !mine.some(e => e.subType === 'flying') && mine.some(e => e.subType === 'barbarian'), mine.map(e => e.subType).join(','));
+  }
+}
+
+console.log('\n[10] スキル（24個）：開いていれば効く・開いていなければ効かない・同じ seed で同じ結果');
+{
+  const ch = CAMPAIGN[0];
+  const map = BATTLE_MAP_BY_ID[ch.mapId];
+  type Bld = { type: BuildingType; x: number; y: number };
+  const arena = (skills: Record<string, string[]>, defenders: Bld[] = []) => {
+    const cfg = buildSimConfig({
+      mode: 'PVE', seed: 5, chapter: ch,
+      difficulty: { ...ch.difficulty, firstSpawnDelayMs: 99999999, enemyHpMult: 1, enemyDamageMult: 1, defenseHpMult: 1, defenseDamageMult: 1, startEnergy: 0, energyPerSec: 0 },
+      battleMap: map,
+      p1: { levels: {}, buffs: { values: {} }, skills },
+    });
+    const r = new SimRunner(cfg, {
+      defenderBuildings: [{ type: BuildingType.TOWN_HALL, x: 26, y: 1 }, ...defenders],
+      playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 13 }],
+      spellCharges: { P1: { HEAL: 0, RAGE: 0 }, P2: { HEAL: 0, RAGE: 0 } },
+    });
+    r.state.started = true;
+    return r;
+  };
+  let n = 0;
+  const enemy = (r: SimRunner, kind: EnemyUnitKind, x: number, y: number, still = true, extra: Partial<BattleEntity> = {}): BattleEntity => {
+    const st = ENEMY_UNIT_STATS[kind];
+    const e: BattleEntity = {
+      id: `zz-e${n++}`, type: 'TROOP', subType: st.subType, x, y, hp: st.hp, maxHp: st.hp,
+      damage: still ? 0 : st.damage, team: 'DEFENDER', kind,
+      attackRange: st.attackRange, attackSpeed: st.attackSpeed, lastAttack: -999999,
+      moveSpeed: 0, targetPreference: 'ANY', path: [], ...extra,
+    };
+    r.state.entities.push(e);
+    return e;
+  };
+  const cat = (r: SimRunner, id: string, x: number, y: number, extra: Partial<BattleEntity> = {}): BattleEntity => {
+    const line = r.cfg.unitStats.P1[id];
+    const e: BattleEntity = {
+      id: `zz-c${n++}`, type: 'TROOP', subType: id, x, y, hp: line.hp, maxHp: line.hp,
+      damage: line.damage, team: 'ATTACKER', attackRange: line.attackRange,
+      attackSpeed: Math.round(line.attackSpeed), lastAttack: -999999, moveSpeed: 0,
+      targetPreference: line.target, path: [], ...extra,
+    };
+    r.state.entities.push(e);
+    return e;
+  };
+  const NONE = new TickScript(new Map());
+  const run = (r: SimRunner, ticks: number) => { for (let i = 0; i < ticks; i++) r.advance(TICK_MS, NONE); };
+  const hitOf = (r: SimRunner, target: BattleEntity, max = 120): number => {
+    const hp0 = target.hp;
+    for (let i = 0; i < max && target.hp === hp0; i++) r.advance(TICK_MS, NONE);
+    return hp0 - target.hp;
+  };
+  const bld = (r: SimRunner, type: BuildingType) => r.state.entities.find(e => e.type === 'BUILDING' && e.team === 'DEFENDER' && e.subType === type)!;
+  const f1 = (v: number) => v.toFixed(1);
+
+  /** 1つのスキルの試験：metric(その id を開いた) と metric(開いていない) をくらべる */
+  const cases: Record<string, { fam: string; pre?: string[]; metric: (sk: string[]) => number; expect: (on: number, off: number) => boolean; note: string }> = {
+    melee_feast: { fam: 'barbarian', note: 'たおしたあとの HP', expect: (a, b) => a > b, metric: (sk) => {
+      const r = arena({ barbarian: sk }); const c = cat(r, 'barbarian', 10, 7, { hp: 20 }); enemy(r, 'grunt', 11, 7, true, { hp: 3 }); run(r, 40); return c.hp; } },
+    melee_rally: { fam: 'barbarian', note: '3秒で あたえたダメージ（HP 2割）', expect: (a, b) => a > b, metric: (sk) => {
+      const r = arena({ barbarian: sk }); cat(r, 'barbarian', 10, 7, { hp: 12 }); const e = enemy(r, 'brute', 11, 7, true, { hp: 99999, maxHp: 99999 }); run(r, 60); return 99999 - e.hp; } },
+    melee_pack: { fam: 'barbarian', note: 'なかま3びきと いるときの 1回のダメージ', expect: (a, b) => a < b, metric: (sk) => {
+      const r = arena({ barbarian: sk }); const c = cat(r, 'barbarian', 10, 7, { hp: 9999, maxHp: 9999 });
+      cat(r, 'barbarian', 9, 7); cat(r, 'barbarian', 9, 6.2); cat(r, 'barbarian', 9, 7.8);
+      enemy(r, 'brute', 11, 7, false); return hitOf(r, c); } },
+    ranged_sky: { fam: 'archer', note: '空中の敵への 1発', expect: (a, b) => Math.abs(a - b * 1.5) < 0.01, metric: (sk) => {
+      const r = arena({ archer: sk }); cat(r, 'archer', 10, 7); const e = enemy(r, 'flyer', 12, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e); } },
+    ranged_reach: { fam: 'archer', note: '射程 4.2 マスの敵に とどく', expect: (a, b) => a > 0 && b === 0, metric: (sk) => {
+      const r = arena({ archer: sk }); cat(r, 'archer', 10, 7); const e = enemy(r, 'grunt', 14.2, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e, 60); } },
+    ranged_first: { fam: 'archer', note: 'さいしょの 1発', expect: (a, b) => Math.abs(a - b * 3) < 0.01, metric: (sk) => {
+      const r = arena({ archer: sk }); cat(r, 'archer', 10, 7); const e = enemy(r, 'brute', 12, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e); } },
+    tank_cover: { fam: 'giant', note: '砲台から 近接系が うける 1発', expect: (a, b) => a < b && a > 0, metric: (sk) => {
+      const r = arena({ giant: sk }, [{ type: BuildingType.CANNON, x: 12, y: 7 }]);
+      const c = cat(r, 'barbarian', 12, 11, { hp: 9999, maxHp: 9999 }); cat(r, 'giant', 12, 12.6); return hitOf(r, c); } },
+    tank_last: { fam: 'giant', note: 'タンクが たおれたあとの なかまの HP', expect: (a, b) => a > b, metric: (sk) => {
+      const r = arena({ giant: sk }); const g = cat(r, 'giant', 10, 7); const c = cat(r, 'barbarian', 11, 7, { hp: 20 }); g.hp = 0; run(r, 2); return c.hp; } },
+    tank_smash: { fam: 'giant', note: '施設への倍率', expect: (a, b) => Math.abs(a - b - 0.75) < 1e-9, metric: (sk) => arena({ giant: sk }).cfg.unitStats.P1.giant.buildingDamageMult },
+    magic_pierce: { fam: 'magic', note: '盾持ちへの 1発', expect: (a, b) => Math.abs(a - b * 1.5) < 0.01, metric: (sk) => {
+      const r = arena({ magic: sk }); cat(r, 'magic', 10, 7); const e = enemy(r, 'guard', 12, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e); } },
+    magic_burst: { fam: 'magic', note: 'となりの敵が うけたダメージ', expect: (a, b) => a > 0 && b === 0, metric: (sk) => {
+      const r = arena({ magic: sk }); cat(r, 'magic', 10, 7); const t = enemy(r, 'grunt', 12, 7, true, { hp: 9999, maxHp: 9999 });
+      const o = enemy(r, 'grunt', 12.6, 7, true, { hp: 9999, maxHp: 9999 }); hitOf(r, t); return 9999 - o.hp; } },
+    magic_seek: { fam: 'magic', note: '回復役を さきに うつ（1＝回復役）', expect: (a, b) => a === 1 && b === 0, metric: (sk) => {
+      const r = arena({ magic: sk }); cat(r, 'magic', 10, 7); enemy(r, 'grunt', 11.5, 7, true, { hp: 9999, maxHp: 9999 });
+      const m = enemy(r, 'medic', 10, 9.8, true, { hp: 9999, maxHp: 9999 }); run(r, 30); return m.hp < 9999 ? 1 : 0; } },
+    speed_stop: { fam: 'speed', note: '自爆ロボを さきに うつ（1＝自爆ロボ）', expect: (a, b) => a === 1 && b === 0, metric: (sk) => {
+      const r = arena({ speed: sk }); cat(r, 'speed', 10, 7); enemy(r, 'grunt', 10.8, 7, true, { hp: 9999, maxHp: 9999 });
+      const k = enemy(r, 'kamikaze', 10, 8.1, true, { hp: 9999, maxHp: 9999 }); run(r, 20); return k.hp < 9999 ? 1 : 0; } },
+    speed_dash: { fam: 'speed', note: '出て 2秒で うけたダメージ', expect: (a, b) => a === 0 && b > 0, metric: (sk) => {
+      const r = arena({ speed: sk }); const c = cat(r, 'speed', 10, 7, { hp: 9999, maxHp: 9999, bornTick: r.state.tick }); enemy(r, 'brute', 11, 7, false); run(r, 40); return 9999 - c.hp; } },
+    speed_raid: { fam: 'speed', note: '発電所への 1発', expect: (a, b) => Math.abs(a - b * 2) < 0.01, metric: (sk) => {
+      const r = arena({ speed: sk }, [{ type: BuildingType.GOLD_MINE, x: 11, y: 7 }]); cat(r, 'speed', 10, 7); const g = bld(r, BuildingType.GOLD_MINE); g.hp = g.maxHp = 99999; return hitOf(r, g); } },
+    fly_dodge: { fam: 'flying', note: '砲台に はじめて うたれるまでの tick', expect: (a, b) => a >= b + 10, metric: (sk) => {
+      const r = arena({ flying: sk }, [{ type: BuildingType.CANNON, x: 12, y: 7 }]); const c = cat(r, 'flying', 12, 10, { hp: 9999, maxHp: 9999, damage: 0 });
+      const t0 = r.state.tick; hitOf(r, c, 200); return r.state.tick - t0; } },
+    fly_ace: { fam: 'flying', note: '空中の敵への 1発', expect: (a, b) => Math.abs(a - b * 1.5) < 0.01, metric: (sk) => {
+      const r = arena({ flying: sk }); cat(r, 'flying', 10, 7); const e = enemy(r, 'flyer', 11, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e); } },
+    fly_perch: { fam: 'flying', note: '壁の ちかくで 3秒やすんだ HP', expect: (a, b) => a > b, metric: (sk) => {
+      const r = arena({ flying: sk }, [{ type: BuildingType.WALL, x: 11, y: 7 }]); const c = cat(r, 'flying', 10, 7, { hp: 20, damage: 0 }); run(r, 60); return c.hp; } },
+    heal_aura: { fam: 'healer', note: '3秒で なかまの HP', expect: (a, b) => a > b, metric: (sk) => {
+      const r = arena({ healer: sk }); cat(r, 'healer', 10, 7); const c = cat(r, 'barbarian', 11, 7, { hp: 10 }); run(r, 60); return c.hp; } },
+    heal_wide: { fam: 'healer', pre: ['heal_aura'], note: '3マス はなれた なかまの HP', expect: (a, b) => a > b, metric: (sk) => {
+      const r = arena({ healer: sk }); cat(r, 'healer', 10, 7); const c = cat(r, 'barbarian', 13, 7, { hp: 10 }); run(r, 60); return c.hp; } },
+    heal_calm: { fam: 'healer', note: 'シールドの ボスの 1発', expect: (a, b) => Math.abs(a - b * 0.7) < 0.01, metric: (sk) => {
+      const r = arena({ healer: sk }); const c = cat(r, 'barbarian', 10, 7, { hp: 99999, maxHp: 99999, damage: 0 }); cat(r, 'healer', 10, 9, { damage: 0 });
+      enemy(r, 'boss', 11.2, 7, false, { shield: 3 }); return hitOf(r, c); } },
+    bomb_blast: { fam: 'bomber', note: 'となりの敵が うけたダメージ', expect: (a, b) => a > 0 && b === 0, metric: (sk) => {
+      const r = arena({ bomber: sk }); cat(r, 'bomber', 10, 7, { targetPreference: 'ANY' }); const t = enemy(r, 'grunt', 11, 7, true, { hp: 9999, maxHp: 9999 });
+      const o = enemy(r, 'grunt', 11.6, 7, true, { hp: 9999, maxHp: 9999 }); hitOf(r, t); return 9999 - o.hp; } },
+    bomb_wall: { fam: 'bomber', note: '壁への 1発', expect: (a, b) => Math.abs(a - b * 3) < 0.01, metric: (sk) => {
+      const r = arena({ bomber: sk }, [{ type: BuildingType.WALL, x: 11, y: 7 }]); cat(r, 'bomber', 10, 7, { targetPreference: 'ANY' }); const w = bld(r, BuildingType.WALL); w.hp = w.maxHp = 99999; return hitOf(r, w); } },
+    bomb_last: { fam: 'bomber', note: 'たおれたとき となりの敵が うけたダメージ', expect: (a, b) => a > 0 && b === 0, metric: (sk) => {
+      const r = arena({ bomber: sk }); const c = cat(r, 'bomber', 10, 7); const o = enemy(r, 'grunt', 11, 7, true, { hp: 9999, maxHp: 9999 }); c.hp = 0; run(r, 2); return 9999 - o.hp; } },
+  };
+  check('スキルは 24個（8系統×3）・どれにも試験がある', SKILLS.length === 24 && SKILLS.every(s => !!cases[s.id]), `${SKILLS.length}個`);
+  for (const sk of SKILLS) {
+    const c = cases[sk.id];
+    if (!c) continue;
+    const pre = c.pre ?? [];
+    const on = c.metric([...pre, sk.id]), off = c.metric(pre);
+    // 開く かけらの1つ手前では 開いていない（sim の表にも入らない）
+    const th = SKILL_SHARDS[sk.slot];
+    const lockedIds = unlockedSkillIds(sk.family, th - 1);
+    const lockedCfg = arena(Object.fromEntries([[sk.family, lockedIds]])).cfg.unitStats.P1[sk.family];
+    const locked = !lockedIds.includes(sk.id) && unlockedSkillIds(sk.family, th).includes(sk.id) && !(lockedCfg.skillIds ?? []).includes(sk.id);
+    check(`スキル ${sk.name}（${CHARACTER_BY_ID[sk.family].displayName}・かけら${th}）：${c.note}`,
+      c.expect(on, off) && locked, `あり ${f1(on)} ／ なし ${f1(off)}${locked ? '' : '（かけら ' + (th - 1) + ' で開いてしまう）'}`);
+  }
+
+  // 同じ seed・同じコマンド列なら、スキルがあっても同じ結果
+  {
+    const all = Object.fromEntries(['barbarian', 'archer', 'giant', 'magic', 'speed', 'flying', 'healer', 'bomber'].map(f => [f, unlockedSkillIds(f, 8)]));
+    const runOnce = () => {
+      const ch4 = CAMPAIGN[3];
+      const m4 = BATTLE_MAP_BY_ID[ch4.mapId];
+      const cfg = buildSimConfig({
+        mode: 'PVE', seed: 31337, chapter: ch4, difficulty: SIM_TEST_DIFFICULTY(tierDifficulty(ch4, 'extreme')), battleMap: m4,
+        p1: { levels: { barbarian: 30, giant: 30, bomber: 30, archer: 30, speed: 30, magic: 30, flying: 30, healer: 30 }, buffs: { values: {} }, skills: all },
+      });
+      const r = new SimRunner(cfg, {
+        defenderBuildings: tierEnemyBase(m4, 'extreme'),
+        playerBuildings: [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }],
+        spellCharges: { P1: { HEAL: 2, RAGE: 2 }, P2: { HEAL: 0, RAGE: 0 } },
+      });
+      const p = new TickScript(makeScript(4242, 1800));
+      const sums: number[] = [];
+      for (let i = 0; i < 1800; i++) { r.advance(TICK_MS, p); if (i % 100 === 0) sums.push(stateChecksum(r.state)); }
+      return sums;
+    };
+    const a = runOnce(), b = runOnce();
+    check('スキル24個を全部開いても 同じ seed＋同じコマンド列 → 同じ結果', a.join() === b.join(), `checksum ${a[a.length - 1]}`);
+  }
 }
 
 console.log(failures === 0

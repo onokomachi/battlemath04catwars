@@ -1,119 +1,101 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { BuildingType, DeployedBuilding } from '../types';
+import { SAVE_KEYS } from '../portal/saveKeys';
+import {
+  FACILITY_MAX_COUNT, MAX_FACILITY_LEVEL, buyCost, upgradeCost,
+} from '../data/facilities';
 
-// ── 陣地ストア（当日リセット制）─────────────────────────────────────────────
+// ── 基地ストア（持ちつづける施設・2026-11-15 CW-4a）─────────────────────────────
 //
-// 設計意図:
-//   施設を「一度買えば永久所有」にすると、数週間で💠が貯まりきり、
-//   その日に勉強しなくても満額の陣地が組めてしまう。毎日の学習動機を保つため、
-//   **施設は毎日建て直す**方式にした。
+// 施設は 💠クレジットで買い、レベルを上げ、ずっと持ちつづける（日付で消えない）。
+// その日に戦闘へ出せる数は「きょう まちがえずに解いた数」で決まる（data/facilities.ts の activeFacilityLimit）。
+// 値段・持てる数・レベルの効き目は data/facilities.ts。
 //
-//   ・建設の支払いは ⚡エナジー（当日リセット通貨＝今日解いたぶん）
-//   ・建てた施設は「今日のもちもの」として、その日のうちは
-//     どのステージ・どの対戦でも自由に置き直せる（何度でも無料）
-//   ・日付が変わると もちもの も 配置 もリセットされる
-//
-// エビデンス: 変動比率でない「毎日リセットされる資源」は日次のログイン・学習習慣を
-// 強く形成する（習慣形成における文脈手がかりの反復: Lally et al. 2010）。
-// 一方で失うのは当日ぶんだけなので、1日休んでも進行そのものは失われない
-// （損失忌避で子どもを縛りすぎない設計）。
-
-/** 施設の建設コスト（⚡エナジー）。コアは必須なので無料。 */
-export const FACILITY_ENERGY_COST: Record<BuildingType, number> = {
-  [BuildingType.TOWN_HALL]: 0,
-  [BuildingType.WALL]: 3,
-  [BuildingType.GOLD_MINE]: 8,
-  [BuildingType.ARMY_CAMP]: 10,
-  [BuildingType.BARRACKS]: 10,
-  [BuildingType.CANNON]: 12,
-  [BuildingType.HIDDEN_TESLA]: 18,
-};
-
-/** 撤去したときに戻ってくる割合（建て直しを気軽にできるよう全額返す） */
-export const REFUND_RATE = 1;
-
-const todayStr = (): string => new Date().toISOString().slice(0, 10);
+// 前の形（当日リセット・⚡で建てる）は 'catwars-base' に入っていた。形がちがうので 新しい鍵にする
+// （いま遊んでいる子はいないので、前のセーブは引きつがない。残っていても読まない）。
 
 export type FacilityCounts = Partial<Record<BuildingType, number>>;
 
 interface BaseStore {
-  /** 今日建設した施設の数 */
-  built: FacilityCounts;
-  /** ステージ(章)ごとの配置。今日のうちは保持される */
+  /** 持っている数（コアは数えない＝いつも1つ） */
+  owned: FacilityCounts;
+  /** 種類ごとのレベル（1〜10。無ければ1） */
+  levels: FacilityCounts;
+  /** 章ごとの配置（先に置いた順。日付で消さない） */
   layouts: Record<string, DeployedBuilding[]>;
-  /** built / layouts が属する日付 */
-  date: string;
 
-  /** 日付が変わっていたらリセットする（各画面の入口で呼ぶ） */
-  rollDateIfNeeded: () => void;
-  /** 今日の もちもの を返す（日付チェック込み） */
-  getBuilt: () => FacilityCounts;
-  /** 施設を1つ建設する。⚡が足りなければ false */
-  build: (type: BuildingType, spendEnergy: (n: number) => boolean) => boolean;
-  /** 施設を1つ撤去して⚡を返す */
-  demolish: (type: BuildingType, refundEnergy: (n: number) => void) => void;
-  /** 指定ステージの配置を取得 */
+  countOf: (type: BuildingType) => number;
+  levelOf: (type: BuildingType) => number;
+  /** 1つ買う。上限・💠不足なら false */
+  buy: (type: BuildingType, spend: (n: number) => boolean) => boolean;
+  /** レベルを1つ上げる。上限・💠不足なら false */
+  upgrade: (type: BuildingType, spend: (n: number) => boolean) => boolean;
   getLayout: (chapterId: string) => DeployedBuilding[];
-  /** 指定ステージの配置を保存 */
   setLayout: (chapterId: string, layout: DeployedBuilding[]) => void;
-  /** そのステージの配置で使用中の施設数 */
-  usedIn: (chapterId: string) => FacilityCounts;
   reset: () => void;
 }
 
 export const useBaseStore = create<BaseStore>()(
   persist(
     (set, get) => ({
-      built: {},
+      owned: {},
+      levels: {},
       layouts: {},
-      date: todayStr(),
 
-      // 実際のリセットを行う。レンダリング中に呼ぶと React の警告になるので、
-      // 画面の useEffect かイベントハンドラからだけ呼ぶこと。
-      rollDateIfNeeded: () => {
-        const t = todayStr();
-        if (get().date !== t) set({ built: {}, layouts: {}, date: t });
-      },
+      countOf: (type) => (type === BuildingType.TOWN_HALL ? 1 : get().owned[type] ?? 0),
+      levelOf: (type) => Math.max(1, Math.min(MAX_FACILITY_LEVEL, get().levels[type] ?? 1)),
 
-      // 読み取り系は set を伴わない純粋な参照にしてある（描画中に呼ばれるため）。
-      // 日付が変わっていれば、リセット前でも「空」として見える。
-      getBuilt: () => (get().date === todayStr() ? get().built : {}),
-
-      build: (type, spendEnergy) => {
-        get().rollDateIfNeeded();
-        const cost = FACILITY_ENERGY_COST[type] ?? 0;
-        if (cost > 0 && !spendEnergy(cost)) return false;
-        set(s => ({ built: { ...s.built, [type]: (s.built[type] ?? 0) + 1 } }));
+      buy: (type, spend) => {
+        if (type === BuildingType.TOWN_HALL) return false;
+        const have = get().owned[type] ?? 0;
+        if (have >= FACILITY_MAX_COUNT[type]) return false;
+        if (!spend(buyCost(type, have + 1))) return false;
+        set(s => ({ owned: { ...s.owned, [type]: have + 1 } }));
         return true;
       },
 
-      demolish: (type, refundEnergy) => {
-        get().rollDateIfNeeded();
-        const have = get().built[type] ?? 0;
-        if (have <= 0) return;
-        const refund = Math.round((FACILITY_ENERGY_COST[type] ?? 0) * REFUND_RATE);
-        if (refund > 0) refundEnergy(refund);
-        set(s => ({ built: { ...s.built, [type]: Math.max(0, (s.built[type] ?? 0) - 1) } }));
+      upgrade: (type, spend) => {
+        const lv = get().levelOf(type);
+        if (lv >= MAX_FACILITY_LEVEL) return false;
+        if (type !== BuildingType.TOWN_HALL && (get().owned[type] ?? 0) <= 0) return false;
+        if (!spend(upgradeCost(type, lv))) return false;
+        set(s => ({ levels: { ...s.levels, [type]: lv + 1 } }));
+        return true;
       },
 
-      getLayout: (chapterId) =>
-        (get().date === todayStr() ? get().layouts[chapterId] ?? [] : []),
-
-      setLayout: (chapterId, layout) => {
-        get().rollDateIfNeeded();
-        set(s => ({ layouts: { ...s.layouts, [chapterId]: layout } }));
-      },
-
-      usedIn: (chapterId) => {
-        const layout = get().layouts[chapterId] ?? [];
-        const out: FacilityCounts = {};
-        for (const d of layout) out[d.type] = (out[d.type] ?? 0) + 1;
+      getLayout: (chapterId) => {
+        // 持っている数より多く置いてあるとき（あとから数が変わった等）は、先に置いた順に 持っている数まで
+        const raw = get().layouts[chapterId];
+        const layout = Array.isArray(raw) ? raw : [];
+        const used: FacilityCounts = {};
+        const out: DeployedBuilding[] = [];
+        for (const d of layout) {
+          const n = (used[d.type] ?? 0) + 1;
+          if (n > get().countOf(d.type)) continue;
+          used[d.type] = n;
+          out.push(d);
+        }
         return out;
       },
 
-      reset: () => set({ built: {}, layouts: {}, date: todayStr() }),
+      setLayout: (chapterId, layout) => set(s => ({ layouts: { ...s.layouts, [chapterId]: layout } })),
+
+      reset: () => set({ owned: {}, levels: {}, layouts: {} }),
     }),
-    { name: 'catwars-base' }
+    {
+      name: SAVE_KEYS.base,
+      // 形が合わないセーブ（手でいじった等）でも落ちないように、足りない所を空でうめる
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<BaseStore>;
+        const obj = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+        return {
+          ...current,
+          owned: obj(p.owned) as FacilityCounts,
+          levels: obj(p.levels) as FacilityCounts,
+          layouts: obj(p.layouts) as Record<string, DeployedBuilding[]>,
+        };
+      },
+    }
   )
 );

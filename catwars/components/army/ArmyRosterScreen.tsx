@@ -1,6 +1,24 @@
-import React, { useState } from 'react';
-import { CHARACTERS, getCharacterSprite, stageForLevel, xpToNext, STAGE_MULT, MAX_LEVEL, CharacterFamily } from '../../data/characters';
+import React, { useEffect, useState } from 'react';
+import { CHARACTERS, getCharacterSprite, stageForLevel, xpToNext, levelMult, MAX_LEVEL, CharacterFamily } from '../../data/characters';
 import { useArmyStore } from '../../store/useArmyStore';
+import { useStudyStore } from '../../store/useStudyStore';
+import { familyShards, familyLevelCap, weakestUnitForFamily, nextShardHint, shardsFromServer, useShardSource, MAX_SHARDS } from '../../learn/shards';
+import { loadPack, packLoaded, UNIT_NAME_BY_KEY, unitsForFamily } from '../../learn/gradePack';
+import { skillsForFamily, unlockedSkillIds } from '../../data/skills';
+import { SkillList, NewSkillNotice } from './SkillParts';
+
+/** 系統の「上限・かけら・つぎにとく単元」 */
+function capInfo(familyId: string, perfect: Record<string, number>) {
+  const shards = familyShards(familyId, perfect);
+  const cap = familyLevelCap(familyId, perfect);
+  const weak = weakestUnitForFamily(familyId, perfect);
+  return {
+    shards, cap,
+    nextUnit: weak ? UNIT_NAME_BY_KEY[weak] ?? weak : null,
+    nextHint: weak ? nextShardHint(UNIT_NAME_BY_KEY[weak] ?? weak, weak, perfect) : '',
+    units: unitsForFamily(familyId),
+  };
+}
 
 interface Props {
   onBack: () => void;
@@ -11,7 +29,13 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 
 export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
   const { army } = useArmyStore();
+  const perfect = useStudyStore(s => s.perfect);
+  // サーバの かけら（名乗っているとき）が 読めたら かぞえなおす
+  useShardSource(s => s.server);
   const [selected, setSelected] = useState<CharacterFamily | null>(null);
+  // かけらは「その単元の出せる問題」で数える。問題の一覧を読みこんだら、もう一度かぞえる
+  const [, setReady] = useState(packLoaded());
+  useEffect(() => { let alive = true; loadPack().then(() => { if (alive) setReady(true); }).catch(() => {}); return () => { alive = false; }; }, []);
 
   return (
     <div className="min-h-[100dvh] h-[100dvh] flex flex-col bg-[#0a0e1a] overflow-y-auto" style={font}>
@@ -19,9 +43,12 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
       <div className="flex items-center gap-3 p-4 border-b border-white/10 sticky top-0 z-10"
         style={{ background: 'rgba(10,14,26,0.95)' }}>
         <button onClick={onBack} className="text-white/50 hover:text-white text-sm">← もどる</button>
-        <h2 className="text-[#22d3ee] font-bold text-base" style={fontMono}>ネコ図鑑</h2>
+        <h2 className="text-[#22d3ee] font-bold text-base" style={fontMono}>ネコ部隊</h2>
         <span className="text-white/40 text-xs ml-auto">{CHARACTERS.length}系統 / {CHARACTERS.length * 3}フォーム</span>
       </div>
+
+      {/* 新しく開いたスキル（1回だけ） */}
+      {packLoaded() && <div className="px-3 pt-3"><NewSkillNotice /></div>}
 
       {/* Grid of families */}
       <div className="grid grid-cols-2 gap-3 p-3">
@@ -29,6 +56,8 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
           const entry = army[fam.id] ?? { level: 1, xp: 0, totalBattles: 0 };
           const stage = stageForLevel(entry.level);
           const form = fam.forms[stage - 1];
+          const ci = capInfo(fam.id, perfect);
+          const atCap = entry.level >= ci.cap;
           return (
             <button key={fam.id} onClick={() => setSelected(fam)}
               className="flex flex-col items-center p-3 rounded-2xl border transition-all active:scale-95"
@@ -46,22 +75,39 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
               {/* XP bar */}
               <div className="w-full h-1.5 rounded-full mt-2 overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
                 <div className="h-full rounded-full" style={{
-                  width: entry.level >= MAX_LEVEL ? '100%' : `${Math.min(100, (entry.xp / xpToNext(entry.level)) * 100)}%`,
-                  background: fam.accent,
+                  width: atCap ? '100%' : `${Math.min(100, (entry.xp / xpToNext(entry.level)) * 100)}%`,
+                  background: atCap ? '#facc15' : fam.accent,
                 }} />
               </div>
+              <div className="w-full mt-1 text-[10px] leading-tight" data-testid="cap-line">
+                <span className="text-white/60">上限 Lv.{ci.cap}</span>
+                <span className="text-[#c4b5fd]">　💎{ci.shards}/{MAX_SHARDS}</span>
+                {skillsForFamily(fam.id).length > 0 && (
+                  <span className="text-[#facc15]" data-testid="skill-stars">　{'★'.repeat(unlockedSkillIds(fam.id, ci.shards).length)}<span className="text-white/20">{'☆'.repeat(3 - unlockedSkillIds(fam.id, ci.shards).length)}</span></span>
+                )}
+              </div>
+              {atCap && ci.cap < MAX_LEVEL && ci.nextUnit && (
+                <div className="w-full mt-0.5 text-[10px] leading-tight text-[#fde68a]">
+                  {shardsFromServer() ? `つぎの上限：『${ci.nextUnit}』の 単元アプリで がんばろう` : `つぎの上限：『${ci.nextUnit}』を まちがえずに とこう`}
+                </div>
+              )}
             </button>
           );
         })}
       </div>
 
       <p className="text-center text-white/30 text-xs px-6 pb-4">
-        戦闘に出すとネコが経験値を得てレベルアップ！ Lv10とLv30で姿が進化するニャ。
+        戦いに 出すと ネコに けいけんちが 入って レベルアップ！ Lv10と Lv30で すがたが 進化するニャ。<br />
+        {shardsFromServer()
+          ? <>レベルの上限は、そのネコの単元の 単元アプリで 本番テスト・実力の階段を がんばると 上がる（💎かけら 1つで +5・Lv60まで。SANMON と同じ かけら）。<br /></>
+          : <>レベルの上限は、そのネコの単元を まちがえずに とくと 上がる（💎かけら 1つで +5・Lv60まで）。<br /></>}
+        💎かけらが 2・4・8こに なると スキル（★）が ひらく。
       </p>
 
       {/* Detail modal */}
       {selected && (
         <DetailModal fam={selected} entry={army[selected.id] ?? { level: 1, xp: 0, totalBattles: 0 }}
+          info={capInfo(selected.id, perfect)}
           onClose={() => setSelected(null)} />
       )}
     </div>
@@ -71,8 +117,9 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
 const DetailModal: React.FC<{
   fam: CharacterFamily;
   entry: { level: number; xp: number; totalBattles: number };
+  info: ReturnType<typeof capInfo>;
   onClose: () => void;
-}> = ({ fam, entry, onClose }) => {
+}> = ({ fam, entry, info, onClose }) => {
   const curStage = stageForLevel(entry.level);
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/80 p-3" onClick={onClose}>
@@ -99,10 +146,26 @@ const DetailModal: React.FC<{
               }} />
             </div>
             <div className="text-white/40 text-[10px] mt-0.5">
-              {entry.level >= MAX_LEVEL ? 'MAX' : `次のレベルまで ${xpToNext(entry.level) - entry.xp} XP`}
+              {entry.level >= MAX_LEVEL ? 'MAX' : entry.level >= info.cap ? `上限 Lv.${info.cap}（XPは入らない）` : `次のレベルまで ${xpToNext(entry.level) - entry.xp} XP`}
             </div>
           </div>
         </div>
+
+        {/* レベルの上限と かけら */}
+        <div className="mb-4 p-3 rounded-xl" style={{ background: 'rgba(196,181,253,0.08)', border: '1px solid rgba(196,181,253,0.3)' }}>
+          <div className="text-[#c4b5fd] text-xs font-bold">上限 Lv.{info.cap}　💎かけら {info.shards}/{MAX_SHARDS}</div>
+          <div className="text-white/60 text-[10px] mt-1 leading-relaxed">
+            むすびついた単元：{info.units.length > 4 ? 'ぜんぶの単元' : info.units.map(u => `『${UNIT_NAME_BY_KEY[u] ?? u}』`).join('・')}
+          </div>
+          {info.cap < MAX_LEVEL && info.nextUnit && (
+            <div className="text-[#fde68a] text-[11px] mt-1 leading-relaxed">
+              {info.nextHint}
+            </div>
+          )}
+        </div>
+
+        {/* スキル（かけらで開く） */}
+        <SkillList familyId={fam.id} shards={info.shards} />
 
         {/* 3 evolution forms */}
         <div className="text-white/60 text-xs font-bold mb-2" style={fontMono}>しんか</div>
@@ -110,7 +173,7 @@ const DetailModal: React.FC<{
           {fam.forms.map(form => {
             const unlocked = entry.level >= form.minLevel;
             const isCurrent = form.stage === curStage;
-            const mult = STAGE_MULT[form.stage];
+            const mult = levelMult(form.minLevel);
             return (
               <div key={form.stage}
                 className="flex items-center gap-3 p-2.5 rounded-xl border"
@@ -130,7 +193,7 @@ const DetailModal: React.FC<{
                     {isCurrent && <span className="text-[9px] px-1.5 rounded-full font-bold" style={{ background: fam.accent, color: '#0a0e1a' }}>いま</span>}
                   </div>
                   <div className="text-white/40 text-[10px]">
-                    {form.stage === 1 ? 'Lv1〜' : `Lv${form.minLevel}で進化`} ・ HP×{mult.hp} 攻×{mult.dmg}
+                    {form.stage === 1 ? 'Lv1〜' : `Lv${form.minLevel}で進化`} ・ HP・攻 ×{mult.toFixed(2)}
                   </div>
                   <div className="text-white/50 text-[10px] mt-0.5 leading-tight">{unlocked ? form.flavor : '進化するとわかる！'}</div>
                 </div>
@@ -144,8 +207,8 @@ const DetailModal: React.FC<{
             図鑑にも出す（砲台の射程4.5と見くらべられるようにする）。 */}
         <div className="grid grid-cols-3 gap-2 mt-4">
           {[
-            { l: 'HP', v: Math.round(fam.base.hp * STAGE_MULT[curStage].hp) },
-            { l: '攻撃', v: Math.round(fam.base.damage * STAGE_MULT[curStage].dmg) },
+            { l: 'HP', v: Math.round(fam.base.hp * levelMult(entry.level)) },
+            { l: '攻撃', v: Math.round(fam.base.damage * levelMult(entry.level)) },
             { l: '速さ', v: fam.base.moveSpeed.toFixed(1) },
             { l: '射程', v: fam.base.attackRange.toFixed(1) },
             { l: '再出撃', v: (fam.cooldownMs / 1000).toFixed(1) + '秒' },
@@ -158,8 +221,8 @@ const DetailModal: React.FC<{
           ))}
         </div>
         <div className="text-white/35 text-[10px] mt-2 leading-relaxed">
-          ※ 敵の砲台は射程4.5・とても長い。射程で勝てないネコは、タンク系に受けてもらうか、
-          建物へのダメージが大きいネコ（ぼむにゃー ×4.0）でこわそう。
+          ※ 敵の砲台は しゃてい4.5で とても 長い。とどかない ネコは、タンク系に うけてもらうか、
+          たてものに つよい ネコ（ぼむにゃー ×4.0）で こわそう。
         </div>
       </div>
     </div>

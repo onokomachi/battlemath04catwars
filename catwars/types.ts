@@ -80,6 +80,14 @@ export interface BattleEntity {
    */
   focusId?: string | null;
   isHidden?: boolean; // For traps
+  /** 敵の種類（EnemyUnitKind）。特別なきまり（盾・回復・自爆・空中）の判定に使う。絵は subType */
+  kind?: string;
+  /** ボスのシールドの残り枚数。1枚でもあると、うけるダメージは1割。復習の問題を解くと1枚われる */
+  shield?: number;
+  /** 出てきた tick（スキル「ダッシュ」の むてきの時間に使う。sim の中だけ） */
+  bornTick?: number;
+  /** さいしょの1発を うったか（スキル「せんせいの いちげき」） */
+  firstHitDone?: boolean;
 }
 
 // LAVA = 溶岩。乗っているあいだ継続ダメージ（敵味方・中立すべてに適用）。通行は可能。
@@ -93,7 +101,7 @@ export type BuffType =
   | 'FAST_DEPLOY'      // 出撃インターバル撤廃
   | 'COST_REDUCTION'   // 戦闘中兵士コスト30%オフ
   | 'GOLD_RUSH'        // 開始時ゴールド+150
-  | 'GOLD_BOOST'       // 戦闘中のゴールド湧き+50%
+  | 'GOLD_BOOST'       // 問題カードで もらえる ⚡ が +20〜50%（CW-5a で作り直し。前は自動の湧きに掛けていて 効き目が無かった）
   // T2 上級（本日10問以上）
   | 'RARE_BARBARIAN'   // 近接系：HP+50%・攻撃力+40%
   | 'RARE_ARCHER'      // 遠距離系：射程+・速度+30%

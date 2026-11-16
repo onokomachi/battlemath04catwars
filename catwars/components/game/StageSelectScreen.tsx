@@ -1,6 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { CAMPAIGN, ASSIST_LEVELS, CampaignChapter } from '../../data/campaign';
-import { BATTLE_MAP_BY_ID } from '../../data/battleMaps';
+import {
+  CAMPAIGN, ASSIST_LEVELS, CampaignChapter, ChapterTier, TIER_ORDER, TIER_INFO, ENEMY_UNIT_STATS, ENEMY_TRAIT_NOTE,
+  tierDifficulty, threatLevel, threatMultFor, chapterBaseLevel, cardLimitFor,
+} from '../../data/campaign';
+import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../../data/battleMaps';
 import { BUILDING_STATS } from '../../constants';
 import { BattleLoadout, BuildingType, GRID_W, GRID_H } from '../../types';
 import { useCampaignStore } from '../../store/useCampaignStore';
@@ -13,15 +16,26 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 
 interface Props {
   loadout: BattleLoadout;
+  /** 手持ちの上位5系統の平均レベル（脅威レベルを出すため） */
+  avgLevel: number;
   onBack: () => void;
-  onStart: (chapterId: string) => void;
+  onStart: (chapterId: string, tier: ChapterTier) => void;
 }
 
-/** 章の相対的な手ごわさ（★1〜5）。防衛威力と敵の強さから機械的に出す。 */
-const toughnessStars = (ch: CampaignChapter): number => {
+const TIER_PLUS: Record<ChapterTier, number> = { normal: 0, hard: 1, extreme: 2 };
+/**
+ * 章の相対的な手ごわさ（ふつう ◆1〜5。むずかしい +1・げきむず +2）。★は「とった星」に使うので、手ごわさは ◆ で出す。
+ * 防衛威力と敵の強さから機械的に出す。
+ */
+const toughnessStars = (ch: CampaignChapter, tier: ChapterTier = 'normal'): number => {
   const d = ch.difficulty;
   const raw = d.defenseDamageMult * 0.6 + d.enemyDamageMult * 0.4;
-  return Math.max(1, Math.min(5, Math.round(raw * 3.6)));
+  return Math.max(1, Math.min(5, Math.round(raw * 3.6))) + TIER_PLUS[tier];
+};
+const TIER_LOCK_NOTE: Record<ChapterTier, string> = {
+  normal: '前の章を クリアで 開く',
+  hard: '「ふつう」を クリアで 開く',
+  extreme: '「むずかしい」を クリアで 開く',
 };
 
 /**
@@ -29,15 +43,24 @@ const toughnessStars = (ch: CampaignChapter): number => {
  * ステージによって自陣ゾーンの広さが変わるため、ここで章を決めてから
  * 次の「陣地づくり」でその広さに合わせて陣地を組む。
  */
-export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart }) => {
-  const { clearedChapters, isUnlocked, assistLevelFor, nextChapterId } = useCampaignStore();
+export const StageSelectScreen: React.FC<Props> = ({ loadout, avgLevel, onBack, onStart }) => {
+  const campaign = useCampaignStore();
+  const { clearedChapters, isUnlocked, assistLevelFor, nextChapterId, isTierUnlocked, starsFor } = campaign;
   const baseStore = useBaseStore();
   const [selectedId, setSelectedId] = useState<string>(() => nextChapterId());
+  const [tier, setTier] = useState<ChapterTier>('normal');
 
   const selected = CAMPAIGN.find(c => c.id === selectedId) ?? CAMPAIGN[0];
   const map = BATTLE_MAP_BY_ID[selected.mapId];
-  const unlocked = isUnlocked(selected.id);
-  const assist = assistLevelFor(selected.id);
+  const unlocked = isTierUnlocked(selected.id, tier);
+  const assist = assistLevelFor(selected.id, tier);
+  const tierInfo = TIER_INFO[tier];
+  const td = tierDifficulty(selected, tier);
+  const threat = threatLevel(avgLevel, chapterBaseLevel(selected, tier));
+  const threatPct = Math.round((threatMultFor(avgLevel, chapterBaseLevel(selected, tier)) - 1) * 100);
+  const enemyBase = map ? tierEnemyBase(map, tier) : [];
+  /** 1章の星（3段ぶん。最大9つ） */
+  const chapterStars = (id: string) => TIER_ORDER.reduce((a, t) => a + starsFor(id, t), 0);
 
   // このステージ用に組んだ陣地（まだ組んでいなければ空）。実際の編集は次の画面で行う。
   const deployments = useMemo(
@@ -71,7 +94,7 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
           return (
             <button
               key={ch.id}
-              onClick={() => { sfx.select(); setSelectedId(ch.id); }}
+              onClick={() => { sfx.select(); setSelectedId(ch.id); setTier('normal'); }}
               className="flex-shrink-0 flex flex-col items-center justify-center w-[72px] h-[72px] rounded-2xl border-2 transition-all active:scale-95"
               style={{
                 borderColor: active ? '#ef4444' : done ? '#a3e635' : open ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
@@ -82,9 +105,16 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
             >
               <span className="text-[10px] text-white/50" style={fontMono}>第{ch.no}章</span>
               <span className="text-xl leading-none mt-0.5">{!open ? '🔒' : done ? '👑' : '⚔️'}</span>
-              <span className="text-[9px] mt-1" style={{ color: done ? '#a3e635' : '#f87171' }}>
-                {'★'.repeat(toughnessStars(ch))}
-              </span>
+              {done ? (
+                // とった星（3段ぶん。最大9つ。まちがえずに解けた割合で決まる）
+                <span className="text-[11px] mt-1 leading-none text-[#facc15]" style={fontMono} aria-label={`星 ${chapterStars(ch.id)}つ`}>
+                  ★{chapterStars(ch.id)}<span className="text-white/35">/9</span>
+                </span>
+              ) : (
+                <span className="text-[9px] mt-1" style={{ color: '#f87171' }}>
+                  {'◆'.repeat(toughnessStars(ch))}
+                </span>
+              )}
             </button>
           );
         })}
@@ -101,6 +131,89 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
             CHAPTER {selected.no}
           </div>
           <h3 className="text-white font-black text-xl mt-1 leading-tight">{selected.title}</h3>
+
+          {/* 難易度の段（ふつう → むずかしい → げきむず。前の段をクリアで開く）。星は段ごと */}
+          <div className="mt-3 grid grid-cols-3 gap-2" role="radiogroup" aria-label="むずかしさ">
+            {TIER_ORDER.map(t => {
+              const info = TIER_INFO[t];
+              const open = isTierUnlocked(selected.id, t);
+              const on = t === tier;
+              const st = starsFor(selected.id, t);
+              return (
+                <button key={t} role="radio" aria-checked={on} data-tier={t}
+                  onClick={() => { sfx.select(); setTier(t); }}
+                  className="rounded-xl border-2 px-1 py-2 flex flex-col items-center gap-0.5 transition-all active:scale-95"
+                  style={{
+                    borderColor: on ? info.color : `${info.color}55`,
+                    background: on ? `${info.color}2e` : 'rgba(255,255,255,0.03)',
+                    boxShadow: on ? `0 0 14px ${info.color}88` : undefined,
+                    opacity: open ? 1 : 0.6,
+                  }}>
+                  <span className="text-[12px] font-black" style={{ color: info.color }}>{open ? '' : '🔒 '}{info.label}</span>
+                  <span className="text-[11px] leading-none">
+                    {[1, 2, 3].map(n => (
+                      <span key={n} style={{ color: n <= st ? '#facc15' : 'rgba(255,255,255,0.2)' }}>★</span>
+                    ))}
+                  </span>
+                  {!open && <span className="text-[9px] text-white/60 leading-tight text-center">{TIER_LOCK_NOTE[t]}</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* この段に出てくる敵（とくべつな敵は アイコンと たおし方） */}
+          <div className="mt-3 p-3 rounded-xl" data-testid="enemy-list"
+            style={{ background: `${tierInfo.color}12`, border: `1px solid ${tierInfo.color}55` }}>
+            <div className="font-bold text-[11px] mb-1.5" style={{ color: tierInfo.color, ...fontMono }}>▸ 出てくる 敵</div>
+            <ul className="space-y-1">
+              {td.unitPool.map(k => {
+                const note = ENEMY_TRAIT_NOTE[k];
+                return (
+                  <li key={k} className="text-[11px] leading-snug text-white/85">
+                    <span className="font-bold">{note ? `${note.icon} ` : '・'}{ENEMY_UNIT_STATS[k].label}</span>
+                    {note && <span className="text-white/65">　{note.counter}</span>}
+                  </li>
+                );
+              })}
+              {td.bossAtSpawnCount != null && (
+                <li className="text-[11px] leading-snug text-[#fde68a]">
+                  <span className="font-bold">👑 ボス（{ENEMY_UNIT_STATS.boss.label}）</span>
+                  {(td.bossShield ?? 0) > 0 && (
+                    <span className="text-white/70">　シールド {td.bossShield}まい：ふくしゅうカードを といて わる</span>
+                  )}
+                </li>
+              )}
+            </ul>
+          </div>
+
+          {/* げきむず：カードの まいすう（正確に解くほど 多く出撃できる） */}
+          {cardLimitFor(selected, tier, assist) != null && (
+            <div className="mt-3 p-3 rounded-xl flex items-start gap-2" data-testid="card-limit"
+              style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.4)' }}>
+              <span className="text-lg leading-none">🃏</span>
+              <div>
+                <div className="text-[#fca5a5] font-bold text-xs">カードは {cardLimitFor(selected, tier, assist)} まいまで。まちがえずに とくほど 有利</div>
+                <p className="text-white/70 text-[11px] leading-relaxed mt-0.5">
+                  まちがえずに とけた カードは ⚡ に なる。ていねいに とくほど たくさん 出撃できるよ。
+                  {assist > 0 && `（サポートモードで +${cardLimitFor(selected, tier, assist)! - cardLimitFor(selected, tier, 0)!} まい）`}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 脅威レベル（隠れた調整はしない。強くなっているときは はっきり出す） */}
+          {threat >= 1 && (
+            <div className="mt-3 p-3 rounded-xl flex items-start gap-2" data-testid="threat"
+              style={{ background: 'rgba(244,114,182,0.10)', border: '1px solid rgba(244,114,182,0.4)' }}>
+              <span className="text-lg leading-none">⚠️</span>
+              <div>
+                <div className="text-[#f472b6] font-bold text-xs" style={fontMono}>脅威 Lv.{threat}</div>
+                <p className="text-white/75 text-[11px] leading-relaxed mt-0.5">
+                  手持ちが育っているぶん、敵も強くなっているよ（+{threatPct}%）。
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* 敵の紹介 */}
           <div className="mt-3 flex items-start gap-3 p-3 rounded-xl"
@@ -128,11 +241,11 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
             </span>
             <span className="px-2.5 py-1 rounded-full border text-[#f87171]"
               style={{ background: 'rgba(239,68,68,0.10)', borderColor: 'rgba(239,68,68,0.3)' }}>
-              手ごわさ {'★'.repeat(toughnessStars(selected))}
+              手ごわさ {'◆'.repeat(toughnessStars(selected, tier))}
             </span>
             <span className="px-2.5 py-1 rounded-full border text-[#38bdf8]"
               style={{ background: 'rgba(56,189,248,0.10)', borderColor: 'rgba(56,189,248,0.3)' }}>
-              勝利報酬 💠{selected.rewardCredits}
+              勝利報酬 💠{Math.round(selected.rewardCredits * tierInfo.rewardMult)}
             </span>
           </div>
 
@@ -159,7 +272,7 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
               自陣 {zoneW}×{zoneH}マス{zoneW >= 9 ? '（ひろい）' : zoneW <= 5 ? '（せまい）' : ''}
             </span>
           </div>
-          {map && <DeploymentPreview map={map} deployments={deployments} />}
+          {map && <DeploymentPreview map={map} enemyBase={enemyBase} deployments={deployments} />}
           <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[10px] text-white/55">
             <span>🏰 コア×1</span>
             <span>🧱 壁×{deployments.filter(d => d.type === BuildingType.WALL).length}/{loadout.maxWallSlots}</span>
@@ -179,17 +292,19 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
       <div className="border-t border-white/10 px-4 pt-3 flex-shrink-0"
         style={{ background: 'rgba(6,10,24,0.92)', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
         <button
-          onClick={() => { if (unlocked) { sfx.select(); onStart(selected.id); } }}
+          onClick={() => { if (unlocked) { sfx.select(); onStart(selected.id, tier); } }}
           disabled={!unlocked}
           className="w-full py-4 rounded-xl font-bold text-lg transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
             ...fontMono,
-            background: unlocked ? 'rgba(239,68,68,0.18)' : 'transparent',
-            border: `2px solid ${unlocked ? '#ef4444' : '#6b7280'}`,
-            color: unlocked ? '#f87171' : '#9ca3af',
-            boxShadow: unlocked ? '0 0 16px rgba(239,68,68,0.5)' : 'none',
+            background: unlocked ? `${tierInfo.color}2e` : 'transparent',
+            border: `2px solid ${unlocked ? tierInfo.color : '#6b7280'}`,
+            color: unlocked ? '#fff' : '#9ca3af',
+            boxShadow: unlocked ? `0 0 16px ${tierInfo.color}88` : 'none',
           }}>
-          {unlocked ? `🏰 第${selected.no}章の陣地をつくる →` : '🔒 前の章をクリアすると開放'}
+          {unlocked
+            ? `🐱 第${selected.no}章${tier === 'normal' ? '' : `（${tierInfo.label}）`}の 出撃メンバーを えらぶ →`
+            : `🔒 ${TIER_LOCK_NOTE[tier]}`}
         </button>
       </div>
     </div>
@@ -199,13 +314,15 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, onBack, onStart })
 /** 自陣ゾーンへの自動転写を、そのまま縮小表示するミニマップ */
 const DeploymentPreview: React.FC<{
   map: import('../../types').BattleMap;
+  /** 段ごとの敵の基地（tierEnemyBase） */
+  enemyBase: import('../../types').BattleMap['enemyBase'];
   deployments: import('../../types').DeployedBuilding[];
-}> = ({ map, deployments }) => {
+}> = ({ map, enemyBase, deployments }) => {
   const CELL = 12;
   const zone = map.playerDeployZone;
   const terrainAt = (x: number, y: number) => map.terrain.find(t => t.x === x && t.y === y)?.type ?? 'GRASS';
   // 2x2の施設が4マスぶん重なって見えないよう、左上マスにだけアイコンを出す
-  const enemyAt = (x: number, y: number) => map.enemyBase.find(e => e.x === x && e.y === y);
+  const enemyAt = (x: number, y: number) => enemyBase.find(e => e.x === x && e.y === y);
   const deployAt = (x: number, y: number) =>
     deployments.find(d => {
       const s = BUILDING_STATS[d.type];

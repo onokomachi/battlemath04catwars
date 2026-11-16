@@ -5,10 +5,17 @@ import { usePlayerStore } from '../store/usePlayerStore';
 import { useProgressStore } from '../store/useProgressStore';
 import { useBaseStore } from '../store/useBaseStore';
 import { useBattleSetupStore } from '../store/useBattleSetupStore';
-import { computeBattleLoadout } from '../utils/battleLoadout';
-import { BATTLE_MAP_BY_ID, BATTLE_MAPS } from '../data/battleMaps';
-import { CHAPTER_BY_ID, CAMPAIGN, effectiveDifficulty } from '../data/campaign';
+import { computeBattleLoadout, splitActiveLayout, unlockedFamilies } from '../utils/battleLoadout';
+import { useStudyStore } from '../store/useStudyStore';
+import { activeFacilityLimit, facilityMult, powerPlantBonus, LEVELED_COMBAT } from '../data/facilities';
+import { FormationScreen } from './army/FormationScreen';
+import { effectiveFormation } from '../store/useArmyStore';
+import { BATTLE_MAP_BY_ID, BATTLE_MAPS, tierEnemyBase } from '../data/battleMaps';
+import {
+  CHAPTER_BY_ID, CAMPAIGN, effectiveDifficulty, threatLevel, threatMultFor, chapterBaseLevel, type ChapterTier,
+} from '../data/campaign';
 import { useCampaignStore } from '../store/useCampaignStore';
+import { useArmyStore } from '../store/useArmyStore';
 import { BattleScene } from './game/BattleScene';
 import { StageSelectScreen } from './game/StageSelectScreen';
 import { RangeSelect } from './game/RangeSelect';
@@ -16,64 +23,134 @@ import { ArmyRosterScreen } from './army/ArmyRosterScreen';
 import { DailyBuffsPanel } from './learn/DailyBuffsPanel';
 import { ExchangePanel } from './learn/ExchangePanel';
 import { BaseBuilder } from './BaseBuilder';
-import { CatWarsPvpScreen } from './pvp/CatWarsPvpScreen';
+import { CollectionScreen } from './collection/CollectionScreen';
+import { NewBadgeNotice, TitleChip, DecorFlag } from './collection/CollectionParts';
+import { useCollectionStore } from '../store/useCollectionStore';
+import { refreshCollection } from '../collection/record';
+import { CAPSULE_RULES } from '../collection/stickers';
 import { sfx } from '../utils/audioEngine';
+import { usePortalLifecycle, startSortie, usePortal, sortieLock, playingLock, reportSortieLock, afterBattle } from '../portal/usePortal';
+import { PortalCard, SortieStamina } from '../portal/PortalCard';
+import { settleBattle, newBattleId } from '../utils/settleBattle';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 
-// 出撃導線: 範囲えらび → ステージえらび → 陣地づくり → 戦闘
+// 出撃導線: 範囲えらび → ステージえらび → 出撃メンバー（5枠）→ 陣地づくり（施設の買う・レベル上げも ここ）→ 戦闘
 // 陣地はステージごとに組む（ゾーンの広さが章によって変わるため）。
-// 陣地づくりは常にこの導線の中でのみ行う（ハブから単独で開く入口は廃止・一本化ずみ）。
-type View = 'home' | 'army' | 'range' | 'stage' | 'prep' | 'battle' | 'buffs' | 'mercs' | 'pvp';
+type View = 'home' | 'army' | 'collection' | 'range' | 'stage' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
 
 interface Props {
-  onExit: () => void;
+  /** 上の階のメニューがあるときだけ（いまは CAT-WARS だけで動くので無い） */
+  onExit?: () => void;
   playerName?: string;
 }
 
 export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const [view, setView] = useState<View>('home');
-  const { resources, buildings, troops, lastTick, addResources, setGameState } = usePlayerStore();
+  const { resources, buildings, troops, lastTick } = usePlayerStore();
   const { resetBattleSession } = useBattleSetupStore();
   const {
-    getTodayDailyStars, dailyStreak, todayAnswered, dailyGoal, updateDailyStreak,
+    getTodayDailyStars, dailyStreak, todayAnswered, dailyGoal, updateDailyStreak, permanentUnlocks,
   } = useProgressStore();
   const campaign = useCampaignStore();
   const base = useBaseStore();
 
   const [activeChapterId, setActiveChapterId] = useState<string>(CAMPAIGN[0].id);
+  /** えらんだ難易度の段（ふつう／むずかしい／げきむず） */
+  const [activeTier, setActiveTier] = useState<ChapterTier>('normal');
+  const army = useArmyStore((s) => s.army);
+  /** 手持ちの上位5系統の平均レベル（脅威レベルの もと） */
+  const topAvgLevel = useMemo(() => topFamiliesAvgLevel(army), [army]);
   const [quizSubtopics, setQuizSubtopics] = useState<string[]>([]);
   const gameState: GameState = { resources, buildings, troops, lastTick };
-  // 施設は当日リセット制。今日建てたぶんから、今日つかえる戦力を算出する。
-  const built = base.getBuilt();
-  const loadout = useMemo(() => computeBattleLoadout(built), [built]);
+  // 施設は持ちつづける（useBaseStore）。きょう動かせる数は、きょう まちがえずに解いた数で決まる
+  const owned = base.owned;
+  const todayPerfect = useStudyStore(s => (s.todayDate === new Date().toISOString().slice(0, 10) ? s.todayPerfect : 0));
+  const limit = activeFacilityLimit(todayPerfect);
+  const unlocked = useMemo(() => unlockedFamilies(owned, permanentUnlocks), [owned, permanentUnlocks]);
+  const savedFormation = useArmyStore((s) => s.formation);
+  const formation = useMemo(() => effectiveFormation(savedFormation, unlocked), [savedFormation, unlocked]);
+  const loadout = useMemo(() => computeBattleLoadout(owned, [], permanentUnlocks), [owned, permanentUnlocks]);
   const dailyStars = getTodayDailyStars();
+  /** 発電所：勝ったときの 💠 の上乗せ（放置の収入は無い） */
+  const creditBonus = powerPlantBonus(owned[BuildingType.GOLD_MINE] ?? 0, base.levelOf(BuildingType.GOLD_MINE));
 
-  // 金山のパッシブ収入を来訪時にまとめて回収（放置ボーナス）
   useEffect(() => {
     updateDailyStreak();
-    base.rollDateIfNeeded();
-    const now = Date.now();
-    const mins = Math.min(240, (now - lastTick) / 60000); // 最大4時間ぶん
-    const mines = useBaseStore.getState().built[BuildingType.GOLD_MINE] ?? 0;
-    const rate = mines * (BUILDING_STATS[BuildingType.GOLD_MINE].productionRate ?? 0);
-    const earned = Math.floor(rate * (mins / 60));
-    if (earned > 0) addResources(earned);
-    setGameState(prev => ({ ...prev, lastTick: now }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 収集：ホームに もどるたびに バッジ・ネコの図鑑を 決めなおす（傭兵召集・兵舎で ネコが ふえたときも）
+  useEffect(() => { if (view === 'home') { try { refreshCollection(); } catch { /* noop */ } } }, [view]);
+  const coins = useCollectionStore((s) => s.coins);
 
-  const handleEndBattle = (win: boolean, loot: { gold: number }) => {
-    if (win) addResources(Math.round(loot.gold));
-    // 章の結果を記録（勝敗で連敗数が更新され、サポートモードの判定に反映される）
-    campaign.recordResult(activeChapterId, win);
+  // 学級ポータル（名乗り・スタミナ・モードの開け閉め・サーバのかけら）。CW-5a
+  usePortalLifecycle();
+  const portalStudent = usePortal((s) => s.student);
+  const portalModes = usePortal((s) => s.modes);
+  /** 出撃が閉じているときの文（名乗っている子だけ。おためしは閉じない） */
+  const homeLock = portalStudent ? sortieLock(portalModes) : null;
+  const [homeNotice, setHomeNotice] = useState<string | null>(null);
+  /**
+   * 戦闘の きっぷ。出撃の関門（portal/gate.ts）を通ったときだけ できる。戦闘の画面は これが無いと出さない
+   * （関門を通らずに戦闘を始める道を残さない）。戦闘が おわったら 消す。
+   */
+  const [battleTicket, setBattleTicket] = useState<{ id: string; chapterId: string; tier: ChapterTier } | null>(null);
+  const [sortieBusy, setSortieBusy] = useState(false);
+  const [sortieMsg, setSortieMsg] = useState<string | null>(null);
+
+  // 遊んでいる とちゅう（出撃の準備・戦闘）で モードが閉じたら（平日モードの時間になった・先生が閉じた・番号ごとの停止）、
+  // すぐ ホームに もどす（CW-5b。SANMON の App.tsx と同じ）。モードは usePortal が 2分ごと・タブに もどったときに 読みなおす。
+  // その戦闘の 勝ちの ごほうび・章の記録は 無し・出撃の スタミナは もどらない（SANMON と同じ）。解いた問題の ごほうびと記録は のこる。
+  const playLock = playingLock(portalModes);
+  useEffect(() => {
+    if (!playLock) return;
+    if (!['range', 'stage', 'formation', 'prep', 'battle'].includes(view)) return;
+    if (view === 'battle') afterBattle();
+    setBattleTicket(null);
+    setSortieMsg(null);
+    setHomeNotice(playLock);
     setView('home');
+  }, [playLock, view]);
+
+  /** 出撃の関門。ここだけが battleTicket を作る */
+  const beginBattle = async (chapterId: string) => {
+    if (sortieBusy) return;
+    setSortieBusy(true);
+    setSortieMsg(null);
+    try {
+      const r = await startSortie(formation);
+      if (r.ok === false) { setSortieMsg(r.message); return; }
+      campaign.recordAttempt(chapterId, activeTier);
+      setBattleTicket({ id: newBattleId(), chapterId, tier: activeTier });
+      setView('battle');
+    } finally {
+      setSortieBusy(false);
+    }
+  };
+
+  /**
+   * 勝ち負けが決まった瞬間に1回だけ：勝ちの 💠・章の記録（クリア・★・連敗の数）を入れる（utils/settleBattle.ts）。
+   * BattleScene の 戦闘終了の useEffect が呼ぶ。結果画面のまま 読みなおしても のこる。入れたら すぐ セーブを送る。
+   */
+  const handleSettle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
+    if (!battleTicket) return;
+    const done = settleBattle({ battleId: battleTicket.id, chapterId: battleTicket.chapterId, tier: battleTicket.tier, win, gold: loot.gold, stars });
+    if (done) afterBattle();
+  };
+
+  /** 結果画面のボタン・退却：画面を閉じる（まだ結果を入れていない＝退却 のときだけ ここで 負けとして入れる。💠 は無し） */
+  const handleEndBattle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
+    handleSettle(win, loot, stars);
+    setBattleTicket(null);
+    setView('home');
+    // 解いた問題の記録を まとめて送る・セーブを しまう（名乗っているときだけ。中身が変わっていなければ 送らない）
+    afterBattle();
   };
 
   // ── サブ画面 ───────────────────────────────
-  if (view === 'pvp') return <CatWarsPvpScreen onBack={() => setView('home')} playerName={playerName ?? 'あなた'} />;
   if (view === 'army') return <ArmyRosterScreen onBack={() => setView('home')} />;
+  if (view === 'collection') return <CollectionScreen onBack={() => setView('home')} />;
 
   if (view === 'range') {
     return (
@@ -89,12 +166,22 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       <StageSelectScreen
         loadout={loadout}
         onBack={() => setView('home')}
-        onStart={(chapterId) => {
+        avgLevel={topAvgLevel}
+        onStart={(chapterId, tier) => {
           setActiveChapterId(chapterId);
-          // ステージを決めてから、そのステージの自陣ゾーンに合わせて陣地を組む
-          setView('prep');
+          setActiveTier(tier);
+          // ステージを決めたら、その敵に合わせて 出撃メンバー（5枠）をえらぶ → 陣地づくり
+          setView('formation');
         }}
       />
+    );
+  }
+
+  if (view === 'formation') {
+    const chapter = CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
+    return (
+      <FormationScreen chapter={chapter} tier={activeTier}
+        onBack={() => setView('stage')} onProceed={() => setView('prep')} />
     );
   }
 
@@ -103,32 +190,45 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     return (
       <BaseBuilder
         chapter={chapter}
-        onBack={() => setView('stage')}
-        onProceed={() => {
-          campaign.recordAttempt(chapter.id);
-          setView('battle');
-        }}
+        onBack={() => { setSortieMsg(null); setView('formation'); }}
+        onProceed={() => { void beginBattle(chapter.id); }}
+        proceedBusy={sortieBusy}
+        proceedSlot={<SortieStamina formation={formation} message={sortieMsg} />}
       />
     );
   }
 
-  if (view === 'battle') {
-    const chapter = CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
+  if (view === 'battle' && battleTicket) {
+    const chapter = CHAPTER_BY_ID[battleTicket.chapterId] ?? CAMPAIGN[0];
     const map = BATTLE_MAP_BY_ID[chapter.mapId] ?? BATTLE_MAPS[0];
-    const assist = campaign.assistLevelFor(chapter.id);
-    // 陣地づくりで組んだ配置を、そのまま戦場に出す（座標はすでに戦場のもの）
-    const deployments = base.getLayout(chapter.id);
+    // サポートモードは段ごとの連敗で決まる
+    const assist = campaign.assistLevelFor(chapter.id, activeTier);
+    // 脅威レベル：手持ちが その段の めやすより育っているぶん、敵も強くなる（画面に出す）
+    const baseLv = chapterBaseLevel(chapter, activeTier);
+    const threat = threatLevel(topAvgLevel, baseLv);
+    const tMult = threatMultFor(topAvgLevel, baseLv);
+    // 陣地づくりで組んだ配置のうち、きょう動かせるもの（先に置いた順）だけを戦場に出す
+    const { active } = splitActiveLayout(base.getLayout(chapter.id), limit);
+    const facilityMults: Partial<Record<BuildingType, number>> = {};
+    for (const t of LEVELED_COMBAT) facilityMults[t] = facilityMult(t, base.levelOf(t));
     return (
       <BattleScene
         attackerState={gameState}
-        defenderBuildings={map.enemyBase}
-        playerDeployments={deployments}
+        defenderBuildings={tierEnemyBase(map, activeTier)}
+        playerDeployments={active}
         battleMap={map}
-        loadout={loadout}
+        loadout={computeBattleLoadout(owned, active, permanentUnlocks)}
+        formation={formation}
+        facilityMults={facilityMults}
+        creditBonus={creditBonus}
         chapter={chapter}
-        difficulty={effectiveDifficulty(chapter, assist)}
+        difficulty={effectiveDifficulty(chapter, assist, activeTier, tMult)}
         assistLevel={assist}
+        tier={activeTier}
+        threat={threat}
+        threatPct={Math.round((tMult - 1) * 100)}
         quizSubtopics={quizSubtopics}
+        onSettle={handleSettle}
         onEndBattle={handleEndBattle}
       />
     );
@@ -152,24 +252,40 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-y-auto" style={font}>
       {/* Header */}
       <div className="flex items-center justify-between p-4">
-        <button onClick={onExit} className="text-white/60 hover:text-white text-sm">← メニュー</button>
+        {onExit ? <button onClick={onExit} className="text-white/60 hover:text-white text-sm">← メニュー</button> : <span />}
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {dailyStreak >= 1 && <StatChip icon="🔥" value={`${dailyStreak}`} color="#fb923c" />}
           <StatChip icon="💠" value={Math.floor(resources.gold)} color="#38bdf8" />
           <StatChip icon="⚡" value={dailyStars} color="#facc15" />
+          <StatChip icon="🪙" value={coins} color="#fde68a" />
         </div>
       </div>
 
       {/* Title */}
       <div className="text-center px-4 mt-1 mb-3">
         <h1 className="text-3xl sm:text-4xl font-black text-hologram tracking-wide" style={fontMono}>CAT-WARS</h1>
-        <p className="text-[11px] text-[#38bdf8]/80 tracking-[0.3em] mt-1">拠点をきずき ネコ軍団で せめこもう</p>
+        <p className="text-[11px] text-[#38bdf8]/80 tracking-[0.3em] mt-1">基地を きずき ネコぐんだんで せめこもう</p>
+        <div className="mt-2"><TitleChip /></div>
       </div>
+
+      {/* あたらしい バッジ（1回だけ） */}
+      <NewBadgeNotice />
+
+      {/* 学級ポータル：名乗りの入口・スタミナ（つないでいないビルドでは出さない） */}
+      <PortalCard />
+      {homeNotice && (
+        <div className="px-4 pt-3" role="status">
+          <div className="rounded-xl border border-[#fca5a5]/50 p-3 text-center" style={{ background: 'rgba(127,29,29,0.25)' }}>
+            <p className="text-white text-sm font-bold">{homeNotice}</p>
+            <button onClick={() => setHomeNotice(null)} className="mt-1 text-[11px] text-white/60 underline">とじる</button>
+          </div>
+        </div>
+      )}
 
       {/* Daily goal */}
       <div className="px-5">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-white/60 text-[11px]">きょうの学習で 💠クレジット と ⚡エナジー がたまる</span>
+          <span className="text-white/60 text-[11px]">まちがえずに とくと 💠クレジット・⚡エナジー・施設を 動かす力 が たまる</span>
           <span className="text-[#38bdf8] text-[11px]" style={fontMono}>{todayAnswered}/{dailyGoal}問</span>
         </div>
         <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
@@ -193,37 +309,42 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       </div>
 
       {/* Big actions */}
-      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
-        <HubButton icon="⚔️" label="出撃！" sub={allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`} color="#ef4444"
-          onClick={() => { resetBattleSession(); setView('range'); }} big />
-        <HubButton icon="🐱" label="ネコ図鑑" sub="部隊のレベル・進化" color="#a3e635"
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4 pt-4">
+        <HubButton icon="⚔️" label="出撃！" sub={homeLock ? `🔒 ${homeLock}` : allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`} color="#ef4444"
+          locked={!!homeLock}
+          onClick={() => {
+            // 閉じていても 押せる形のまま。押すと わけを出す（SANMON と同じ）
+            if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); return; }
+            setSortieMsg(null); resetBattleSession(); setView('range');
+          }} big />
+        <HubButton icon="🐱" label="ネコ部隊" sub="レベル・進化・スキル" color="#a3e635"
           onClick={() => setView('army')} />
-        <HubButton icon="✨" label="出撃バフ" sub="⚡エナジーで今日の戦力UP" color="#facc15"
+        <HubButton icon="📖" label="あつめる" sub={coins >= CAPSULE_RULES.cost ? `🪙${coins} カプセルを まわせる！` : '図鑑・バッジ・シール'} color="#7dd3fc"
+          onClick={() => setView('collection')} />
+        <HubButton icon="✨" label="出撃バフ" sub="⚡エナジーで きょうの 戦力アップ" color="#facc15"
           onClick={() => setView('buffs')} />
-        <HubButton icon="🤝" label="たいせん" sub="ともだちと ネコ軍団で しょうぶ" color="#a855f7"
-          onClick={() => setView('pvp')} />
       </div>
 
-      {/* Base mini-preview（陣地の編集は出撃フローの中でのみ行う。ここは今日のもちものの確認のみ） */}
+      {/* 基地のようす（施設の買う・レベル上げ・配置は 出撃の中の「陣地づくり」で） */}
       <div className="px-4 pt-4">
-        <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }}>
+        <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }} data-testid="hub-base">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-white/70 text-xs font-bold" style={fontMono}>きょうの もちもの</span>
+            <span className="flex items-center gap-2"><DecorFlag size={22} /><span className="text-white/70 text-xs font-bold" style={fontMono}>基地</span></span>
+            <span className="text-[#facc15] text-[11px]">きょう 動かせる施設 {limit}こ まで（コアのほか）</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(built).filter(([, n]) => (n ?? 0) > 0).length === 0 && (
-              <span className="text-white/40 text-xs">
-                まだ施設がありません。「出撃！」から陣地づくりで⚡エナジーで建てよう（明日リセット）
-              </span>
-            )}
-            {Object.entries(built).filter(([, n]) => (n ?? 0) > 0).map(([type, n]) => (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
+              <span className="text-white/70 text-[11px]">🏰 コア Lv{base.levelOf(BuildingType.TOWN_HALL)}</span>
+            </div>
+            {(Object.entries(owned) as [BuildingType, number][]).filter(([, n]) => (n ?? 0) > 0).map(([type, n]) => (
               <div key={type} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
-                <img src={`/assets/sprites/${type.toLowerCase().replace(/_/g, '-')}.png`} alt={type}
-                  style={{ width: 20, height: 20, objectFit: 'contain' }} draggable={false} />
-                <span className="text-white/70 text-[11px]">{BUILDING_STATS[type as BuildingType].name}×{n}</span>
+                <span className="text-white/70 text-[11px]">{BUILDING_STATS[type].icon || '🧱'} {BUILDING_STATS[type].name}×{n} Lv{base.levelOf(type)}</span>
               </div>
             ))}
           </div>
+          {Object.values(owned).every(n => !n) && (
+            <p className="text-white/40 text-[11px] mt-2">「出撃！」の 陣地づくりで、💠クレジットで 施設を 買えるよ。施設は ずっと のこる。</p>
+          )}
         </div>
       </div>
 
@@ -231,7 +352,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       <div className="px-4 pt-3 pb-8">
         <button onClick={() => setView('mercs')}
           className="w-full py-3 rounded-xl border border-[#a3e635]/40 text-[#a3e635] text-sm font-bold hover:bg-[#a3e635]/10 transition-all active:scale-95">
-          💠 傭兵召集（クレジットでレアな宇宙ネコを解放）
+          💠 なかまを よぶ（💠で ボスの 宇宙ネコを なかまに）
         </button>
       </div>
 
@@ -242,7 +363,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         </Overlay>
       )}
       {view === 'mercs' && (
-        <Overlay title="傭兵召集" onClose={() => setView('home')}>
+        <Overlay title="なかまを よぶ" onClose={() => setView('home')}>
           <ExchangePanel />
         </Overlay>
       )}
@@ -250,11 +371,18 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   );
 };
 
+/** 手持ちの上位5系統の平均レベル（脅威レベルの もと） */
+export function topFamiliesAvgLevel(army: Record<string, { level: number }>): number {
+  const lv = Object.values(army).map((e) => e?.level ?? 1).sort((a, b) => b - a).slice(0, 5);
+  if (lv.length === 0) return 1;
+  return lv.reduce((a, b) => a + b, 0) / lv.length;
+}
+
 const HubButton: React.FC<{
-  icon: string; label: string; sub: string; color: string; onClick: () => void; big?: boolean;
-}> = ({ icon, label, sub, color, onClick, big }) => (
-  <button onClick={() => { sfx.select(); onClick(); }}
-    className={`relative overflow-hidden rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${big ? 'col-span-2 py-6' : 'py-5'}`}
+  icon: string; label: string; sub: string; color: string; onClick: () => void; big?: boolean; locked?: boolean;
+}> = ({ icon, label, sub, color, onClick, big, locked }) => (
+  <button onClick={() => { sfx.select(); onClick(); }} aria-disabled={locked || undefined}
+    className={`relative overflow-hidden rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${big ? 'col-span-2 md:col-span-3 py-6' : 'py-5'} ${locked ? 'opacity-60 grayscale' : ''}`}
     style={{ borderColor: `${color}`, background: `${color}18`, boxShadow: big ? `0 0 22px ${color}55` : `0 0 10px ${color}33` }}>
     <span className={big ? 'text-4xl' : 'text-3xl'}>{icon}</span>
     <span className="font-black text-white tracking-wide" style={{ ...fontMono, fontSize: big ? 18 : 15 }}>{label}</span>
