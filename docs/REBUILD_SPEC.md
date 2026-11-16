@@ -338,6 +338,14 @@ CW-4b で 0.99 にした（1手の速さを そろえたら「にがて」の +0
   `progress.mastery` を ストアから消して 4週間で 15.3KB → 約6.1KB（めやす 6KB）。
 - 合格条件：`npm run test:portal` の [10]〜[14]（鍵・とちゅうで閉じる・送信・セーブ）、`npm run check`・`test:progress`・`test:collection`。
 
+### 4c. 実装ずみ（CW-5c・2026-11-16）：SOL の入口・体験版・デモモード
+くわしくは `docs/PORTAL.md`。先生が決めた：「SOL に入り口を出すが、閉じておく、PRISM で管理」「デモも いずれは SOL の /#trial で記録を残さずできるように」「0000・0（デモモード）も、あり」。
+- SOL：SANMON タブの SANMON の入口の下に CAT-WARS の入口（鍵 `catwars` で 🔒・押すと わけ）。体験の入口は 先生が PRISM で「体験に出す」にしたときだけ。じぶんの きろく・ふくしゅう・単元の一覧には出さない。
+- 体験版：項目は3つ（`portal/trialFeatures.ts`＝kit 0.37.0 の `TRIAL_FEATURE_SETS.catwars`：出撃・ネコ部隊（なかま・バフも）・あつめる）。はじめは全部 使える。閉じた所は kit の `TrialLock`。ホームに「たいけんばん」。
+- デモモード（0000・0 ＋先生のパスワード）：セーブは3つ目の `demo`・名乗らない・送らない・スタミナと鍵を見ない・DEMO の表示・「デモを おわる」。全部の章と3つの段・かけら 8・はじめて入ったとき 💠9999・全系統 Lv20（デモのセーブにだけ）。
+- 第8章のボスの名前を「クロマント」に（他社の作品の名前に似ていたため。図鑑の鍵 `boss:ch8`・シールの id は そのまま）。
+- 合格条件：`npm run test:portal`（[17] 体験版＝`scripts/portalTrialTest.ts`・[18] デモ）、`npm run check`・`test:progress`・`test:collection`。
+
 ## 5. 遠征・対戦（CW-6）
 - **週がわりの遠征**：毎週月曜に、種（seed）とルール（例：空中の敵だけ・霧で射程−1・敵の出現2倍）が変わる。学級の合計スコア（星の合計）で目標を目指す。個人の順位は出さない。
 - **同時対戦（本命）**：決定的な戦闘の計算（`catwars/sim/`）とロックステップ（`catwars/net/lockstep.ts`）を Supabase Realtime Broadcast に載せかえる（`net/transport.ts` の実装を1つ足す）。

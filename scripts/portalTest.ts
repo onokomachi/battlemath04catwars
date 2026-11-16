@@ -18,6 +18,8 @@
  *  [14] セーブを サーバに（往復・新しい方が勝つ・2台・おためしは送らない・大きさ・読みなおし／取りこんだ直後は 送らない）
  *  [15] 戦闘の結果は 勝ち負けが決まった瞬間に1回だけ（💠・章クリア・★・連敗。ボタンを押さずに 読みなおしても のこる・二重に入らない）
  *  [16] SOLO/DUO（kit の PlayModeGate）は 出さない（名乗ったら JoinGate の かわりに AppAccessGate だけ）
+ *  [17] 体験版（項目の開け閉め・送らない）は scripts/portalTrialTest.ts（体験のタブを はじめから つくるため 別の試験）
+ *  [18] デモモード（0000・0）：入る・出る・セーブが3つに分かれる・送らない・関門がスタミナを使わない・鍵を見ない・中身（章・段・かけら・💠・Lv）
  */
 import { memLocal, MemStorage } from './lib/memStorage';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -38,7 +40,7 @@ import { createSaveSync, saveHash } from '../catwars/portal/saveSync';
 import { settleBattle } from '../catwars/utils/settleBattle';
 import { usePlayerStore } from '../catwars/store/usePlayerStore';
 import { SAVED_AT_KEY, isProfileKey } from '../catwars/portal/saveProfile';
-import { flushEvents, getSentMark, type LogLike } from 'learning-app-kit/sync';
+import { flushEvents, getSentMark, getStudent, type LogLike } from 'learning-app-kit/sync';
 import { CATALOGS } from 'learning-app-kit/catalog';
 import { useProgressStore } from '../catwars/store/useProgressStore';
 import { PACK_UNITS, unitSkillIds } from '../catwars/learn/gradePack';
@@ -48,6 +50,13 @@ import { useBaseStore } from '../catwars/store/useBaseStore';
 import { useStudyStore } from '../catwars/store/useStudyStore';
 import { CAMPAIGN, assistLevelForLosses } from '../catwars/data/campaign';
 import { BuildingType } from '../catwars/types';
+import { enterDemoWith, exitDemoWith, profileFor, trialOnDemoDeviceFor, DEMO_KEY, isDemo } from '../catwars/portal/saveProfile';
+import { seedDemoOnce, DEMO_CREDITS, DEMO_LEVEL, DEMO_SEEDED_KEY } from '../catwars/portal/demo';
+import { applyDemoShards } from '../catwars/portal/demo';
+import { setServerShards as setShards0 } from '../catwars/learn/shards';
+import { useArmyStore } from '../catwars/store/useArmyStore';
+import { CHARACTERS } from '../catwars/data/characters';
+import { shardsFromServer } from '../catwars/learn/shards';
 
 let fails = 0;
 let bundleBytes = 0;
@@ -551,9 +560,113 @@ console.log('[16] SOLO/DUO は 出さない');
   const gate = readFileSync(join(process.cwd(), 'catwars/portal/PortalGate.tsx'), 'utf8');
   check(!/<JoinGate\b/.test(idx) && /<PortalGate\s*\/>/.test(idx), 'index.tsx は JoinGate を じかに 出さない（PortalGate を通す）');
   check(/named && !isTrial\(\)\) return isPortalConfigured \? <AppAccessGate/.test(gate), '名乗っているときは AppAccessGate だけ（PlayModeGate の SOLO/DUO を出さない）');
-  check(/<JoinGate config=\{PORTAL\} chip=\{false\} \/>/.test(gate), '名乗っていないときは JoinGate（右下の入口なし）');
+  check(/<JoinGate config=\{PORTAL\} chip=\{false\}[^>]*\/>/.test(gate), '名乗っていないときは JoinGate（右下の入口なし）');
   check(/forceSolo\(\)/.test(gate), '前に DUO を選んでいた端末は SOLO に もどす');
   check(!/PlayModeGate/.test(idx) && !/<PlayModeGate/.test(gate), 'PlayModeGate を どこにも 出さない');
+}
+
+// ── [18] ──
+console.log('[18] デモモード（0000・0）');
+{
+  // 入る：学級コードが入っていたら消す・デモのセーブに入れかえて 読みなおす
+  const kv = new MemStorage();
+  ensureProfile('class', kv);
+  kv.setItem(SAVE_KEYS.player, 'CLASS-PLAYER');
+  let reloads = 0;
+  let cleared = 0;
+  enterDemoWith(kv, () => { reloads++; }, () => true, () => { cleared++; });
+  check(kv.getItem(DEMO_KEY) === '1' && activeProfile(kv) === 'demo', '入る：しるしを付けて デモの側へ');
+  check(cleared === 1 && reloads === 1, '入る：名乗りを消して（記録が送られないように）読みなおす');
+  check(kv.getItem(SAVE_KEYS.player) === null && !!kv.getItem(stashKey('class')), '学級のセーブは しまってある（デモには 見えない）');
+  kv.setItem(SAVE_KEYS.player, 'DEMO-PLAYER');
+  // 出る：おためしの側へ（デモのセーブは しまう）
+  exitDemoWith(kv, () => { reloads++; }, () => false);
+  check(kv.getItem(DEMO_KEY) === null && activeProfile(kv) === 'trial' && reloads === 2, '出る：しるしを消して おためしの側へ・読みなおす');
+  check(kv.getItem(SAVE_KEYS.player) === null && !!kv.getItem(stashKey('demo')) && !!kv.getItem(stashKey('class')), 'セーブは3つ（学級・おためし・デモ）に分かれて まざらない');
+  kv.setItem(SAVE_KEYS.player, 'TRIAL-PLAYER');
+  enterDemoWith(kv, () => {}, () => false, () => { cleared++; });
+  check(kv.getItem(SAVE_KEYS.player) === 'DEMO-PLAYER' && cleared === 1, 'もう一度 入ると デモの続き（名乗っていなければ 消さない）');
+  ensureProfile('class', kv);
+  check(kv.getItem(SAVE_KEYS.player) === 'CLASS-PLAYER', '学級に もどると 学級のセーブ（デモで さわっていない）');
+  check(profileFor(false, true) === 'demo' && profileFor(true, true) === 'class' && profileFor(false, false) === 'trial', 'profileFor：名乗っていれば 学級・デモは 名乗っていないときだけ');
+  // 体験のタブ × デモの端末
+  const kv2 = new MemStorage();
+  ensureProfile('trial', kv2);
+  enterDemoWith(kv2, () => {}, () => false, () => {});
+  check(trialOnDemoDeviceFor(true, kv2) === true && trialOnDemoDeviceFor(false, kv2) === false, '体験のタブ：デモの端末では あそばせない（デモのセーブを守る）');
+
+  // 関門：デモは名乗らないので スタミナを使わない・モードの鍵を見ない（先生が閉じていても）
+  const f = fakeServer({ common: 0, modes: { catwars: false } });
+  const g = createSortieGate({ ...f.deps, studentId: () => null });
+  const r = await g.startBattle({ formation: ['magic'], status: null, modes: { catwars: false, _student_lock: true } as SanmonModes });
+  check(r.ok === true && r.spent === false && f.calls.length === 0, '関門：スタミナを使わず 通す・サーバに 聞かない（鍵・平日モード・番号ごとの停止を見ない）');
+
+  // 送らない：名乗っていない（デモ）ときは 記録を作らない・セーブを送らない
+  memLocal.removeItem('lak_student_v1');
+  memLocal.setItem(DEMO_KEY, '1');
+  memLocal.setItem(ACTIVE_KEY, 'demo');
+  check(isDemo() === true, 'デモ中（しるし＋ふつうのタブ）');
+  // デモに入ると 名乗りは消える（enterDemo が clearStudent）→ 記録・セーブを送る相手が いない
+  check(getStudent() === null, 'デモ中は 名乗っていない（getStudent が null）');
+  const sent: string[] = [];
+  const as = createAnswerSync({
+    configured: () => true,
+    studentId: () => getStudent()?.studentId ?? null,
+    flush: async () => { sent.push('flush'); return { ok: true }; },
+    store: () => memLocal,
+    setTimer: (fn) => { fn(); return 1; },
+    clearTimer: () => { /* noop */ },
+  });
+  as.queue(buildPortalLog({ unitKey: 'fraction', skillId: unitSkillIds('fraction')[0], perfect: true, ts: 1 })!);
+  await as.flushNow();
+  const ss = createSaveSync({
+    configured: () => true,
+    studentId: () => getStudent()?.studentId ?? null,
+    load: async () => { sent.push('load'); return { ok: true, data: null }; },
+    save: async () => { sent.push('save'); return true; },
+    exportBundle, importBundle, store: () => memLocal,
+  });
+  await ss.pushSave();
+  await ss.pullSaveIfNewer();
+  check(sent.length === 0, `記録も セーブも サーバに 送らない・読まない（${sent.length} 回）`);
+
+  // 中身：全部の章と3つの段・かけら 8・💠9999・Lv20（デモのセーブにだけ）
+  check(CAMPAIGN.every((c) => useCampaignStore.getState().isUnlocked(c.id) && useCampaignStore.getState().isTierUnlocked(c.id, 'extreme')), '全部の章と 3つの段（げきむず まで）を えらべる');
+  memLocal.removeItem(DEMO_KEY);
+  const last = CAMPAIGN[CAMPAIGN.length - 1].id;
+  check(!useCampaignStore.getState().isTierUnlocked(last, 'extreme'), 'デモでなければ 今までどおり（最後の章の げきむず は 閉じている）');
+  memLocal.setItem(DEMO_KEY, '1');
+  check(applyDemoShards() === true, 'デモ：かけらを入れる');
+  check(PACK_UNITS.every((u) => unitShards(u.key) === MAX_SHARDS), 'かけら：全単元 8（名乗らないので サーバの かけらの かわりに）');
+  check(familyShards('magic') === MAX_SHARDS, '系統の かけらも 8（スキルが ぜんぶ 開いて見える）');
+  memLocal.removeItem(DEMO_SEEDED_KEY);
+  usePlayerStore.setState((st) => ({ resources: { ...st.resources, gold: 120 } }));
+  useArmyStore.setState((st) => ({ army: Object.fromEntries(Object.keys(st.army).map((k) => [k, { level: 3, xp: 5, totalBattles: 0 }])) }));
+  check(seedDemoOnce(memLocal) === true, 'はじめて入ったとき：中身を入れる');
+  check(usePlayerStore.getState().resources.gold === DEMO_CREDITS, `💠 ${DEMO_CREDITS}`);
+  check(CHARACTERS.every((c) => useArmyStore.getState().army[c.id]?.level === DEMO_LEVEL), `ネコは 全系統 Lv${DEMO_LEVEL}`);
+  usePlayerStore.setState((st) => ({ resources: { ...st.resources, gold: 50 } }));
+  check(seedDemoOnce(memLocal) === false && usePlayerStore.getState().resources.gold === 50, '2回目からは 入れない（デモで使った分は そのまま）');
+  memLocal.setItem(ACTIVE_KEY, 'trial');
+  memLocal.removeItem(DEMO_SEEDED_KEY);
+  check(seedDemoOnce(memLocal) === false, 'デモの側でなければ（学級・おためし）入れない');
+  memLocal.removeItem(DEMO_KEY);
+  check(isDemo() === false && profileFor(false) === 'trial', 'しるしを消せば ふつう');
+  check(applyDemoShards() === false, 'デモでなければ かけらを入れない');
+  setShards0(null);
+  check(!shardsFromServer(), 'かけらは 端末の数え方に もどる');
+  memLocal.setItem(ACTIVE_KEY, 'class');
+
+  // 画面のつなぎ（ソースを見る）
+  const gate = readFileSync(join(process.cwd(), 'catwars/portal/PortalGate.tsx'), 'utf8');
+  const card = readFileSync(join(process.cwd(), 'catwars/portal/PortalCard.tsx'), 'utf8');
+  const idx = readFileSync(join(process.cwd(), 'index.tsx'), 'utf8');
+  const up = readFileSync(join(process.cwd(), 'catwars/portal/usePortal.ts'), 'utf8');
+  check(/if \(!applyDemoShards\(\)\) setServerShards\(null\)/.test(up) && /seedDemoOnce\(\);/.test(up), '名乗っていないとき：デモなら かけら 8（refreshPortal）・はじめに中身を入れる（usePortalLifecycle）');
+  check(/const playLock = playingLock/.test(readFileSync(join(process.cwd(), 'catwars/components/CatWars.tsx'), 'utf8')) && /usePortalStore\.getState\(\)\.student \? closedWhilePlayingMessage/.test(up), 'とちゅうで閉じる・出撃の🔒 は 名乗っている子だけ（デモは 鍵を見ない）');
+  check(/allowWithout=\{isDemo\}/.test(gate) && /onDemo=\{enterDemo\}/.test(gate), '「ログイン必須」でも デモは入れる（JoinGate の allowWithout={isDemo}・onDemo）');
+  check(/JoinSettingsRow config=\{PORTAL\} onDemo=\{enterDemo\}/.test(card) && /exitDemo/.test(card), 'ホーム：0000・0 で デモに入る・「デモを おわる」');
+  check(/isDemo\(\) && \(/.test(idx) && /DEMO ・ きろくは おくられません/.test(idx), '画面の左上に DEMO');
 }
 
 void memLocal;

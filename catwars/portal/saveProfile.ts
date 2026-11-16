@@ -10,12 +10,17 @@
  *
  * ストア（zustand の persist）は 読みこんだ時点で localStorage を読むので、index.tsx で いちばん先に読みこむこと。
  *
- * SANMON とちがうところ：デモモード（学級コード 0000・番号 0）は まだ無い（JoinGate に onDemo を渡していない）。
+ * デモモード（CW-5c・2026-11-16。SANMON と同じ：学級コード 0000・番号 0 ＋先生のパスワード＝サーバの verify_demo）は 3つ目のセーブ 'demo'。
+ * アプリの紹介用で、名乗らない・記録もセーブも送らない・スタミナを使わない・モードの鍵を見ない。学級・おためしのセーブとは まざらない
+ * （しまう先は catwars_profile_demo）。はじめて入ったときの中身（💠・ネコのレベル）は portal/demo.ts。
  */
-import { getStudent, subscribeStudent, isTrial as isTrialTab } from 'learning-app-kit/sync';
+import { clearStudent, getStudent, subscribeStudent, isTrial as isTrialTab } from 'learning-app-kit/sync';
 import { SAVE_KEY_LIST } from './saveKeys';
+import { DEMO_KEY, demoFlag, isDemo } from './demoMode';
 
-export type SaveProfile = 'class' | 'trial';
+export { DEMO_KEY, demoFlag, isDemo };
+
+export type SaveProfile = 'class' | 'trial' | 'demo';
 
 /** localStorage と同じ形（試験で差しかえる） */
 export interface KV {
@@ -32,12 +37,18 @@ export const stashKey = (p: SaveProfile) => `catwars_profile_${p}`;
 export const SAVED_AT_KEY = 'catwars_portal_saved_at';
 export const isProfileKey = (k: string) => SAVE_KEY_LIST.includes(k) || k === SAVED_AT_KEY;
 
-export const profileFor = (hasStudent: boolean): SaveProfile => (hasStudent ? 'class' : 'trial');
-
 const ls = (): KV | null => { try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; } };
 
+
+/** いまの名乗り・デモから、使う側を決める（名乗っていれば 学級。デモは 名乗っていないときだけ） */
+export const profileFor = (hasStudent: boolean, demo: boolean = isDemo()): SaveProfile =>
+  (hasStudent ? 'class' : demo ? 'demo' : 'trial');
+
 export function activeProfile(store: KV | null = ls()): SaveProfile {
-  try { return store?.getItem(ACTIVE_KEY) === 'trial' ? 'trial' : 'class'; } catch { return 'class'; }
+  try {
+    const v = store?.getItem(ACTIVE_KEY);
+    return v === 'trial' || v === 'demo' ? v : 'class';
+  } catch { return 'class'; }
 }
 
 /**
@@ -90,13 +101,48 @@ export function trialOnClassDeviceFor(trialTab: boolean, store: KV | null = ls()
 }
 export const trialOnClassDevice = (): boolean => trialOnClassDeviceFor(isTrialTab());
 
-// 読みこんだ時点で、いまの名乗りに合わせる（ストアが localStorage を読む前）。学級の端末の体験タブでは 何も動かさない
-if (typeof window !== 'undefined' && !trialOnClassDevice()) ensureProfile(profileFor(!!getStudent()));
+/**
+ * デモモードの端末で、体験のリンクから開いたか（CW-5c）。学級の端末と同じ理由で このタブでは遊ばせない
+ * （体験のタブで おためしのセーブに入れかえると、ひらいている デモのタブと localStorage を取りあう）。
+ */
+export function trialOnDemoDeviceFor(trialTab: boolean, store: KV | null = ls()): boolean {
+  if (!trialTab || !store) return false;
+  return demoFlag(store) && activeProfile(store) === 'demo';
+}
+export const trialOnDemoDevice = (): boolean => trialOnDemoDeviceFor(isTrialTab());
+/** 体験のタブで遊ばせない端末か（学級コードが入っている・デモモード） */
+export const trialBlocked = (): boolean => trialOnClassDevice() || trialOnDemoDevice();
+
+/**
+ * デモモードに入る（名乗りを消して、デモのセーブで読みなおす）。先生のパスワードは kit の JoinForm が確かめたあと（verify_demo）。
+ * SANMON の enterDemo と同じ。reload は試験で差しかえる。
+ */
+export function enterDemoWith(store: KV | null, reload: () => void, hasStudent: () => boolean = () => !!getStudent(), clear: () => void = clearStudent): void {
+  if (!store) return;
+  try { store.setItem(DEMO_KEY, '1'); } catch { return; }
+  if (hasStudent()) clear();             // 記録が送られないように（clearStudent の通知でも入れかわる）
+  ensureProfile('demo', store);
+  reload();
+}
+/** デモモードを おわる（おためしのセーブにもどる） */
+export function exitDemoWith(store: KV | null, reload: () => void, hasStudent: () => boolean = () => !!getStudent()): void {
+  if (!store) return;
+  try { store.removeItem(DEMO_KEY); } catch { /* noop */ }
+  ensureProfile(profileFor(hasStudent(), false), store);
+  reload();
+}
+export const enterDemo = (): void => enterDemoWith(ls(), () => window.location.reload());
+export const exitDemo = (): void => exitDemoWith(ls(), () => window.location.reload());
+
+// 読みこんだ時点で、いまの名乗り・デモに合わせる（ストアが localStorage を読む前）。学級・デモの端末の体験タブでは 何も動かさない
+if (typeof window !== 'undefined' && !trialBlocked()) ensureProfile(profileFor(!!getStudent()));
 
 // 学級コードを入れた・消したら、セーブを入れかえて 読みなおす
 if (typeof window !== 'undefined') {
   subscribeStudent((s) => {
-    if (trialOnClassDevice()) return;
+    if (trialBlocked()) return;
+    // デモ中に学級コードを入れたら、デモは おわり（学級のセーブにする。SANMON と同じ）
+    if (s && demoFlag()) { try { localStorage.removeItem(DEMO_KEY); } catch { /* noop */ } }
     if (ensureProfile(profileFor(!!s))) window.location.reload();
   });
 }

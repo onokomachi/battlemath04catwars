@@ -130,7 +130,7 @@ export const STICKERS: StickerDef[] = [
   s('st-kaiser', 'めかかいざー', '⚙️', '#64748b', 'たてものを 一撃で こわす きかいの 王。', `${CH}/boss-artillery-3.png`),
   s('st-darkmage', 'にゃーくめいじ', '📖', '#a78bfa', 'まほうの 本を あやつる 大まほうつかい。', `${CH}/magic-3.png`),
   // ── でんせつ（2）──
-  l('st-emperor', 'にゃーすべいだー', '🌑', '#facc15', '銀河の 皇帝。マントの かげが 戦場に のびる。', `${CH}/boss-overlord-3.png`),
+  l('st-emperor', 'クロマント', '🌑', '#facc15', '銀河の 皇帝。マントの かげが 戦場に のびる。', `${CH}/boss-overlord-3.png`),
   l('st-cosmic', 'こずみっくはいどら', '🌟', '#facc15', '宇宙に ひろがる でんせつの かいじゅう。', `${CH}/boss-titan-3.png`),
 ];
 

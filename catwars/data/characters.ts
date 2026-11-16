@@ -278,12 +278,12 @@ export const CHARACTERS: CharacterFamily[] = [
     bodySize: 86, bodyType: '巨大な機械の体。肩の砲塔で上半身が異様に大きい', defenseResist: 0.25,
   },
   {
-    id: 'boss_overlord', spriteFamily: 'boss-overlord', displayName: 'にゃーすべいだー', role: 'やみの 王。おそいけれど 一撃が とても つよい',
+    id: 'boss_overlord', spriteFamily: 'boss-overlord', displayName: 'クロマント', role: 'やみの 王。おそいけれど 一撃が とても つよい',
     accent: '#dc2626',
     forms: [
       { stage: 1, name: 'だーすにゃん',     minLevel: 1,  flavor: '黒い マントを なびかせ、やみの 光の 剣を あやつる 宇宙ネコ。' },
       { stage: 2, name: 'だーすにゃんII',   minLevel: 10, flavor: 'むねの 赤い コアが はげしく 光る。その 一撃は とても つよい。' },
-      { stage: 3, name: 'にゃーすべいだー', minLevel: 30, flavor: '銀河の 皇帝。黒い マントの かげが 戦場に のびる、さいごの ボス。' },
+      { stage: 3, name: 'クロマント', minLevel: 30, flavor: '銀河の 皇帝。黒い マントの かげが 戦場に のびる、さいごの ボス。' },
     ],
     base: { hp: 1100, damage: 150, moveSpeed: 0.9, target: 'ANY', attackRange: 1.8, attackSpeed: 2600 },
     cost: { gold: 750, count: 1 },

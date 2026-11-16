@@ -15,7 +15,7 @@
     "lint": "tsc --noEmit",
     "check": "npm run lint && npm run test:pack && npm run test:sim && npm run test:collection && npm run test:portal && npm run build",
     "test:collection": "tsx scripts/collectionTest.ts",
-    "test:portal": "tsx scripts/portalTest.ts"
+    "test:portal": "tsx scripts/portalTest.ts && tsx scripts/portalTrialTest.ts"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
