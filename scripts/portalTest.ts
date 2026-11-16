@@ -15,7 +15,9 @@
  *  [11] 鍵 catwars（はじめ閉じる・開ける・平日モード・番号ごとの停止）
  *  [12] 遊んでいる とちゅうで閉じる（ホームに もどす・やさしい1行）
  *  [13] 記録の送信（名乗り／おためし／ことわられたあとの送りなおし／二重に送らない／直近500件）
- *  [14] セーブを サーバに（往復・新しい方が勝つ・2台・おためしは送らない・大きさ）
+ *  [14] セーブを サーバに（往復・新しい方が勝つ・2台・おためしは送らない・大きさ・読みなおし／取りこんだ直後は 送らない）
+ *  [15] 戦闘の結果は 勝ち負けが決まった瞬間に1回だけ（💠・章クリア・★・連敗。ボタンを押さずに 読みなおしても のこる・二重に入らない）
+ *  [16] SOLO/DUO（kit の PlayModeGate）は 出さない（名乗ったら JoinGate の かわりに AppAccessGate だけ）
  */
 import { memLocal, MemStorage } from './lib/memStorage';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -32,7 +34,9 @@ import { setServerShards, unitShards, localShards, familyShards, MAX_SHARDS } fr
 import { buildPortalLog, sendAnswerToPortal, catalogTownOf, CATWARS_APP_ID, CATWARS_LABEL_PREFIX, PORTAL_SEND_ENABLED, grantStudyReward } from '../catwars/bridge';
 import { createAnswerSync, ANSWER_WAIT_MS } from '../catwars/portal/answerSync';
 import { readOutbox, OUTBOX_MAX } from '../catwars/portal/outbox';
-import { createSaveSync } from '../catwars/portal/saveSync';
+import { createSaveSync, saveHash } from '../catwars/portal/saveSync';
+import { settleBattle } from '../catwars/utils/settleBattle';
+import { usePlayerStore } from '../catwars/store/usePlayerStore';
 import { SAVED_AT_KEY, isProfileKey } from '../catwars/portal/saveProfile';
 import { flushEvents, getSentMark, type LogLike } from 'learning-app-kit/sync';
 import { CATALOGS } from 'learning-app-kit/catalog';
@@ -42,7 +46,7 @@ import { useCampaignStore } from '../catwars/store/useCampaignStore';
 import { useCollectionStore } from '../catwars/store/useCollectionStore';
 import { useBaseStore } from '../catwars/store/useBaseStore';
 import { useStudyStore } from '../catwars/store/useStudyStore';
-import { CAMPAIGN } from '../catwars/data/campaign';
+import { CAMPAIGN, assistLevelForLosses } from '../catwars/data/campaign';
 import { BuildingType } from '../catwars/types';
 
 let fails = 0;
@@ -468,6 +472,88 @@ console.log('[14] セーブを サーバに');
   remote = null;
   check(await B.pullSaveIfNewer() === false, 'サーバに まだ無い（はじめて）なら 何もしない');
   check(bundleBytes > 0 && bundleBytes <= 6 * 1024, `大きさ：4週間で ${bundleBytes} バイト（めやす 6KB 以下・サーバは 64KB まで）`);
+
+  // 送りなおしを へらす（2026-11-16）：最後に送った／取りこんだ中身の目印を 端末に のこす
+  const kvC = new MemStorage();
+  const devC = { stores: { player: { gold: 10 } } as Record<string, unknown> };
+  remote = null; saves = 0; student = 'stu-1';
+  check(await mkDevice(devC, kvC).pushSave() === true && saves === 1, 'C：送った');
+  check(!!kvC.getItem(SAVE_KEYS.sentHash), `目印を 端末に のこす（${SAVE_KEYS.sentHash}）`);
+  clock += 1000;
+  check(await mkDevice(devC, kvC).pushSave() === false && saves === 1, 'アプリを 読みなおしても（メモリが空でも）同じ中身なら 送らない');
+  devC.stores = { player: { gold: 11 } };
+  check(await mkDevice(devC, kvC).pushSave() === true && saves === 2, '中身が変わったら 送る');
+  // 別の端末 D で サーバのセーブを取りこむ → 読みなおしても 送りかえさない
+  const kvD = new MemStorage();
+  const devD = { stores: {} as Record<string, unknown> };
+  clock += 1000;
+  check(await mkDevice(devD, kvD).pullSaveIfNewer() === true, 'D：取りこんだ');
+  check(await mkDevice(devD, kvD).pushSave() === false && saves === 2, 'D：取りこんだ直後（読みなおしたあと）に 同じ中身を 送りかえさない');
+  check(saveHash({ a: 1 }) === saveHash({ a: 1 }) && saveHash({ a: 1 }) !== saveHash({ a: 2 }), '目印：同じ中身は 同じ・ちがえば ちがう');
+  check(isProfileKey(SAVE_KEYS.sentHash), '目印も 学級／おためし の入れかえの対象');
+
+  // 本物の ストア：取りこんで 読みなおした（persist から もどした）あとも 目印が かわらない
+  {
+    const kvR = new MemStorage();
+    remote = exportBundle(clock + 5000) as unknown as Record<string, unknown>;
+    saves = 0;
+    const real = createSaveSync({
+      configured: () => true, studentId: () => 'stu-1',
+      load: async () => ({ ok: true, data: remote }),
+      save: async () => { saves++; return true; },
+      exportBundle, importBundle, store: () => kvR, now: () => clock,
+    });
+    check(await real.pullSaveIfNewer() === true, '本物のストア：取りこんだ');
+    for (const id of STORE_IDS) if (id !== 'collection') await (STORES[id].persist as unknown as { rehydrate: () => Promise<void> }).rehydrate();
+    check(await real.pushSave() === false && saves === 0, '本物のストア：読みなおしても 送りかえさない');
+  }
+}
+
+// ── [15] ──
+console.log('[15] 戦闘の結果は 決まった瞬間に1回だけ');
+{
+  const ch = CAMPAIGN[0];
+  useCampaignStore.getState().reset();
+  usePlayerStore.getState().addResources(0);
+  const gold0 = usePlayerStore.getState().resources.gold;
+  const reload = async () => { await useCampaignStore.persist.rehydrate(); await usePlayerStore.persist.rehydrate(); };
+  // 勝った → 戦闘の おわり（BattleScene の useEffect）で 入れる。ボタンは押さずに 読みなおす
+  check(settleBattle({ battleId: 'b1', chapterId: ch.id, tier: 'normal', win: true, gold: 300, stars: 2 }) === true, '勝ち：決まった瞬間に入れた');
+  await reload();
+  check(usePlayerStore.getState().resources.gold === gold0 + 300, `ボタンを押さずに 読みなおしても 💠 が のこる（${gold0} → ${usePlayerStore.getState().resources.gold}）`);
+  check(useCampaignStore.getState().clearedChapters.includes(ch.id) && useCampaignStore.getState().starsFor(ch.id, 'normal') === 2, '章クリア・★ も のこる');
+  // StrictMode の2回実行・ボタン（handleEndBattle も settle を呼ぶ）・連打
+  for (let i = 0; i < 3; i++) settleBattle({ battleId: 'b1', chapterId: ch.id, tier: 'normal', win: true, gold: 300, stars: 3 });
+  check(usePlayerStore.getState().resources.gold === gold0 + 300 && useCampaignStore.getState().starsFor(ch.id, 'normal') === 2, '同じ戦闘は 二重に入らない（2回実行・ボタン・連打）');
+  // 負け：連敗の数（サポートモードの判定）も 決まった瞬間に のこる
+  settleBattle({ battleId: 'b2', chapterId: ch.id, tier: 'hard', win: false, gold: 0 });
+  settleBattle({ battleId: 'b2', chapterId: ch.id, tier: 'hard', win: false, gold: 0 });
+  settleBattle({ battleId: 'b3', chapterId: ch.id, tier: 'hard', win: false, gold: 999 });
+  await reload();
+  check(useCampaignStore.getState().lossStreak[`${ch.id}:hard`] === 2, `負け：連敗の数が のこる・二重に数えない（${useCampaignStore.getState().lossStreak[`${ch.id}:hard`]}）`);
+  check(usePlayerStore.getState().resources.gold === gold0 + 300, '負けは 💠 なし');
+  check(useCampaignStore.getState().assistLevelFor(ch.id, 'hard') === assistLevelForLosses(2), 'サポートモードの判定は のこった 連敗の数から');
+  // 勝つと 連敗は 0 に
+  settleBattle({ battleId: 'b4', chapterId: ch.id, tier: 'hard', win: true, gold: 50, stars: 1 });
+  check(useCampaignStore.getState().lossStreak[`${ch.id}:hard`] === 0 && useCampaignStore.getState().isTierCleared(ch.id, 'hard'), '勝つと 連敗 0・その段クリア');
+  check(settleBattle({ battleId: '', chapterId: ch.id, tier: 'normal', win: true, gold: 1 }) === false, 'id の無い戦闘は 入れない');
+  // ソース：結果画面のボタンは 閉じるだけ（💠 を足すのは settleBattle だけ）
+  const cw = readFileSync(join(process.cwd(), 'catwars/components/CatWars.tsx'), 'utf8');
+  const bs = readFileSync(join(process.cwd(), 'catwars/components/game/BattleScene.tsx'), 'utf8');
+  check(!/addResources\(/.test(cw) && !/recordResult\(/.test(cw), 'CatWars.tsx は 💠・章の記録を 直接 入れない（settleBattle だけ）');
+  check(/onSettle\?\.\(win/.test(bs), 'BattleScene は 勝ち負けが決まった useEffect で onSettle を呼ぶ');
+}
+
+// ── [16] ──
+console.log('[16] SOLO/DUO は 出さない');
+{
+  const idx = readFileSync(join(process.cwd(), 'index.tsx'), 'utf8');
+  const gate = readFileSync(join(process.cwd(), 'catwars/portal/PortalGate.tsx'), 'utf8');
+  check(!/<JoinGate\b/.test(idx) && /<PortalGate\s*\/>/.test(idx), 'index.tsx は JoinGate を じかに 出さない（PortalGate を通す）');
+  check(/named && !isTrial\(\)\) return isPortalConfigured \? <AppAccessGate/.test(gate), '名乗っているときは AppAccessGate だけ（PlayModeGate の SOLO/DUO を出さない）');
+  check(/<JoinGate config=\{PORTAL\} chip=\{false\} \/>/.test(gate), '名乗っていないときは JoinGate（右下の入口なし）');
+  check(/forceSolo\(\)/.test(gate), '前に DUO を選んでいた端末は SOLO に もどす');
+  check(!/PlayModeGate/.test(idx) && !/<PlayModeGate/.test(gate), 'PlayModeGate を どこにも 出さない');
 }
 
 void memLocal;

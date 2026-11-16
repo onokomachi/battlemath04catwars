@@ -19,11 +19,17 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
   - `gate.ts` … 出撃の関門（`createSortieGate` → `startBattle`）・閉じているときの文（`lockMessage`・`closedWhilePlayingMessage`）
   - `usePortal.ts` … 名乗り・スタミナ・モード・サーバのかけら の いまのようす（zustand）・`startSortie`・記録とセーブを いつ送るか（`usePortalLifecycle`・`afterBattle`）
   - `outbox.ts`・`answerSync.ts` … 1問の記録を 端末に のこして まとめて送る（CW-5b）
-  - `saveSync.ts` … セーブを サーバ（`catwars_save`）に しまう・取りこむ（CW-5b）
+  - `saveSync.ts` … セーブを サーバ（`catwars_save`）に しまう・取りこむ（CW-5b）。同じ中身は 送らない（目印 `saveHash`）
   - `PortalCard.tsx` … ホームの「がっきゅうコード」とスタミナ、陣地づくりの「出撃！」の上のスタミナ
   - `saveBundle.ts` … セーブを1つの JSON に まとめる・もどす・大きさを測る（`saveSync.ts` が送る）
+  - `PortalGate.tsx` … kit の JoinGate の つつみ（名乗った子に SOLO/DUO を出さない。下の「名乗り」）
 - 名乗り：kit の `JoinGate`（学級コード＋出席番号。はじめの1回）と、SOL からの `#c=&n=`（`adoptStudentFromUrl`）。氏名は扱わない。
   右下の入口（chip）は出さない（戦闘の下のバーに重なる）。あとから名乗る入口は ホームの「がっきゅうコード」（kit の `JoinSettingsRow`）。
+- **SOLO/DUO（kit の PlayModeGate）は出さない**（2026-11-16。`PortalGate.tsx`）：kit の JoinGate は 名乗った子に 授業の時間だけ「MODE SELECT（SOLO／DUO）」と右下の「● SOLO」を出すが、
+  CAT-WARS は ごほうびのゲームで ふたりで学ぶ記録を 想定していない・右下のボタンが 陣地づくりの「出撃！」と 戦闘の下のバーに重なる。
+  JoinGate には 出さないための引数が無い（kit 2fc93b1）ので、名乗っているときは JoinGate の かわりに `AppAccessGate` だけを出す（JoinGate が 名乗った子に出すのは この2つだけ）。
+  名乗っていない・体験版・ログイン必須の入力画面は 今までどおり JoinGate。記録は SOLO（DUO の区間は PlayModeGate で DUO を選んだときしか できない。前に選んでいた端末は 開いたときに kit の `forceSolo` で閉じる）。
+  kit を変えるなら：`JoinGate` に `playMode?: boolean`（false で PlayModeGate を出さない）を足せば、このつつみは要らなくなる。
 
 ## おためし・体験版（SANMON と同じ）
 - 名乗っていない＝**おためし**：全部あそべる。スタミナは使わない。記録・セーブはサーバに送らない。
@@ -58,6 +64,7 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
   とちゅう＝出撃の準備（範囲・ステージ・メンバー・陣地づくり）と戦闘。ネコ部隊・あつめる・出撃バフ の画面は そのまま。
   ホームに「じゅぎょうの じかんに なったよ。つづきは 15:30から あそべるよ」／「先生が CAT-WARS を とじたよ。つづきは また こんどね」／「せんせいと おはなししてね」（`closedWhilePlayingMessage`）。
   その戦闘の 勝ちの ごほうび（💠・章の記録・星・図鑑・バッジ）は 無し・出撃で使った スタミナは もどらない（SANMON の ぼうけんも同じ）。
+  （勝ち負けが もう決まって 結果画面が出ていたら、その結果は 決まった瞬間に 入っている。`utils/settleBattle.ts`）
   それまでに解いた問題の ごほうび（💠・⚡・XP・シールコイン）と 記録は のこる（1問ごとに 入るため）。
 
 ## 記録の送信（CW-5b）
@@ -74,7 +81,9 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 
 ## セーブのサーバ保存（CW-5b）
 - 表 `catwars_save`（kit の `saveCatwarsSave`／`loadCatwarsSave`）。中身は `saveBundle.ts` の `{ v, savedAt, stores }`。`saveSync.ts`。SANMON の `pushSave`／`pullSaveIfNewer` と同じ考え方：
-  - **名乗っているときだけ**。送るのは 中身が変わったときだけ。いつ：問題を解いて10秒あと・1分ごと・タブを かくしたとき・戦闘の おわり・名乗ったとき（サーバの方が新しくなければ）。
+  - **名乗っているときだけ**。送るのは 中身が変わったときだけ。いつ：問題を解いて10秒あと・1分ごと・タブを かくしたとき・戦闘の勝ち負けが決まったとき・戦闘の おわり・名乗ったとき（サーバの方が新しくなければ）。
+  - 「中身が変わった」は、最後に送った（または取りこんだ）中身の目印（`saveHash`。stores だけから作る短いハッシュ。`savedAt` は入れない）を 端末に のこして くらべる（`SAVE_KEYS.sentHash`＝`catwars_portal_sent_hash`。学級／おためし の入れかえの対象・サーバのセーブには入れない）。
+    2026-11-16 まで 目印が メモリの中だけで、アプリを開くたびに1回・別の端末で取りこんだ直後にも 同じ中身を 送りかえしていた（試験 [14]）。
   - 取りこむのは サーバの `savedAt` が この端末の `catwars_portal_saved_at`（最後に送った／取りこんだ時刻）より新しいとき。取りこんだら 画面を読みなおす。いつ：名乗ったとき・タブにもどったとき。
   - サーバを見ているあいだは 送らない（古いセーブで 新しいセーブを上書きしない）。
 - **端末を変えて名乗ったとき**：サーバの方が新しいので 前の端末の つづきから 遊べる（試験 [14]）。
