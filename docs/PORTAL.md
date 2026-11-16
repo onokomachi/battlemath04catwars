@@ -45,7 +45,7 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 - 入り方は SANMON と同じ：ホームの「がっきゅうコード」（kit の `JoinSettingsRow`）か、ログイン必須の入力画面で 学級コード「0000」・番号「0」→ 先生のパスワード（サーバの `verify_demo`）。
 - 名乗らない（入るとき 名乗りを消す）→ 記録もセーブも送らない・スタミナを使わない・モードの鍵・平日モード・番号ごとの停止を見ない。
 - セーブは3つ目の `demo`（`catwars_profile_demo`。学級・おためしと まざらない）。しるしは `catwars_demo_v1`（`portal/demoMode.ts`）。
-- 画面の左上に「DEMO ・ きろくは おくられません」。ホームの「デモを おわる」で おためしにもどる。デモ中に学級コードを入れたら デモは おわり（学級のセーブ）。
+- 画面の左上に小さく「DEMO」（「← もどる」に重ならないよう文字は短く。押せない）。ホームの「デモを おわる」で おためしにもどる。デモ中に学級コードを入れたら デモは おわり（学級のセーブ）。
 - 紹介用の中身（`portal/demo.ts`）：全部の章と3つの段をえらべる（`useCampaignStore` の `isUnlocked`・`isTierUnlocked`）・かけらは全単元 8（`applyDemoShards`）・**はじめて入ったときだけ** 💠9999・全系統 Lv20（`seedDemoOnce`。デモのセーブにだけ。しるし `catwars_demo_seeded_v1`）。
 - 体験のタブでは デモにしない。デモの端末で体験のリンクを開いたら 遊ばせない（`trialOnDemoDevice`。学級の端末と同じ理由）。
 

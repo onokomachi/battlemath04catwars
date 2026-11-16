@@ -665,7 +665,7 @@ console.log('[18] デモモード（0000・0）');
   check(/const playLock = playingLock/.test(readFileSync(join(process.cwd(), 'catwars/components/CatWars.tsx'), 'utf8')) && /usePortalStore\.getState\(\)\.student \? closedWhilePlayingMessage/.test(up), 'とちゅうで閉じる・出撃の🔒 は 名乗っている子だけ（デモは 鍵を見ない）');
   check(/allowWithout=\{isDemo\}/.test(gate) && /onDemo=\{enterDemo\}/.test(gate), '「ログイン必須」でも デモは入れる（JoinGate の allowWithout={isDemo}・onDemo）');
   check(/JoinSettingsRow config=\{PORTAL\} onDemo=\{enterDemo\}/.test(card) && /exitDemo/.test(card), 'ホーム：0000・0 で デモに入る・「デモを おわる」');
-  check(/isDemo\(\) && \(/.test(idx) && /DEMO ・ きろくは おくられません/.test(idx), '画面の左上に DEMO');
+  check(/isDemo\(\) && \(/.test(idx) && /data-testid="demo-badge"/.test(idx) && />\s*DEMO\s*</.test(idx), '画面の左上に DEMO');
 }
 
 void memLocal;

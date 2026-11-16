@@ -29,10 +29,11 @@ ReactDOM.createRoot(rootElement).render(
           </div>
         </div>
       ) : <CatWars />}
-      {/* デモモード（紹介用）であることを いつも小さく出す（SANMON と同じ）。おわるのは ホームの「デモを おわる」 */}
+      {/* デモモード（紹介用）であることを いつも小さく出す（SANMON と同じ。押せない）。おわるのは ホームの「デモを おわる」。
+          CAT-WARS は 左上に「← もどる」が ある画面が多いので、文字は「DEMO」だけ（「きろくは おくられません」は ホームの デモの説明に） */}
       {isDemo() && (
-        <div className="fixed top-2 left-2 z-[280] pointer-events-none rounded-lg border border-amber-400/60 bg-black/70 px-2.5 py-1 text-[10px] font-black tracking-widest text-amber-300" data-testid="demo-badge">
-          DEMO ・ きろくは おくられません
+        <div className="fixed top-1 left-1 z-[280] pointer-events-none rounded-md border border-amber-400/60 bg-black/70 px-1.5 py-0.5 text-[9px] font-black tracking-widest text-amber-300" data-testid="demo-badge" aria-label="デモモード（きろくは おくられません）">
+          DEMO
         </div>
       )}
     </ErrorBoundary>
