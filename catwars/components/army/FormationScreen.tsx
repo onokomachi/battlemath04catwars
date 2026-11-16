@@ -76,7 +76,7 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
   const lockNote = (id: string): string => {
     const need = barracksNeededFor(id);
     if (need != null) return `兵舎を ${need}つ もつと ひらく`;
-    return '傭兵召集（💠）で ひらく';
+    return '「なかまを よぶ」（💠）で ひらく';
   };
 
   return (

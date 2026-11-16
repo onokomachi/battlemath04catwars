@@ -24,7 +24,7 @@ const SUPPORT: BuildingType[] = SUPPORT_FACILITIES;
 function effectNote(type: BuildingType, level: number, count: number): string {
   if (type === BuildingType.GOLD_MINE) return `勝ったときの💠 +${Math.round(powerPlantBonus(Math.max(1, count), level) * 100)}%`;
   if (type === BuildingType.BARRACKS) return '数で ネコの系統が ひらく';
-  if (type === BuildingType.ARMY_CAMP) return '呪文 +1（おいた数）';
+  if (type === BuildingType.ARMY_CAMP) return 'まほう +1（おいた数）';
   return `HP・こうげき ×${facilityMult(type, level).toFixed(1)}`;
 }
 

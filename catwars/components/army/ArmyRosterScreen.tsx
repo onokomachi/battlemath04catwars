@@ -97,7 +97,7 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
       </div>
 
       <p className="text-center text-white/30 text-xs px-6 pb-4">
-        戦闘に出すと ネコに 経験値が 入って レベルアップ！ Lv10と Lv30で すがたが 進化するニャ。<br />
+        戦いに 出すと ネコに けいけんちが 入って レベルアップ！ Lv10と Lv30で すがたが 進化するニャ。<br />
         {shardsFromServer()
           ? <>レベルの上限は、そのネコの単元の 単元アプリで 本番テスト・実力の階段を がんばると 上がる（💎かけら 1つで +5・Lv60まで。SANMON と同じ かけら）。<br /></>
           : <>レベルの上限は、そのネコの単元を まちがえずに とくと 上がる（💎かけら 1つで +5・Lv60まで）。<br /></>}

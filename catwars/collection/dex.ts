@@ -23,7 +23,7 @@ export function catHowToMeet(fam: CharacterFamily, stage: 1 | 2 | 3): string {
   if (fam.isStarter) return 'はじめから なかま';
   const b = BARRACKS_UNLOCKS.find((u) => u.ids.includes(fam.id));
   if (b) return `兵舎を ${b.need}つ もつと なかまに なる（陣地づくりで 買える）`;
-  return '傭兵召集（💠クレジット）で なかまに なる';
+  return '「なかまを よぶ」（💠クレジット）で なかまに なる';
 }
 
 /** いま見つけている ネコの鍵（使える系統と レベルから） */

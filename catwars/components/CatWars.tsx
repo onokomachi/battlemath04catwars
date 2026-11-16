@@ -325,7 +325,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       <div className="px-4 pt-3 pb-8">
         <button onClick={() => setView('mercs')}
           className="w-full py-3 rounded-xl border border-[#a3e635]/40 text-[#a3e635] text-sm font-bold hover:bg-[#a3e635]/10 transition-all active:scale-95">
-          💠 傭兵召集（クレジットで ボスの宇宙ネコを解放）
+          💠 なかまを よぶ（💠で ボスの 宇宙ネコを なかまに）
         </button>
       </div>
 
@@ -336,7 +336,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         </Overlay>
       )}
       {view === 'mercs' && (
-        <Overlay title="傭兵召集" onClose={() => setView('home')}>
+        <Overlay title="なかまを よぶ" onClose={() => setView('home')}>
           <ExchangePanel />
         </Overlay>
       )}

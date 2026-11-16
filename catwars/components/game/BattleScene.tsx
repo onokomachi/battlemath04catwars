@@ -833,7 +833,7 @@ export const BattleScene: React.FC<Props> = ({
             )}
             {selectedSpell && (
               <span className="text-xs bg-purple-600/50 text-purple-200 px-2 py-0.5 rounded-full select-none animate-bounce border border-purple-400/30">
-                🔮 呪文を おく 場所を タップ
+                🔮 まほうを おく 場所を タップ
               </span>
             )}
           </div>
@@ -855,7 +855,7 @@ export const BattleScene: React.FC<Props> = ({
        {quizSubtopics.length > 0 && !battleResult && !briefingOpen && (
          <ProblemCards
            unitKeys={quizSubtopics}
-           baseReward={QUIZ_BASE_REWARD}
+           baseReward={Math.round(QUIZ_BASE_REWARD * (1 + (isPvp ? 0 : buffVal('GOLD_BOOST')) / 100))}
            poor={Math.floor(gold) < runner.cfg.minTroopCost[localPlayer]}
            onOpenChange={(open) => { setQuizOpen(open); setBattlePaused(open); }}
            onReward={(en) => issue({ type: 'GRANT_ENERGY', player: localPlayer, amount: en })}
@@ -985,7 +985,7 @@ export const BattleScene: React.FC<Props> = ({
                  }}
               >
                 <span className={`text-[9px] font-black tracking-widest uppercase scale-75 ${s.type === 'HEAL' ? 'text-emerald-400' : 'text-purple-300'}`}>
-                  {s.type === 'HEAL' ? '💚 HEAL ZONE' : '⚡ RAGE ZONE'}
+                  {s.type === 'HEAL' ? '💚 かいふく' : '⚡ げきおこ'}
                 </span>
               </div>
             ))}
@@ -1400,7 +1400,7 @@ export const BattleScene: React.FC<Props> = ({
                                 {(
                                   [
                                     { order: 'RUSH' as const, label: '🏃突撃', color: '#ef4444' },
-                                    { order: 'DEFENSE' as const, label: '🛡防衛', color: '#22d3ee' },
+                                    { order: 'DEFENSE' as const, label: '🛡まもる', color: '#22d3ee' },
                                     { order: 'HOLD' as const, label: '⏸待機', color: '#94a3b8' },
                                   ] as { order: 'RUSH' | 'DEFENSE' | 'HOLD'; label: string; color: string }[]
                                 ).map(({ order, label, color }) => (
@@ -1483,7 +1483,7 @@ export const BattleScene: React.FC<Props> = ({
             {!battleStarted && (
                <div className="absolute inset-0 border-4 border-dashed border-teal-400/40 pointer-events-none flex items-center justify-center iso-item">
                   <span className="text-white text-xs font-black bg-slate-950/90 py-3 px-6 rounded-full border border-teal-400/30 shadow-2xl backdrop-blur-md animate-pulse">
-                     👈 自分の じんち（すなの ところ）を タップして、ネコや 呪文を 出そう
+                     👈 自分の じんち（すなの ところ）を タップして、ネコや まほうを 出そう
                   </span>
                </div>
             )}
@@ -1505,7 +1505,7 @@ export const BattleScene: React.FC<Props> = ({
                <div className="text-center p-6 bg-slate-900/70 border border-yellow-500/30 rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto backdrop-blur-md shadow-2xl">
                  <Trophy className="w-16 h-16 text-yellow-400 mx-auto mb-3 animate-bounce" />
                  <div className="text-[10px] tracking-[0.25em] text-yellow-400/70 mb-1" style={{ fontFamily: 'Orbitron, monospace' }}>
-                   CHAPTER {chapter.no} CLEAR
+                   だい{chapter.no}しょう クリア！
                  </div>
                  <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
                  <p className="text-sm text-gray-200 mb-4 leading-relaxed">{chapter.victoryLine}</p>
@@ -1514,7 +1514,7 @@ export const BattleScene: React.FC<Props> = ({
                  <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect))}>
-                   戦利品を獲得して帰還 (💠{loot.gold} クレジット){hasBuff('DOUBLE_LOOT') && ' ×2!'}
+                   ごほうびを もらって かえる（💠{loot.gold}）{hasBuff('DOUBLE_LOOT') && ' アップ！'}
                  </Button>
                </div>
             ) : (
@@ -1527,7 +1527,7 @@ export const BattleScene: React.FC<Props> = ({
                  </p>
                  {/* 連敗時は次回サポートが入ることを先に伝える（隠れた調整はしない） */}
                  <div className="text-[11px] text-[#a3e635] mb-3 leading-relaxed">
-                   まけても部隊の経験値は手に入るよ。何回かまけると「サポートモード」で やさしくなるので、あきらめずにもう一回！
+                   まけても ネコたちの けいけんちは 手に入るよ。何回か まけると「サポートモード」で やさしく なるので、あきらめずに もう一回！
                  </div>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
                  <GainsSummary gains={gains} />
@@ -1547,7 +1547,7 @@ export const BattleScene: React.FC<Props> = ({
        <div className="bg-gray-950/95 border-t border-gray-800 px-3 py-1.5 z-50 relative shadow-2xl flex flex-col gap-1.5 flex-shrink-0">
          {/* Row 1: 魔法カード（選択＋補充を1行にまとめた） */}
          <div className="flex gap-2 items-center justify-center flex-wrap">
-           <span className="text-[10px] font-black text-gray-400 self-center uppercase pr-1">魔法カード:</span>
+           <span className="text-[10px] font-black text-gray-400 self-center uppercase pr-1">まほう:</span>
            <button
              onClick={() => {
                setSelectedSpell('HEAL');
@@ -1561,9 +1561,9 @@ export const BattleScene: React.FC<Props> = ({
              } ${spellCounts.HEAL <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
            >
              <Heart size={13} className="text-emerald-400" />
-             <span className="font-bold">回復(HEAL)</span>
+             <span className="font-bold">かいふく</span>
              <span className="text-[10px] bg-slate-850 text-stone-300 px-1.5 py-0.2 rounded font-mono">
-               残: {spellCounts.HEAL}
+               のこり {spellCounts.HEAL}
              </span>
            </button>
 
@@ -1580,9 +1580,9 @@ export const BattleScene: React.FC<Props> = ({
              } ${spellCounts.RAGE <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
            >
              <Zap size={13} className="text-purple-400" />
-             <span className="font-bold">激怒(RAGE)</span>
+             <span className="font-bold">げきおこ</span>
              <span className="text-[10px] bg-slate-850 text-stone-300 px-1.5 py-0.2 rounded font-mono">
-               残: {spellCounts.RAGE}
+               のこり {spellCounts.RAGE}
              </span>
            </button>
 
@@ -1603,7 +1603,7 @@ export const BattleScene: React.FC<Props> = ({
            </button>
 
            {/* 建設（旧・独立した行を、この行に統合） */}
-           <span className="text-[10px] font-black text-gray-400 self-center uppercase pl-2">建設:</span>
+           <span className="text-[10px] font-black text-gray-400 self-center uppercase pl-2">たてる:</span>
            {IN_BATTLE_BUILD_OPTIONS.map(type => {
              const bCost = IN_BATTLE_BUILD_COSTS[type] ?? 0;
              const canAfford = Math.floor(gold) >= bCost;
@@ -1798,7 +1798,7 @@ const QuizSummary: React.FC<{ answered: number; perfect: number; win?: boolean }
 const LevelUpSummary: React.FC<{ events: import('../../store/useArmyStore').LevelUpEvent[] }> = ({ events }) => {
   if (!events || events.length === 0) {
     return (
-      <div className="text-xs text-cyan-300/80 mb-2">出撃したネコに経験値が入りました！</div>
+      <div className="text-xs text-cyan-300/80 mb-2">出撃した ネコに けいけんちが 入ったよ！</div>
     );
   }
   return (
