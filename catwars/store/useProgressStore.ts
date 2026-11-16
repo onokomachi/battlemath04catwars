@@ -4,16 +4,6 @@ import { syncProgressState } from '../utils/syncToSupabase';
 import { BuffType, BuffTier, ActiveDailyBuff } from '../types';
 import { SAVE_KEYS } from '../portal/saveKeys';
 
-export interface MasteryEntry {
-  seen: number;
-  correct: number;
-  streak: number;
-  lastSeenAt?: number;
-  easeFactor?: number;
-  interval?: number;
-  nextReviewAt?: number;
-}
-
 export interface LoginBonusResult {
   dailyStarsGained: number;
   superStarsGained: number;
@@ -27,7 +17,6 @@ interface ProgressStore {
   dailyStarsDate: string;
   totalCorrect: number;
   totalAnswered: number;
-  mastery: Record<string, MasteryEntry>;
   dailyStreak: number;
   lastPlayDate: string;
   todayAnswered: number;
@@ -70,17 +59,6 @@ function endOfToday(): number {
   const d = new Date();
   d.setHours(23, 59, 59, 999);
   return d.getTime();
-}
-
-function sm2Update(entry: MasteryEntry, correct: boolean): Partial<MasteryEntry> {
-  const ef = entry.easeFactor ?? 2.5;
-  const interval = entry.interval ?? 0;
-  if (!correct) {
-    return { interval: 1, easeFactor: Math.max(1.3, ef - 0.2), nextReviewAt: Date.now() + 86400000 };
-  }
-  const newInterval = interval === 0 ? 1 : interval === 1 ? 6 : Math.round(interval * ef);
-  const newEf = Math.max(1.3, ef + 0.1);
-  return { interval: newInterval, easeFactor: newEf, nextReviewAt: Date.now() + newInterval * 86400000 };
 }
 
 export interface BuffTierInfo {
@@ -167,7 +145,6 @@ function pickSync(s: ProgressStore) {
     stars: s.stars,
     total_correct: s.totalCorrect,
     total_answered: s.totalAnswered,
-    mastery: s.mastery,
     daily_streak: s.dailyStreak,
     last_play_date: s.lastPlayDate,
     today_answered: s.todayAnswered,
@@ -188,7 +165,6 @@ export const useProgressStore = create<ProgressStore>()(
       dailyStarsDate: '',
       totalCorrect: 0,
       totalAnswered: 0,
-      mastery: {},
       dailyStreak: 0,
       lastPlayDate: '',
       todayAnswered: 0,
@@ -303,33 +279,16 @@ export const useProgressStore = create<ProgressStore>()(
         return activeDailyBuffs.filter(b => b.expiresAt > Date.now());
       },
 
-      recordAnswer: (unitId, correct, subTopicId) =>
+      // 学習の量（きょうの問題数・正解の数）。項目ごとの くりかえしの記録（mastery）は CW-5b で消した
+      // （どこからも読まれず、サーバのセーブを ふくらませていた。項目ごとの記録は useStudyStore とサーバの learning_event）
+      recordAnswer: (_unitId, correct) =>
         set((s) => {
-          // 単元とサブトピックの両方の粒度で習熟度・SM-2を更新する。
-          // サブトピック粒度が弱点特定と足場フェーディングの単位になる（設計書 P1/P2）。
-          const updateEntry = (key: string) => {
-            const prev = s.mastery[key] ?? { seen: 0, correct: 0, streak: 0 };
-            return {
-              [key]: {
-                seen: prev.seen + 1,
-                correct: prev.correct + (correct ? 1 : 0),
-                streak: correct ? prev.streak + 1 : 0,
-                lastSeenAt: Date.now(),
-                ...sm2Update(prev, correct),
-              },
-            };
-          };
           const today = todayString();
           const next = {
             totalAnswered: s.totalAnswered + 1,
             totalCorrect: s.totalCorrect + (correct ? 1 : 0),
             todayAnswered: s.lastPlayDate === today ? s.todayAnswered + 1 : 1,
             lastPlayDate: today,
-            mastery: {
-              ...s.mastery,
-              ...updateEntry(unitId),
-              ...(subTopicId ? updateEntry(subTopicId) : {}),
-            },
           };
           pickSync({ ...s, ...next });
           return next;
@@ -430,7 +389,6 @@ export const useProgressStore = create<ProgressStore>()(
           dailyStarsDate: (data.dailyStarsDate as string) ?? s.dailyStarsDate,
           totalCorrect: (data.totalCorrect as number) ?? s.totalCorrect,
           totalAnswered: (data.totalAnswered as number) ?? s.totalAnswered,
-          mastery: (data.mastery as Record<string, MasteryEntry>) ?? s.mastery,
           dailyStreak: (data.dailyStreak as number) ?? s.dailyStreak,
           lastPlayDate: (data.lastPlayDate as string) ?? s.lastPlayDate,
           todayAnswered: (data.todayAnswered as number) ?? s.todayAnswered,
@@ -448,15 +406,22 @@ export const useProgressStore = create<ProgressStore>()(
       reset: () => {
         const next = {
           stars: 0, dailyStars: 0, dailyStarsDate: '',
-          totalCorrect: 0, totalAnswered: 0, mastery: {},
+          totalCorrect: 0, totalAnswered: 0,
           dailyStreak: 0, lastPlayDate: '', todayAnswered: 0, dailyGoal: 10, dueUnitIds: [],
           lastLoginDate: '', loginStreak: 0, activeDailyBuffs: [], lastBuffDate: '',
           unlockedToday: [], unlockedTodayDate: '', permanentUnlocks: [], specialItems: [],
         };
-        syncProgressState({ stars: 0, total_correct: 0, total_answered: 0, mastery: {}, daily_streak: 0, last_play_date: '', today_answered: 0, daily_goal: 10, daily_stars: 0 });
+        syncProgressState({ stars: 0, total_correct: 0, total_answered: 0, daily_streak: 0, last_play_date: '', today_answered: 0, daily_goal: 10, daily_stars: 0 });
         return set(next);
       },
     }),
-    { name: SAVE_KEYS.progress }
+    {
+      name: SAVE_KEYS.progress,
+      // CW-5b より前の セーブに のこっている mastery（項目ごとの くりかえしの記録。もう使わない）は 読みこまない
+      merge: (persisted, current) => {
+        const { mastery: _old, ...rest } = (persisted ?? {}) as Partial<ProgressStore> & { mastery?: unknown };
+        return { ...current, ...rest };
+      },
+    }
   )
 );
