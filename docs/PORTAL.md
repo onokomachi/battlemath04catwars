@@ -25,11 +25,9 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
   - `PortalGate.tsx` … kit の JoinGate の つつみ（名乗った子に SOLO/DUO を出さない。下の「名乗り」）
 - 名乗り：kit の `JoinGate`（学級コード＋出席番号。はじめの1回）と、SOL からの `#c=&n=`（`adoptStudentFromUrl`）。氏名は扱わない。
   右下の入口（chip）は出さない（戦闘の下のバーに重なる）。あとから名乗る入口は ホームの「がっきゅうコード」（kit の `JoinSettingsRow`）。
-- **SOLO/DUO（kit の PlayModeGate）は出さない**（2026-11-16。`PortalGate.tsx`）：kit の JoinGate は 名乗った子に 授業の時間だけ「MODE SELECT（SOLO／DUO）」と右下の「● SOLO」を出すが、
-  CAT-WARS は ごほうびのゲームで ふたりで学ぶ記録を 想定していない・右下のボタンが 陣地づくりの「出撃！」と 戦闘の下のバーに重なる。
-  JoinGate には 出さないための引数が無い（kit 2fc93b1）ので、名乗っているときは JoinGate の かわりに `AppAccessGate` だけを出す（JoinGate が 名乗った子に出すのは この2つだけ）。
-  名乗っていない・体験版・ログイン必須の入力画面は 今までどおり JoinGate。記録は SOLO（DUO の区間は PlayModeGate で DUO を選んだときしか できない。前に選んでいた端末は 開いたときに kit の `forceSolo` で閉じる）。
-  kit を変えるなら：`JoinGate` に `playMode?: boolean`（false で PlayModeGate を出さない）を足せば、このつつみは要らなくなる。
+- **SOLO/DUO（kit の PlayModeGate）は出さない**（2026-11-16。`PortalGate.tsx`）：CAT-WARS は ごほうびのゲームで ふたりで学ぶ記録を 想定していない・右下のボタンが 陣地づくりの「出撃！」と 戦闘の下のバーに重なる。
+  CW-5c から kit 0.37.0 の `JoinGate` の `playMode={false}` で出さない（前は 名乗っているとき JoinGate の かわりに `AppAccessGate` だけを出す つつみ だった）。
+  名乗り・ログイン必須・体験版・単元の鍵・デモ（`allowWithout={isDemo}`）の動きは JoinGate のまま。記録は SOLO（前に DUO を選んでいた端末は 開いたときに kit の `forceSolo` で閉じる）。
 
 ## おためし・体験版（SANMON と同じ）
 - 名乗っていない＝**おためし**：全部あそべる。スタミナは使わない。記録・セーブはサーバに送らない。

@@ -17,7 +17,7 @@
  *  [13] 記録の送信（名乗り／おためし／ことわられたあとの送りなおし／二重に送らない／直近500件）
  *  [14] セーブを サーバに（往復・新しい方が勝つ・2台・おためしは送らない・大きさ・読みなおし／取りこんだ直後は 送らない）
  *  [15] 戦闘の結果は 勝ち負けが決まった瞬間に1回だけ（💠・章クリア・★・連敗。ボタンを押さずに 読みなおしても のこる・二重に入らない）
- *  [16] SOLO/DUO（kit の PlayModeGate）は 出さない（名乗ったら JoinGate の かわりに AppAccessGate だけ）
+ *  [16] SOLO/DUO（kit の PlayModeGate）は 出さない（kit 0.37.0 の JoinGate の playMode={false}）
  *  [17] 体験版（項目の開け閉め・送らない）は scripts/portalTrialTest.ts（体験のタブを はじめから つくるため 別の試験）
  *  [18] デモモード（0000・0）：入る・出る・セーブが3つに分かれる・送らない・関門がスタミナを使わない・鍵を見ない・中身（章・段・かけら・💠・Lv）
  */
@@ -559,8 +559,7 @@ console.log('[16] SOLO/DUO は 出さない');
   const idx = readFileSync(join(process.cwd(), 'index.tsx'), 'utf8');
   const gate = readFileSync(join(process.cwd(), 'catwars/portal/PortalGate.tsx'), 'utf8');
   check(!/<JoinGate\b/.test(idx) && /<PortalGate\s*\/>/.test(idx), 'index.tsx は JoinGate を じかに 出さない（PortalGate を通す）');
-  check(/named && !isTrial\(\)\) return isPortalConfigured \? <AppAccessGate/.test(gate), '名乗っているときは AppAccessGate だけ（PlayModeGate の SOLO/DUO を出さない）');
-  check(/<JoinGate config=\{PORTAL\} chip=\{false\}[^>]*\/>/.test(gate), '名乗っていないときは JoinGate（右下の入口なし）');
+  check(/<JoinGate config=\{PORTAL\} chip=\{false\} playMode=\{false\}[^>]*\/>/.test(gate), 'JoinGate の playMode={false}（kit 0.37.0）：名乗った子にも SOLO/DUO を出さない・右下の入口なし');
   check(/forceSolo\(\)/.test(gate), '前に DUO を選んでいた端末は SOLO に もどす');
   check(!/PlayModeGate/.test(idx) && !/<PlayModeGate/.test(gate), 'PlayModeGate を どこにも 出さない');
 }
