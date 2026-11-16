@@ -4,10 +4,10 @@ import './catwars/portal/saveProfile';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { adoptStudentFromUrl, endTrial } from 'learning-app-kit/sync';
-import { JoinGate } from 'learning-app-kit/react';
 import { CatWars } from './catwars/components/CatWars';
 import { ErrorBoundary } from './catwars/components/ui/ErrorBoundary';
 import { PORTAL } from './catwars/portal/config';
+import { PortalGate } from './catwars/portal/PortalGate';
 import { trialOnClassDevice } from './catwars/portal/saveProfile';
 
 // SOL から #c=<学級コード>&n=<番号> 付きで来たら、その子として名乗る（await しない。つないでいないビルドでは何もしない）
@@ -31,7 +31,8 @@ ReactDOM.createRoot(rootElement).render(
       ) : <CatWars />}
     </ErrorBoundary>
     {/* 学級コードの入力（はじめの1回）。つないでいないビルドでは何も出さない。
-        右下の入口（chip）は出さない：戦闘の下のバーに重なるため。あとから名乗る入口は ホームの「がっきゅうコード」（portal/PortalCard.tsx） */}
-    <JoinGate config={PORTAL} chip={false} />
+        右下の入口（chip）は出さない：戦闘の下のバーに重なるため。あとから名乗る入口は ホームの「がっきゅうコード」（portal/PortalCard.tsx）。
+        名乗ったあとの SOLO/DUO（右下の「● SOLO」と MODE SELECT）も出さない（portal/PortalGate.tsx） */}
+    <PortalGate />
   </React.StrictMode>,
 );
