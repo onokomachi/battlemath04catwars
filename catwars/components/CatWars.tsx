@@ -237,7 +237,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       {/* Title */}
       <div className="text-center px-4 mt-1 mb-3">
         <h1 className="text-3xl sm:text-4xl font-black text-hologram tracking-wide" style={fontMono}>CAT-WARS</h1>
-        <p className="text-[11px] text-[#38bdf8]/80 tracking-[0.3em] mt-1">拠点をきずき ネコ軍団で せめこもう</p>
+        <p className="text-[11px] text-[#38bdf8]/80 tracking-[0.3em] mt-1">基地を きずき ネコぐんだんで せめこもう</p>
         <div className="mt-2"><TitleChip /></div>
       </div>
 
