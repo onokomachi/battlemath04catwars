@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "firebase-setup-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    { "binding": "OAUTH_STORE", "id": "3f41a070ac474a9c926621e2dd53098e" }
+  ]
+}
