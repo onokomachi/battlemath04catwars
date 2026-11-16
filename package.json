@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
-    "learning-app-kit": "https://github.com/onokomachi/learning-app-kit/archive/df7ec52368a75bf642035914e8415c00861ba857.tar.gz",
+    "learning-app-kit": "https://github.com/onokomachi/learning-app-kit/archive/2fc93b10146b8f526aa0e4f75be02a27d3d71115.tar.gz",
     "lucide-react": "^1.73.0",
     "motion": "^14.14.0",
     "react": "^19.1.1",

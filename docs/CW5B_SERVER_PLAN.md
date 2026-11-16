@@ -1,6 +1,6 @@
 # CW-5b サーバ側の下書き（提案。**まだ何も流していない**）
 
-> **2026-11-16：第1段（kit 0.36.0 `df7ec52`・PRISM の SQL ファイル `supabase/sql/2026-11-16-catwars-*.sql`）・第2段（CAT-WARS：鍵 `catwars`・記録の送信・セーブの push/pull・mastery を消す）で実装ずみ／持ち主が SQL を流すのを待っている。** いまの しくみは `docs/PORTAL.md`。
+> **2026-11-16：第1段（kit 0.36.0 `df7ec52`・PRISM の SQL ファイル `supabase/sql/2026-11-16-catwars-*.sql`）・第2段（CAT-WARS：鍵 `catwars`・記録の送信・セーブの push/pull・mastery を消す）で実装ずみ。SQL は 2026-11-16 に流しおわった。CAT-WARS は全学級で閉じて始まる。先生が PRISM の SANMON タブで開ける。** いまの しくみは `docs/PORTAL.md`。
 
 CW-5a（端末の側だけ・2026-11-16）のつづき。サーバ（Supabase `gakkyu-portal`）・kit・PRISM に入れるもの。
 **このあと点検の担当が計画してから、全体セッション（kit・PRISM・SANMON・SOL・CAT-WARS を つないだセッション）で行う。**

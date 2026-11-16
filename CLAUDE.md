@@ -2,7 +2,7 @@
 
 小4算数のごほうびゲーム。基地をきずき、ネコ軍団で敵の基地をせめる。**問題を解くことがゲームを動かす**（解かないと進まない）。
 学級ポータルに つないだ（CW-5a・CW-5b 2026-11-16：名乗り・おためし・SANMON と共通のスタミナ・サーバのかけら・専用の鍵 `catwars`・記録の送信・セーブのサーバ保存）。**SOL には まだ出していない**。
-**サーバの SQL（PRISM `supabase/sql/2026-11-16-catwars-*.sql`）は 持ち主が流すのを待っている**（流す前は 名乗った子は出撃できない・記録は端末に たまる）。くわしくは `docs/PORTAL.md`・`docs/CW5B_SERVER_PLAN.md`。
+**サーバの SQL（PRISM `supabase/sql/2026-11-16-catwars-*.sql`）は 2026-11-16 に流しおわった。CAT-WARS は全学級で閉じて始まる。先生が PRISM の SANMON タブで開ける**（開けるまで 名乗った子は出撃できない）。くわしくは `docs/PORTAL.md`・`docs/CW5B_SERVER_PLAN.md`。
 
 進み具合の正本は知識集 `onokomachi-master-DB` の `techspecs/catwars-rebuild-plan-and-status.md`。
 

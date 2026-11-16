@@ -3,12 +3,14 @@
 CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 - CW-5a：端末の側（名乗り・おためし・SANMON と共通のスタミナ・サーバのかけら）。
 - CW-5b 第1段（kit 0.36.0・PRISM の SQL `supabase/sql/2026-11-16-catwars-*.sql`）と 第2段（この CAT-WARS）：専用の鍵 `catwars`・記録の送信・セーブのサーバ保存。
-  **サーバの SQL は 持ち主が これから流す**。流す前は：鍵 `catwars` が返らないので 名乗った子は「先生が まだ ひらいていないよ」で出撃できない（おためしは あそべる）・記録は ことわられて 端末に たまる（あとで送る）・セーブは とどかない（端末には ある）。
+  **サーバの SQL は 2026-11-16 に流しおわった。CAT-WARS は全学級で閉じて始まる。先生が PRISM の SANMON タブで開ける**（開けるまで 名乗った子は「先生が まだ ひらいていないよ」で出撃できない。おためしは あそべる）。
 計画と戻し方は `docs/CW5B_SERVER_PLAN.md`。
 
 ## つなぎ方
 - 環境変数は SANMON と同じ名前：`VITE_SUPABASE_URL`／`VITE_SUPABASE_PUBLISHABLE_KEY`（publishable キーだけ。値は Vercel の環境変数だけに置く）。
   **値が無いビルドは「つないでいない」**：名乗りの画面も スタミナも出ず、今までどおり 全部あそべる（`portal/config.ts` の `isPortalConfigured`）。
+- **本番の Vercel に入れる手順**（持ち主 または 点検の担当）：1. Vercel の CAT-WARS のプロジェクト → Settings → Environment Variables に、SANMON のプロジェクトと同じ2つ（`VITE_SUPABASE_URL`・`VITE_SUPABASE_PUBLISHABLE_KEY`）を Production（と Preview）で入れる。
+  2. Vite はビルドのときに値を埋めこむので、入れたあと 再デプロイ（Redeploy）する。3. 本番で 名乗りの画面が出ることを確かめる（出なければ 値が入っていない）。値は ファイル・知識集・チャットに書かない。
 - 置き場所：`catwars/portal/`
   - `config.ts` … つなぎ先・モードの鍵（`CATWARS_MODE_KEY = 'catwars'`）・reason の前の部分（`CATWARS_SPEND_REASON`）
   - `saveKeys.ts` … セーブ（persist）の鍵の一覧。**ストアの鍵は ここだけに書く**。ストアでない鍵（送れていない記録 `outbox`）は `NON_STORE_KEYS` にも
@@ -66,7 +68,7 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 - **送れなかった分は 端末に のこす**（`outbox.ts`・鍵 `SAVE_KEYS.outbox`＝`catwars-portal-outbox`・直近500件・学級／おためし の入れかえの対象・サーバのセーブには入れない）。
   1件ごとに 名乗っていた子の id を付け、送るのは いま名乗っている子の分だけ（同じ端末で番号を変えても まざらない）。
   どこまで送れたかは kit の高水位（`lak_sent_ts_catwars`）、二重は サーバが event_id で はじく。
-- **ことわられても 遊びは止めない**（SQL を流す前は `apps` に `catwars` が無いので `sync_events` が ことわる）。次の機会に 送りなおす。
+- **ことわられても 遊びは止めない**（SQL を流す前は `apps` に `catwars` が無いので `sync_events` が ことわった。2026-11-16 に流したので いまは 届く）。次の機会に 送りなおす。
 - 間のあけ方（`answerSync.ts`）：1問ごとには 通信しない。解いたら **15秒あと**に まとめて（待っているあいだの問題も いっしょに。待ちは のばさない）・戦闘の おわり 0.5秒・タブを かくしたら すぐ・名乗ったとき。1度に送るのは1つだけ。
   SANMON は 2秒（れんしゅうの1問が長い）。CAT-WARS は 戦闘の中で 数秒ごとに解くので 長くした。
 
@@ -86,7 +88,8 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 - おためし・つないでいないビルド・まだ読めていない：端末の数え方（まちがえずに3回 解けた項目の割合）。
 
 ## まだ していないこと
-- サーバの SQL（持ち主が流す。`docs/CW5B_SERVER_PLAN.md` §5）。流したら：先生が SANMON タブで CAT-WARS を開ける → 名乗った子が出撃できる・たまっていた記録が送られる。
+- （2026-11-16 に済んだ）サーバの SQL（`docs/CW5B_SERVER_PLAN.md` §5）。先生が SANMON タブで CAT-WARS を開ける → 名乗った子が出撃できる・たまっていた記録が送られる。
+- Vercel の本番の環境変数（上の「本番の Vercel に入れる手順」）。
 - デモモード（0000・0）。
 - 1問の最初のまちがいの型：いまの `apps/` の `onMiss` は 何も わたさないので 入れていない。
 
