@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CHARACTERS, CHARACTER_BY_ID, getCharacterSprite, stageForLevel } from '../../data/characters';
 import {
   CampaignChapter, ChapterTier, ENEMY_TRAIT_NOTE, ENEMY_UNIT_STATS, TIER_INFO, tierDifficulty, type EnemyUnitKind,
@@ -12,6 +12,7 @@ import { sfx } from '../../utils/audioEngine';
 import { useStudyStore } from '../../store/useStudyStore';
 import { familySkillIds } from '../../learn/shards';
 import { skillsForFamily } from '../../data/skills';
+import { loadPack, packLoaded } from '../../learn/gradePack';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
@@ -47,6 +48,9 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
   const owned = useBaseStore(s => s.owned);
   const permanentUnlocks = useProgressStore(s => s.permanentUnlocks);
   const perfect = useStudyStore(s => s.perfect);
+  // かけら（＝スキル）は「出せる問題」で数える。ここで読みこんでおくと、戦闘の始まりで sim に渡すスキルとも そろう
+  const [, setReady] = useState(packLoaded());
+  useEffect(() => { let alive = true; loadPack().then(() => { if (alive) setReady(true); }).catch(() => {}); return () => { alive = false; }; }, []);
   /** 開いているスキルの数を ★ で（スキルの無い系統は 空） */
   const skillStars = (id: string): string => (skillsForFamily(id).length ? '★'.repeat(familySkillIds(id, perfect).length) : '');
 

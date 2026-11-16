@@ -736,17 +736,17 @@ console.log('\n[10] スキル（24個）：開いていれば効く・開いて�
       enemy(r, 'brute', 11, 7, false); return hitOf(r, c); } },
     ranged_sky: { fam: 'archer', note: '空中の敵への 1発', expect: (a, b) => Math.abs(a - b * 1.5) < 0.01, metric: (sk) => {
       const r = arena({ archer: sk }); cat(r, 'archer', 10, 7); const e = enemy(r, 'flyer', 12, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e); } },
-    ranged_reach: { fam: 'archer', note: '射程 3.8 マスの敵に とどく', expect: (a, b) => a > 0 && b === 0, metric: (sk) => {
-      const r = arena({ archer: sk }); cat(r, 'archer', 10, 7); const e = enemy(r, 'grunt', 13.8, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e, 60); } },
-    ranged_first: { fam: 'archer', note: 'さいしょの 1発', expect: (a, b) => Math.abs(a - b * 2) < 0.01, metric: (sk) => {
+    ranged_reach: { fam: 'archer', note: '射程 4.2 マスの敵に とどく', expect: (a, b) => a > 0 && b === 0, metric: (sk) => {
+      const r = arena({ archer: sk }); cat(r, 'archer', 10, 7); const e = enemy(r, 'grunt', 14.2, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e, 60); } },
+    ranged_first: { fam: 'archer', note: 'さいしょの 1発', expect: (a, b) => Math.abs(a - b * 3) < 0.01, metric: (sk) => {
       const r = arena({ archer: sk }); cat(r, 'archer', 10, 7); const e = enemy(r, 'brute', 12, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e); } },
     tank_cover: { fam: 'giant', note: '砲台から 近接系が うける 1発', expect: (a, b) => a < b && a > 0, metric: (sk) => {
       const r = arena({ giant: sk }, [{ type: BuildingType.CANNON, x: 12, y: 7 }]);
       const c = cat(r, 'barbarian', 12, 11, { hp: 9999, maxHp: 9999 }); cat(r, 'giant', 12, 12.6); return hitOf(r, c); } },
     tank_last: { fam: 'giant', note: 'タンクが たおれたあとの なかまの HP', expect: (a, b) => a > b, metric: (sk) => {
       const r = arena({ giant: sk }); const g = cat(r, 'giant', 10, 7); const c = cat(r, 'barbarian', 11, 7, { hp: 20 }); g.hp = 0; run(r, 2); return c.hp; } },
-    tank_smash: { fam: 'giant', note: '施設への倍率', expect: (a, b) => Math.abs(a - b - 0.5) < 1e-9, metric: (sk) => arena({ giant: sk }).cfg.unitStats.P1.giant.buildingDamageMult },
-    magic_pierce: { fam: 'magic', note: '盾持ちへの 1発', expect: (a, b) => Math.abs(a - b * 1.33) < 0.01, metric: (sk) => {
+    tank_smash: { fam: 'giant', note: '施設への倍率', expect: (a, b) => Math.abs(a - b - 0.75) < 1e-9, metric: (sk) => arena({ giant: sk }).cfg.unitStats.P1.giant.buildingDamageMult },
+    magic_pierce: { fam: 'magic', note: '盾持ちへの 1発', expect: (a, b) => Math.abs(a - b * 1.5) < 0.01, metric: (sk) => {
       const r = arena({ magic: sk }); cat(r, 'magic', 10, 7); const e = enemy(r, 'guard', 12, 7, true, { hp: 9999, maxHp: 9999 }); return hitOf(r, e); } },
     magic_burst: { fam: 'magic', note: 'となりの敵が うけたダメージ', expect: (a, b) => a > 0 && b === 0, metric: (sk) => {
       const r = arena({ magic: sk }); cat(r, 'magic', 10, 7); const t = enemy(r, 'grunt', 12, 7, true, { hp: 9999, maxHp: 9999 });

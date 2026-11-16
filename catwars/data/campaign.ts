@@ -305,7 +305,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 0.9, enemyDamageMult: 0.85,
       defenseDamageMult: 0.8, defenseHpMult: 0.9,
-      firstSpawnDelayMs: 7000, enemySpawnRatePerSec: 6.36,
+      firstSpawnDelayMs: 7000, enemySpawnRatePerSec: 7.82,
       unitPool: ['grunt', 'shooter'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -325,7 +325,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.0, enemyDamageMult: 0.95,
       defenseDamageMult: 0.9, defenseHpMult: 1.0,
-      firstSpawnDelayMs: 6500, enemySpawnRatePerSec: 6.38,
+      firstSpawnDelayMs: 6500, enemySpawnRatePerSec: 7.66,
       unitPool: ['grunt', 'shooter', 'runner'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -365,7 +365,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.1, enemyDamageMult: 1.05,
       defenseDamageMult: 1.1, defenseHpMult: 1.1,
-      firstSpawnDelayMs: 5500, enemySpawnRatePerSec: 6.16,
+      firstSpawnDelayMs: 5500, enemySpawnRatePerSec: 7.58,
       unitPool: ['grunt', 'shooter', 'brute'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -385,7 +385,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     difficulty: {
       enemyHpMult: 1.2, enemyDamageMult: 1.15,
       defenseDamageMult: 1.2, defenseHpMult: 1.15,
-      firstSpawnDelayMs: 5000, enemySpawnRatePerSec: 8.42,
+      firstSpawnDelayMs: 5000, enemySpawnRatePerSec: 9.6,
       unitPool: ['grunt', 'shooter', 'runner', 'flyer'],
       startEnergy: PLAYER_START_ENERGY, energyPerSec: 0,
     },
@@ -406,7 +406,7 @@ export const CAMPAIGN: CampaignChapter[] = [
       enemyHpMult: 1.3, enemyDamageMult: 1.2,
       // 防衛施設が最多の章なので、HP倍率は上げない（威力だけで難しさを出す）
       defenseDamageMult: 1.3, defenseHpMult: 1.0,
-      firstSpawnDelayMs: 4500, enemySpawnRatePerSec: 6.23,
+      firstSpawnDelayMs: 4500, enemySpawnRatePerSec: 7.66,
       unitPool: ['grunt', 'shooter', 'brute', 'flyer'],
       // 増援ペースを上げるたびに、体数で指定したボス出現がどんどん早まる
       // （旧: 10秒間隔×9体=約90秒 → 2秒間隔×9体=約20秒 → 1.4秒間隔×45体=約68秒）。
@@ -500,7 +500,7 @@ export const TIER_INFO: Record<ChapterTier, {
 }> = {
   normal:  { label: 'ふつう',     color: '#38bdf8', hpMult: 1.0,  damageMult: 1.0,  rewardMult: 1.0, bossShield: 1, baseLevelPlus: 0 },
   hard:    { label: 'むずかしい', color: '#f59e0b', hpMult: 1.35, damageMult: 1.1,  rewardMult: 1.5, bossShield: 2, baseLevelPlus: 12 },
-  extreme: { label: 'げきむず',   color: '#ef4444', hpMult: 1.8,  damageMult: 1.2,  rewardMult: 2.2, bossShield: 3, baseLevelPlus: 24, cardLimit: 14 },
+  extreme: { label: 'げきむず',   color: '#ef4444', hpMult: 1.8,  damageMult: 1.2,  rewardMult: 2.2, bossShield: 3, baseLevelPlus: 24, cardLimit: 7 },
 };
 
 /**
@@ -513,7 +513,7 @@ export const TIER_INFO: Record<ChapterTier, {
  * サポートモードでは +3／+6（ASSIST_CARD_BONUS）。決め方は scripts/balanceTest.ts（ACCURACY=1 と げきむず の帯）。
  */
 export const TIER_CARD_LIMIT: Partial<Record<ChapterTier, Record<number, number>>> = {
-  extreme: { 1: 14, 2: 14, 3: 14, 4: 14, 5: 14, 6: 14, 7: 14, 8: 14 },
+  extreme: { 1: 6, 2: 7, 3: 10, 4: 8, 5: 5, 6: 7, 7: 8, 8: 6 },
 };
 /** サポートモードで まいすうに足す（Lv1／Lv2） */
 export const ASSIST_CARD_BONUS: Record<0 | 1 | 2, number> = { 0: 0, 1: 3, 2: 6 };
@@ -546,8 +546,8 @@ function tierBossAt(ch: CampaignChapter, tier: ChapterTier): number | undefined 
  * 変えたら `npm run test:balance:all`（3段＋脅威）。さがすときは scripts/tuneTiers.ts。
  */
 export const TIER_SPAWN_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<number, number>> = {
-  hard:    { 1: 4.95, 2: 2.58, 3: 3.05, 4: 2.28, 5: 2.31, 6: 1.97, 7: 1.43, 8: 1.34 },
-  extreme: { 1: 2.59, 2: 2.85, 3: 2.42, 4: 1.95, 5: 1.71, 6: 1.95, 7: 1.21, 8: 1.34 },
+  hard:    { 1: 4.95, 2: 2.58, 3: 2.95, 4: 2.33, 5: 2.54, 6: 2.01, 7: 1.64, 8: 1.71 },
+  extreme: { 1: 3.11, 2: 2.9, 3: 2.66, 4: 1.57, 5: 2.1525, 6: 1.95, 7: 1.47, 8: 1.54 },
 };
 
 /**
@@ -558,8 +558,8 @@ export const TIER_SPAWN_MULT: Record<Exclude<ChapterTier, 'normal'>, Record<numb
 // むずかしい 第2章は 出現だけ速めると、とかない子が 敵をたおした分のエナジーで勝つことがあった（24回に1回）ので、兵の強さで合わせた
 export const TIER_POWER_MULT: Record<ChapterTier, Record<number, number>> = {
   normal: {},
-  hard: { 1: 1.42, 2: 1.3 },
-  extreme: { 1: 1.3 },
+  hard: { 1: 1.6, 2: 1.3 },
+  extreme: { 1: 1.34 },
 };
 
 /** その章・その段の難易度（サポート・脅威レベルをかける前） */
@@ -596,10 +596,11 @@ export function chapterBaseLevel(ch: CampaignChapter, tier: ChapterTier): number
  * SANMON の「相手のレベルは自分に合わせて上がる」と同じ考え方。**画面に「脅威 Lv.n」を出す**（隠れた調整はしない）。
  * 下がる方向には はたらかない（弱い手持ちで来た子を、さらに楽にはしない。そちらはサポートモード）。
  *
- * 育ち方の式（levelMult）に合わせる（2026-11-15 CW-4a）：敵の倍率 ＝ levelMult(基準 + 0.75×育てた分) ÷ levelMult(基準)。
- * 0.75 は「育てたぶんの4分の1は そのまま楽になる」の意味。上限 +120%。「脅威 Lv.n」の n ＝ round(0.75×育てた分)。
+ * 育ち方の式（levelMult）に合わせる（2026-11-15 CW-4a）：敵の倍率 ＝ levelMult(基準 + G×育てた分) ÷ levelMult(基準)。上限 +120%。
+ * 「脅威 Lv.n」の n ＝ round(G×育てた分)。G は 0.75 → 0.9（CW-4a）→ 0.99（CW-4b：1手の速さを そろえたら 0.9 では にがての差が +20 を超えた）。
+ * **スキルは数えない**（学習で開く「脅威に追いつかれない強さ」＝学習のごほうび。data/skills.ts）。
  */
-export const THREAT_GROWTH = 0.9;
+export const THREAT_GROWTH = 0.99;
 export const THREAT_MAX_BONUS = 1.2;
 export function threatLevel(avgLevel: number, baseLevel: number): number {
   return Math.max(0, Math.round(THREAT_GROWTH * (avgLevel - baseLevel)));

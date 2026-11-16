@@ -87,21 +87,21 @@ export const SKILL_SHARDS: Record<1 | 2 | 3, number> = { 1: 2, 2: 4, 3: 8 };
 
 export const SKILLS: SkillDef[] = [
   // ── 近接：たたかいつづける ──
-  { id: 'melee_feast', family: 'barbarian', slot: 1, name: 'かちどき', desc: 'てきを たおすと すこし げんきに なる', effect: { healOnKillPct: 0.2 } },
-  { id: 'melee_rally', family: 'barbarian', slot: 2, name: 'ふんばり', desc: 'HPが はんぶんより へると こうげきが はやい', effect: { lowHpAtkIntervalMult: 0.75 } },
-  { id: 'melee_pack', family: 'barbarian', slot: 3, name: 'えんじん', desc: 'なかまが 3びき ちかくに いると かたくなる', effect: { packAllies: 3, packRadius: 1.6, packTakenMult: 0.8 } },
+  { id: 'melee_feast', family: 'barbarian', slot: 1, name: 'かちどき', desc: 'てきを たおすと すこし げんきに なる', effect: { healOnKillPct: 0.35 } },
+  { id: 'melee_rally', family: 'barbarian', slot: 2, name: 'ふんばり', desc: 'HPが はんぶんより へると こうげきが はやい', effect: { lowHpAtkIntervalMult: 0.65 } },
+  { id: 'melee_pack', family: 'barbarian', slot: 3, name: 'えんじん', desc: 'なかまが 3びき ちかくに いると かたくなる', effect: { packAllies: 3, packRadius: 2, packTakenMult: 0.7 } },
   // ── 遠距離：とおくから ねらう ──
   { id: 'ranged_sky', family: 'archer', slot: 1, name: 'そらうち', desc: 'そらの てきに 1.5ばいの ダメージ', effect: { vsFlyerMult: 1.5 } },
-  { id: 'ranged_reach', family: 'archer', slot: 2, name: 'ロングショット', desc: 'しゃていが 0.5マス のびる', effect: { rangeBonus: 0.5 } },
-  { id: 'ranged_first', family: 'archer', slot: 3, name: 'せんせいの いちげき', desc: 'さいしょの 1ぱつが 2ばいの ダメージ', effect: { firstHitMult: 2 } },
+  { id: 'ranged_reach', family: 'archer', slot: 2, name: 'ロングショット', desc: 'しゃていが 1マス のびる', effect: { rangeBonus: 1 } },
+  { id: 'ranged_first', family: 'archer', slot: 3, name: 'せんせいの いちげき', desc: 'さいしょの 1ぱつが 3ばいの ダメージ', effect: { firstHitMult: 3 } },
   // ── タンク：なかまを まもる ──
-  { id: 'tank_cover', family: 'giant', slot: 1, name: 'かばう', desc: 'ちかくの なかまへの ほうだいの こうげきを うける', effect: { coverPct: 0.3, coverRadius: 2 } },
-  { id: 'tank_last', family: 'giant', slot: 2, name: 'さいごの はげまし', desc: 'たおれるとき まわりの なかまを かいふく', effect: { deathHealPct: 0.25, deathHealRadius: 2.5 } },
-  { id: 'tank_smash', family: 'giant', slot: 3, name: 'てっつい', desc: 'たてものへの ダメージが ふえる', effect: { buildingDamageBonus: 0.5 } },
+  { id: 'tank_cover', family: 'giant', slot: 1, name: 'かばう', desc: 'ちかくの なかまへの ほうだいの こうげきを うける', effect: { coverPct: 0.4, coverRadius: 2 } },
+  { id: 'tank_last', family: 'giant', slot: 2, name: 'さいごの はげまし', desc: 'たおれるとき まわりの なかまを かいふく', effect: { deathHealPct: 0.35, deathHealRadius: 2.5 } },
+  { id: 'tank_smash', family: 'giant', slot: 3, name: 'てっつい', desc: 'たてものへの ダメージが ふえる', effect: { buildingDamageBonus: 0.75 } },
   // ── 魔法：とくべつな てきに つよい ──
-  { id: 'magic_pierce', family: 'magic', slot: 1, name: 'たてやぶり', desc: 'たてもちに もっと つよくなる', effect: { vsGuardMult: 1.33 } },
-  { id: 'magic_burst', family: 'magic', slot: 2, name: 'ひろがる まほう', desc: 'あたった まわりの てきにも すこし あたる', effect: { splashPct: 0.35, splashRadius: 1.0 } },
-  { id: 'magic_seek', family: 'magic', slot: 3, name: 'かいふくやを ねらえ', desc: 'かいふく役の てきを さきに ねらう', effect: { preferKind: 'medic', preferRadius: 5, vsPreferMult: 1.25 } },
+  { id: 'magic_pierce', family: 'magic', slot: 1, name: 'たてやぶり', desc: 'たてもちに もっと つよくなる', effect: { vsGuardMult: 1.5 } },
+  { id: 'magic_burst', family: 'magic', slot: 2, name: 'ひろがる まほう', desc: 'あたった まわりの てきにも すこし あたる', effect: { splashPct: 0.5, splashRadius: 1.2 } },
+  { id: 'magic_seek', family: 'magic', slot: 3, name: 'かいふくやを ねらえ', desc: 'かいふく役の てきを さきに ねらう', effect: { preferKind: 'medic', preferRadius: 5, vsPreferMult: 1.5 } },
   // ── 高速：すばやく うごく ──
   { id: 'speed_stop', family: 'speed', slot: 1, name: 'ばくだん とめ', desc: 'じばくロボを さきに ねらって つよい', effect: { preferKind: 'kamikaze', preferRadius: 5, vsPreferMult: 1.5 } },
   { id: 'speed_dash', family: 'speed', slot: 2, name: 'ダッシュ', desc: 'でてから 3びょうは ダメージを うけない', effect: { spawnGuardMs: 3000 } },
@@ -109,15 +109,15 @@ export const SKILLS: SkillDef[] = [
   // ── 飛行：そらから せめる ──
   { id: 'fly_dodge', family: 'flying', slot: 1, name: 'ジグザグ ひこう', desc: 'ほうだいに ねらわれるのが おそくなる', effect: { aimDelayMs: 600 } },
   { id: 'fly_ace', family: 'flying', slot: 2, name: 'くうちゅうせん', desc: 'そらの てきに 1.5ばいの ダメージ', effect: { vsFlyerMult: 1.5 } },
-  { id: 'fly_perch', family: 'flying', slot: 3, name: 'はねやすめ', desc: 'かべの ちかくで やすむと かいふく', effect: { wallRestHealPct: 0.04 } },
+  { id: 'fly_perch', family: 'flying', slot: 3, name: 'はねやすめ', desc: 'かべの ちかくで やすむと かいふく', effect: { wallRestHealPct: 0.05 } },
   // ── 回復：なかまを ささえる ──
-  { id: 'heal_aura', family: 'healer', slot: 1, name: 'いやしの ひかり', desc: 'ちかくの なかまを すこしずつ かいふく', effect: { healPct: 0.06, healRadius: 2.5, healIntervalMs: 2000 } },
+  { id: 'heal_aura', family: 'healer', slot: 1, name: 'いやしの ひかり', desc: 'ちかくの なかまを すこしずつ かいふく', effect: { healPct: 0.08, healRadius: 2.5, healIntervalMs: 2000 } },
   { id: 'heal_wide', family: 'healer', slot: 2, name: 'ひろい ひかり', desc: 'かいふくの はんいが 1マス ひろがる', effect: { healRadiusBonus: 1 } },
   { id: 'heal_calm', family: 'healer', slot: 3, name: 'しずめの うた', desc: 'シールドの ボスの こうげきを よわめる', effect: { bossWeakenPct: 0.3, bossWeakenRadius: 3 } },
   // ── 爆発：まとめて こわす ──
-  { id: 'bomb_blast', family: 'bomber', slot: 1, name: 'ひろがる ばくはつ', desc: 'ばくはつが まわりの てきにも あたる', effect: { splashPct: 0.4, splashRadius: 1.2 } },
+  { id: 'bomb_blast', family: 'bomber', slot: 1, name: 'ひろがる ばくはつ', desc: 'ばくはつが まわりの てきにも あたる', effect: { splashPct: 0.5, splashRadius: 1.3 } },
   { id: 'bomb_wall', family: 'bomber', slot: 2, name: 'かべくずし', desc: 'かべに 3ばいの ダメージ', effect: { vsWallMult: 3 } },
-  { id: 'bomb_last', family: 'bomber', slot: 3, name: 'さいごの ばくはつ', desc: 'たおれるとき まわりの てきに ばくはつ', effect: { deathBlastMult: 1, deathBlastRadius: 1.5 } },
+  { id: 'bomb_last', family: 'bomber', slot: 3, name: 'さいごの ばくはつ', desc: 'たおれるとき まわりの てきに ばくはつ', effect: { deathBlastMult: 1.5, deathBlastRadius: 1.5 } },
 ];
 
 export const SKILL_BY_ID: Record<string, SkillDef> = Object.fromEntries(SKILLS.map(s => [s.id, s]));

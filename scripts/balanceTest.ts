@@ -93,26 +93,30 @@ if (process.env.ACCURACY === '1') {
  * 章の めやすの手持ち（plusLevel 0）と、そこから 20 レベル育てた手持ち（脅威レベルあり）で、
  * **「にがて」の勝率の差（+20 − +0）が −5〜+20 ポイント**なら合格（育てて弱くなってはいけない・楽勝にもならない）。
  * 手持ちは両方とも loadoutForLevel で作る。脅威レベルなし（noThreat）は参考に出す（無いと どれだけ楽になるか）。
+ * **スキルは +0 の手持ちと そろえる**（2026-11-15 CW-4b）：脅威レベルは レベルだけで決まり、スキル（学習で開く）には追いつかない
+ *（学習のごほうび）。この試験は「レベルを上げても楽勝にならない」を見るので、スキルの分は「+20(スキルも)」の列に参考で出す。
  */
 if (process.env.THREAT === '1') {
   const PLUS = Number(process.env.PLUS ?? 20);
   const LO = -5, HI = 20;
   console.log(`\nCAT-WARS 脅威レベルの試験（ふつうの段・各 ${RUNS}回。手持ち＝めやす と めやす+${PLUS}）\n`);
-  console.log('章  脅威  倍率   にがて:+0  +' + PLUS + '(脅威)  +' + PLUS + '(なし)  差  判定 │ ふつう:+0  +' + PLUS + '(脅威)  +' + PLUS + '(なし) │ 解いた問題(ふつう・勝ち) +0 / +' + PLUS + '(脅威) / +' + PLUS + '(なし)');
+  console.log('章  脅威  倍率   にがて:+0  +' + PLUS + '(脅威)  +' + PLUS + '(なし)  差  判定  +' + PLUS + '(スキルも) │ ふつう:+0  +' + PLUS + '(脅威)  +' + PLUS + '(なし) │ 解いた問題(ふつう・勝ち) +0 / +' + PLUS + '(脅威) / +' + PLUS + '(なし)');
   console.log('─'.repeat(130));
   let bad = 0;
   for (let i = 0; i < CAMPAIGN.length; i++) {
     const ch = CAMPAIGN[i];
     if (ONLY.length > 0 && !ONLY.includes(ch.no)) continue;
     const base = chapterBaseLevel(ch, 'normal');
-    const play = (skill: typeof NORMAL_SKILL, plus: number, noThreat = false) =>
+    const baseSkills = loadoutForChapter(i, 'normal', 0).skills;
+    const play = (skill: typeof NORMAL_SKILL, plus: number, noThreat = false, grownSkills = false) =>
       Array.from({ length: RUNS }, (_, r) => playOnce(i, seedFor(r), {
-        skill, maxSeconds: MAX_SECONDS, plusLevel: plus, noThreat, loadout: loadoutForChapter(i, 'normal', plus),
+        skill, maxSeconds: MAX_SECONDS, plusLevel: plus, noThreat,
+        loadout: { ...loadoutForChapter(i, 'normal', plus), ...(grownSkills ? {} : { skills: baseSkills }) },
       }));
     const rate = (rs: PlayResult[]) => (rs.filter(r => r.win).length / RUNS) * 100;
     const probs = (rs: PlayResult[]) => { const w = rs.filter(r => r.win); return w.length ? w.reduce((a, b) => a + b.problems, 0) / w.length : 0; };
     const n0 = play(NORMAL_SKILL, 0), nT = play(NORMAL_SKILL, PLUS), nN = play(NORMAL_SKILL, PLUS, true);
-    const w0 = play(WEAK_SKILL, 0), wT = play(WEAK_SKILL, PLUS), wN = play(WEAK_SKILL, PLUS, true);
+    const w0 = play(WEAK_SKILL, 0), wT = play(WEAK_SKILL, PLUS), wN = play(WEAK_SKILL, PLUS, true), wS = play(WEAK_SKILL, PLUS, false, true);
     const diff = rate(wT) - rate(w0);
     const ok = diff >= LO && diff <= HI;
     if (!ok) bad++;
@@ -120,12 +124,12 @@ if (process.env.THREAT === '1') {
     const pct = (v: number) => `${v.toFixed(0).padStart(4)}%`;
     console.log(
       `${String(ch.no).padStart(2)}  ${String(th).padStart(3)}  ×${threatMultFor(base + PLUS, base).toFixed(2)}   ` +
-      `${pct(rate(w0))}    ${pct(rate(wT))}     ${pct(rate(wN))}  ${(diff >= 0 ? '+' : '') + diff.toFixed(0)}  ${ok ? '✅' : '❌'}  │ ` +
+      `${pct(rate(w0))}    ${pct(rate(wT))}     ${pct(rate(wN))}  ${(diff >= 0 ? '+' : '') + diff.toFixed(0)}  ${ok ? '✅' : '❌'}  ${pct(rate(wS))} │ ` +
       `${pct(rate(n0))}    ${pct(rate(nT))}     ${pct(rate(nN))}  │ ` +
       `${probs(n0).toFixed(1)} / ${probs(nT).toFixed(1)} / ${probs(nN).toFixed(1)}問`,
     );
   }
-  console.log(`\n（差＝にがての勝率の「+${PLUS}(脅威)」−「+0」。${LO}〜+${HI}ポイントなら ✅。「なし」は脅威レベルを はたらかせないとき＝育てすぎると楽になる分）`);
+  console.log(`\n（差＝にがての勝率の「+${PLUS}(脅威)」−「+0」。${LO}〜+${HI}ポイントなら ✅。スキルは +0 と同じ。「なし」は脅威レベルを はたらかせないとき＝育てすぎると楽になる分。「スキルも」は +${PLUS} の かけらで開くスキルも持たせたとき（参考・合否に使わない）`);
   if (bad) { console.log(`\n✗ ${bad} 章で、育てた手持ちとの差が 帯の外（THREAT_GROWTH を 0.6〜0.9 の間で見なおす）\n`); process.exit(1); }
   console.log('\n✓ 育てても 弱くならず、楽勝にもならない（脅威レベルが はたらいている）\n');
   process.exit(0);
