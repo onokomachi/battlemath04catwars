@@ -4,6 +4,8 @@ import { useArmyStore } from '../../store/useArmyStore';
 import { useStudyStore } from '../../store/useStudyStore';
 import { familyShards, familyLevelCap, weakestUnitForFamily, skillsToNextShard, MAX_SHARDS } from '../../learn/shards';
 import { loadPack, packLoaded, UNIT_NAME_BY_KEY, unitsForFamily } from '../../learn/gradePack';
+import { skillsForFamily, unlockedSkillIds } from '../../data/skills';
+import { SkillList, NewSkillNotice } from './SkillParts';
 
 /** 系統の「上限・かけら・つぎにとく単元」 */
 function capInfo(familyId: string, perfect: Record<string, number>) {
@@ -43,6 +45,9 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
         <span className="text-white/40 text-xs ml-auto">{CHARACTERS.length}系統 / {CHARACTERS.length * 3}フォーム</span>
       </div>
 
+      {/* 新しく開いたスキル（1回だけ） */}
+      {packLoaded() && <div className="px-3 pt-3"><NewSkillNotice /></div>}
+
       {/* Grid of families */}
       <div className="grid grid-cols-2 gap-3 p-3">
         {CHARACTERS.map(fam => {
@@ -75,6 +80,9 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
               <div className="w-full mt-1 text-[10px] leading-tight" data-testid="cap-line">
                 <span className="text-white/60">上限 Lv.{ci.cap}</span>
                 <span className="text-[#c4b5fd]">　💎{ci.shards}/{MAX_SHARDS}</span>
+                {skillsForFamily(fam.id).length > 0 && (
+                  <span className="text-[#facc15]" data-testid="skill-stars">　{'★'.repeat(unlockedSkillIds(fam.id, ci.shards).length)}<span className="text-white/20">{'☆'.repeat(3 - unlockedSkillIds(fam.id, ci.shards).length)}</span></span>
+                )}
               </div>
               {atCap && ci.cap < MAX_LEVEL && ci.nextUnit && (
                 <div className="w-full mt-0.5 text-[10px] leading-tight text-[#fde68a]">
@@ -87,8 +95,9 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
       </div>
 
       <p className="text-center text-white/30 text-xs px-6 pb-4">
-        戦闘に出すとネコが経験値を得てレベルアップ！ Lv10とLv30で姿が進化するニャ。<br />
-        レベルの上限は、そのネコの単元を まちがえずに とくと 上がる（💎かけら 1つで +5・Lv60まで）。
+        戦闘に出すと ネコに 経験値が 入って レベルアップ！ Lv10と Lv30で すがたが 進化するニャ。<br />
+        レベルの上限は、そのネコの単元を まちがえずに とくと 上がる（💎かけら 1つで +5・Lv60まで）。<br />
+        💎かけらが 2・4・8こに なると スキル（★）が ひらく。
       </p>
 
       {/* Detail modal */}
@@ -151,6 +160,9 @@ const DetailModal: React.FC<{
           )}
         </div>
 
+        {/* スキル（かけらで開く） */}
+        <SkillList familyId={fam.id} shards={info.shards} />
+
         {/* 3 evolution forms */}
         <div className="text-white/60 text-xs font-bold mb-2" style={fontMono}>しんか</div>
         <div className="flex flex-col gap-2">
@@ -205,8 +217,8 @@ const DetailModal: React.FC<{
           ))}
         </div>
         <div className="text-white/35 text-[10px] mt-2 leading-relaxed">
-          ※ 敵の砲台は射程4.5・とても長い。射程で勝てないネコは、タンク系に受けてもらうか、
-          建物へのダメージが大きいネコ（ぼむにゃー ×4.0）でこわそう。
+          ※ 敵の砲台は しゃてい4.5で とても 長い。とどかない ネコは、タンク系に うけてもらうか、
+          たてものに つよい ネコ（ぼむにゃー ×4.0）で こわそう。
         </div>
       </div>
     </div>

@@ -9,6 +9,9 @@ import { useProgressStore } from '../../store/useProgressStore';
 import { unlockedFamilies } from '../../utils/battleLoadout';
 import { barracksNeededFor } from '../../data/facilities';
 import { sfx } from '../../utils/audioEngine';
+import { useStudyStore } from '../../store/useStudyStore';
+import { familySkillIds } from '../../learn/shards';
+import { skillsForFamily } from '../../data/skills';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
@@ -43,6 +46,9 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
   const setFormation = useArmyStore(s => s.setFormation);
   const owned = useBaseStore(s => s.owned);
   const permanentUnlocks = useProgressStore(s => s.permanentUnlocks);
+  const perfect = useStudyStore(s => s.perfect);
+  /** 開いているスキルの数を ★ で（スキルの無い系統は 空） */
+  const skillStars = (id: string): string => (skillsForFamily(id).length ? '★'.repeat(familySkillIds(id, perfect).length) : '');
 
   const unlocked = useMemo(() => unlockedFamilies(owned, permanentUnlocks), [owned, permanentUnlocks]);
   const formation = useMemo(() => effectiveFormation(saved, unlocked), [saved, unlocked]);
@@ -127,6 +133,7 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
                     <img src={getCharacterSprite(fam.spriteFamily, stageForLevel(lv))} alt={fam.displayName}
                       style={{ width: 36, height: 36, objectFit: 'contain' }} draggable={false} />
                     <span className="text-[9px] text-white/80 leading-none mt-0.5">{fam.displayName}</span>
+                    {skillStars(fam.id) && <span className="text-[8px] text-[#facc15] leading-none" data-testid="slot-skill-stars">{skillStars(fam.id)}</span>}
                   </>
                 ) : <span className="text-white/25 text-lg">＋</span>}
               </button>
@@ -158,7 +165,7 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
                   {!open && <span className="absolute inset-0 flex items-center justify-center text-lg">🔒</span>}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-white text-xs font-bold leading-tight">{fam.displayName} <span style={{ color: fam.accent, ...fontMono }}>Lv{lv}</span></div>
+                  <div className="text-white text-xs font-bold leading-tight">{fam.displayName} <span style={{ color: fam.accent, ...fontMono }}>Lv{lv}</span>{skillStars(fam.id) && <span className="text-[#facc15] text-[10px]" title="ひらいている スキルの数"> {skillStars(fam.id)}</span>}</div>
                   <div className="text-white/50 text-[10px] leading-tight truncate">{open ? fam.role : lockNote(fam.id)}</div>
                   {open && tags.length > 0 && <div className="text-[9px] text-[#a3e635] leading-tight">{tags.join(' ')}</div>}
                 </div>

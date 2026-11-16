@@ -11,6 +11,7 @@
 import { unitSkillIds, unitsForFamily } from './gradePack';
 import { useStudyStore } from '../store/useStudyStore';
 import { levelCapForShards } from '../data/characters';
+import { unlockedSkillIds } from '../data/skills';
 
 export const MAX_SHARDS = 8;
 /** この回数 まちがえずに解けた項目を「できた」と数える */
@@ -60,4 +61,9 @@ export function weakestUnitForFamily(familyId: string, perfect: Record<string, n
     if (s < bestS) { bestS = s; best = k; }
   }
   return best;
+}
+
+/** その系統で 開いているスキルの id（かけら 2／4／8 で開く。data/skills.ts） */
+export function familySkillIds(familyId: string, perfect: Record<string, number> = useStudyStore.getState().perfect): string[] {
+  return unlockedSkillIds(familyId, familyShards(familyId, perfect));
 }
