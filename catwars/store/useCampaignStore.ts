@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { CAMPAIGN, assistLevelForLosses, tierKey, type ChapterTier } from '../data/campaign';
 import { SAVE_KEYS } from '../portal/saveKeys';
+import { isDemo } from '../portal/demoMode';
 
 interface CampaignStore {
   /** クリアずみの章ID（**ふつう だけ**。章の開放・「n/8章クリア」に使う） */
@@ -73,6 +74,8 @@ export const useCampaignStore = create<CampaignStore>()(
       // 第1章は常に開放。以降は「前の章をクリア」で開放（線形進行）。
       // 進行を1本にすることで「どこまで来たか」が子どもにも一目でわかる。
       isUnlocked: (chapterId) => {
+        // デモモード（紹介用）は 全部の章を えらべる（portal/demoMode.ts）
+        if (isDemo()) return CAMPAIGN.some(c => c.id === chapterId);
         const idx = CAMPAIGN.findIndex(c => c.id === chapterId);
         if (idx <= 0) return idx === 0;
         return (get().clearedChapters ?? []).includes(CAMPAIGN[idx - 1].id);
@@ -85,6 +88,7 @@ export const useCampaignStore = create<CampaignStore>()(
         : (get().tierCleared ?? []).includes(tierKey(chapterId, tier)),
 
       isTierUnlocked: (chapterId, tier) => {
+        if (isDemo()) return get().isUnlocked(chapterId);   // デモは 3つの段とも
         if (tier === 'normal') return get().isUnlocked(chapterId);
         if (tier === 'hard') return get().isTierCleared(chapterId, 'normal');
         return get().isTierCleared(chapterId, 'hard');

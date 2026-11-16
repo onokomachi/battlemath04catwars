@@ -1,6 +1,6 @@
 /**
  * 学級ポータルの 画面の部品（CW-5a・2026-11-16）。
- *   PortalCard      … ホーム：名乗りの入口（kit の JoinSettingsRow）と スタミナ（共通＋町）。おためし・体験版の説明
+ *   PortalCard      … ホーム：名乗りの入口（kit の JoinSettingsRow。0000・0 で デモモード）と スタミナ（共通＋町）。おためし・体験版・デモの説明
  *   SortieStamina   … 出撃の前（陣地づくりの「出撃！」の上）：この出撃で使う町・町のスタミナ・共通・1回の数・ことわられたわけ
  * つないでいないビルドでは どちらも何も出さない（今までどおり）。
  */
@@ -9,6 +9,8 @@ import { JoinSettingsRow } from 'learning-app-kit/react';
 import { isTrial } from 'learning-app-kit/sync';
 import { SANMON_RULES, SANMON_UNITS } from 'learning-app-kit/sanmon';
 import { PORTAL, isPortalConfigured } from './config';
+import { isDemo } from './demoMode';
+import { enterDemo, exitDemo } from './saveProfile';
 import { usePortal, sortieLock } from './usePortal';
 import { sortieStamina } from './stamina';
 
@@ -31,6 +33,7 @@ export const PortalCard: React.FC = () => {
     .slice(0, 6)
     .map(([k, n]) => ({ name: SANMON_UNITS.find((u) => u.key === k)?.name ?? k, n }));
   const lock = student ? sortieLock(modes) : null;
+  const demo = !student && !trial && isDemo();
 
   return (
     <div className="px-4 pt-3" data-testid="portal-card">
@@ -56,17 +59,26 @@ export const PortalCard: React.FC = () => {
           </>
         ) : trial ? (
           <p className="text-white/70 text-[11px] leading-relaxed">いまは たいけんばん。スタミナは つかわないよ。きろくは のこらないよ。</p>
+        ) : demo ? (
+          <div className="text-center" data-testid="portal-demo">
+            <p className="text-sm font-black text-amber-300">デモモード</p>
+            <p className="text-[11px] text-amber-100/80 mt-1 leading-relaxed">
+              すべての 章と 3つの 段が えらべるよ。かけらは ぜんぶ 8。スタミナは つかわず、きろくも セーブも どこにも おくられないよ（セーブは この たんまつの デモ用）。
+            </p>
+            <button onClick={exitDemo} className="mt-2 text-xs font-bold text-amber-200 underline underline-offset-4" data-testid="demo-exit">デモを おわる</button>
+          </div>
         ) : (
           <p className="text-white/70 text-[11px] leading-relaxed" data-testid="portal-otameshi">
             いまは <b className="text-white">おためし</b>。スタミナを つかわずに あそべるよ。きろくは 先生に とどかないし、
             おためしの セーブは がっきゅうコードを 入れると べつに なるよ。
           </p>
         )}
-        {isPortalConfigured && !trial && (
+        {isPortalConfigured && !trial && !demo && (
           student && !openJoin ? (
             <button onClick={() => setOpenJoin(true)} className="mt-2 text-[11px] text-[#7dd3fc] underline underline-offset-4">がっきゅうコードを 入れなおす</button>
           ) : (
-            <div className="mt-2 bg-white rounded-xl p-2"><JoinSettingsRow config={PORTAL} /></div>
+            // 学級コード 0000・番号 0 は デモモード（先生のパスワード。SANMON と同じ）
+            <div className="mt-2 bg-white rounded-xl p-2"><JoinSettingsRow config={PORTAL} onDemo={enterDemo} /></div>
           )
         )}
       </div>
@@ -82,7 +94,7 @@ export const SortieStamina: React.FC<{ formation: readonly string[]; message?: s
   if (!student) {
     return (
       <p className="text-center text-white/50 text-[11px] pb-1.5" data-testid="sortie-otameshi">
-        {isTrial() ? 'たいけんばん' : 'おためし'}：スタミナは つかわないよ
+        {isTrial() ? 'たいけんばん' : isDemo() ? 'デモ' : 'おためし'}：スタミナは つかわないよ
       </p>
     );
   }

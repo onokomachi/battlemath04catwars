@@ -25,11 +25,9 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
   - `PortalGate.tsx` … kit の JoinGate の つつみ（名乗った子に SOLO/DUO を出さない。下の「名乗り」）
 - 名乗り：kit の `JoinGate`（学級コード＋出席番号。はじめの1回）と、SOL からの `#c=&n=`（`adoptStudentFromUrl`）。氏名は扱わない。
   右下の入口（chip）は出さない（戦闘の下のバーに重なる）。あとから名乗る入口は ホームの「がっきゅうコード」（kit の `JoinSettingsRow`）。
-- **SOLO/DUO（kit の PlayModeGate）は出さない**（2026-11-16。`PortalGate.tsx`）：kit の JoinGate は 名乗った子に 授業の時間だけ「MODE SELECT（SOLO／DUO）」と右下の「● SOLO」を出すが、
-  CAT-WARS は ごほうびのゲームで ふたりで学ぶ記録を 想定していない・右下のボタンが 陣地づくりの「出撃！」と 戦闘の下のバーに重なる。
-  JoinGate には 出さないための引数が無い（kit 2fc93b1）ので、名乗っているときは JoinGate の かわりに `AppAccessGate` だけを出す（JoinGate が 名乗った子に出すのは この2つだけ）。
-  名乗っていない・体験版・ログイン必須の入力画面は 今までどおり JoinGate。記録は SOLO（DUO の区間は PlayModeGate で DUO を選んだときしか できない。前に選んでいた端末は 開いたときに kit の `forceSolo` で閉じる）。
-  kit を変えるなら：`JoinGate` に `playMode?: boolean`（false で PlayModeGate を出さない）を足せば、このつつみは要らなくなる。
+- **SOLO/DUO（kit の PlayModeGate）は出さない**（2026-11-16。`PortalGate.tsx`）：CAT-WARS は ごほうびのゲームで ふたりで学ぶ記録を 想定していない・右下のボタンが 陣地づくりの「出撃！」と 戦闘の下のバーに重なる。
+  CW-5c から kit 0.37.0 の `JoinGate` の `playMode={false}` で出さない（前は 名乗っているとき JoinGate の かわりに `AppAccessGate` だけを出す つつみ だった）。
+  名乗り・ログイン必須・体験版・単元の鍵・デモ（`allowWithout={isDemo}`）の動きは JoinGate のまま。記録は SOLO（前に DUO を選んでいた端末は 開いたときに kit の `forceSolo` で閉じる）。
 
 ## おためし・体験版（SANMON と同じ）
 - 名乗っていない＝**おためし**：全部あそべる。スタミナは使わない。記録・セーブはサーバに送らない。
@@ -37,8 +35,19 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
   しまう先は `catwars_profile_class`／`catwars_profile_trial`、いまの側は `catwars_active_profile`。kit の鍵（`lak_*`）は入れかえない。
   おためしの進み具合は 学級に引きつがない。**CW-5a より前から あそんでいた端末の中身は「おためし」の側**になる（はじめて動いたとき 名乗っていないので）。
 - **体験版**（SOL の `#trial`。kit の `isTrial()`）：おためしと同じ。**学級コードが入っている端末で体験のリンクを開くと あそばせない**（`trialOnClassDevice`。ふつうのタブと localStorage を取りあって 学級のセーブを こわさないため）。
-- PRISM の「ログイン必須」を入れると、おためしは使えない（kit の JoinGate）。
-- SANMON とちがう：**デモモード（0000・0）は まだ無い**。
+- PRISM の「ログイン必須」を入れると、おためしは使えない（kit の JoinGate）。デモモードは入れる（`allowWithout={isDemo}`）。
+- **体験版で 先生が閉じられる項目**（CW-5c。`portal/trialFeatures.ts`。キーは kit 0.37.0 の `TRIAL_FEATURE_SETS.catwars` と同じ）：
+  `sortie`＝出撃（範囲・ステージ・メンバー・陣地づくり・戦闘）／`army`＝ネコ部隊・なかまを よぶ・出撃バフ／`collection`＝あつめる。はじめは全部 使える（PRISM の管理タブで「体験に出す」と項目を決める）。
+  閉じた項目は ホームのボタンが「🔒 たいけんばんでは つかえないよ」、押すと kit の `TrialLock`。ボタン以外の道でも その画面には入れない（`CatWars.tsx` の `viewKey`）。
+  ホームの左上に「たいけんばん」の しるし（下の kit のしるしで「おわる」）。陣地づくりの 施設の買い物は 出撃の中なので `sortie` に入る。
+
+## デモモード（0000・0。CW-5c・2026-11-16）
+- 入り方は SANMON と同じ：ホームの「がっきゅうコード」（kit の `JoinSettingsRow`）か、ログイン必須の入力画面で 学級コード「0000」・番号「0」→ 先生のパスワード（サーバの `verify_demo`）。
+- 名乗らない（入るとき 名乗りを消す）→ 記録もセーブも送らない・スタミナを使わない・モードの鍵・平日モード・番号ごとの停止を見ない。
+- セーブは3つ目の `demo`（`catwars_profile_demo`。学級・おためしと まざらない）。しるしは `catwars_demo_v1`（`portal/demoMode.ts`）。
+- 画面の左上に小さく「DEMO」（「← もどる」に重ならないよう文字は短く。押せない）。ホームの「デモを おわる」で おためしにもどる。デモ中に学級コードを入れたら デモは おわり（学級のセーブ）。
+- 紹介用の中身（`portal/demo.ts`）：全部の章と3つの段をえらべる（`useCampaignStore` の `isUnlocked`・`isTierUnlocked`）・かけらは全単元 8（`applyDemoShards`）・**はじめて入ったときだけ** 💠9999・全系統 Lv20（`seedDemoOnce`。デモのセーブにだけ。しるし `catwars_demo_seeded_v1`）。
+- 体験のタブでは デモにしない。デモの端末で体験のリンクを開いたら 遊ばせない（`trialOnDemoDevice`。学級の端末と同じ理由）。
 
 ## スタミナ（SANMON と共通）
 - 数えるのは サーバ（`sanmon_status`／`sanmon_spend`）。CAT-WARS は 数を決めない。
@@ -99,7 +108,6 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 ## まだ していないこと
 - （2026-11-16 に済んだ）サーバの SQL（`docs/CW5B_SERVER_PLAN.md` §5）。先生が SANMON タブで CAT-WARS を開ける → 名乗った子が出撃できる・たまっていた記録が送られる。
 - Vercel の本番の環境変数（上の「本番の Vercel に入れる手順」）。
-- デモモード（0000・0）。
 - 1問の最初のまちがいの型：いまの `apps/` の `onMiss` は 何も わたさないので 入れていない。
 
 ## saveBundle の大きさ（`npm run test:portal` の [8]）

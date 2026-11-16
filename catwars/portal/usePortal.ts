@@ -21,6 +21,7 @@ import { syncAnswersNow, syncAnswersSoon } from './answerSync';
 import { saveSync } from './saveSync';
 import { useStudyStore } from '../store/useStudyStore';
 import { setServerShards } from '../learn/shards';
+import { applyDemoShards, seedDemoOnce } from './demo';
 
 /** サーバとのやりとり（開発のときだけ 差しかえられる：__cwPortalMock） */
 export interface PortalService {
@@ -62,7 +63,12 @@ export const usePortalStore = create<PortalState>()(() => ({
 export async function refreshPortal(): Promise<void> {
   const s = service.configured() ? service.student() : null;
   usePortalStore.setState({ student: s });
-  if (!s) { usePortalStore.setState({ status: null, modes: null, loaded: false }); setServerShards(null); return; }
+  if (!s) {
+    usePortalStore.setState({ status: null, modes: null, loaded: false });
+    // デモモード（名乗らない・紹介用）は かけらを 全単元 8 に。おためしは 端末の数え方（portal/demo.ts）
+    if (!applyDemoShards()) setServerShards(null);
+    return;
+  }
   const [r, m] = await Promise.all([service.fetchStatus(s.studentId), service.fetchModes(s.studentId)]);
   if (r.ok) {
     usePortalStore.setState({ status: r.status, loaded: true });
@@ -135,6 +141,9 @@ export function usePortalLifecycle(): void {
   useEffect(() => {
     if (started) return;
     started = true;
+    // デモモード：はじめて入ったときだけ 💠・ネコのレベルを入れる（デモのセーブにだけ）・かけら 8
+    seedDemoOnce();
+    applyDemoShards();
     void refreshPortal();
     // 記録とセーブ（CW-5b。名乗っているときだけ動く。SANMON の App.tsx と同じ間のあけ方）
     void pullThenPush();

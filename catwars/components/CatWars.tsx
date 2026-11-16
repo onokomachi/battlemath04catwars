@@ -32,8 +32,13 @@ import { sfx } from '../utils/audioEngine';
 import { usePortalLifecycle, startSortie, usePortal, sortieLock, playingLock, reportSortieLock, afterBattle } from '../portal/usePortal';
 import { PortalCard, SortieStamina } from '../portal/PortalCard';
 import { settleBattle, newBattleId } from '../utils/settleBattle';
+import { isTrial } from 'learning-app-kit/sync';
+import { TrialLock, useTrialAllows } from 'learning-app-kit/react';
+import { catwarsTrialKeyOf, CATWARS_TRIAL_LABEL, type CatwarsTrialKey } from '../portal/trialFeatures';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
+/** 体験版で 先生が閉じた項目の ボタンの下の文（押すと kit の TrialLock） */
+const TRIAL_LOCKED_SUB = '🔒 たいけんばんでは つかえないよ';
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 
 // 出撃導線: 範囲えらび → ステージえらび → 出撃メンバー（5枠）→ 陣地づくり（施設の買う・レベル上げも ここ）→ 戦闘
@@ -148,6 +153,19 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     afterBattle();
   };
 
+  // 体験版（SOL の体験の入口）：先生が PRISM の管理タブで閉じた項目（portal/trialFeatures.ts。体験でなければ いつも使える）
+  const trialAllows = useTrialAllows();
+  const trialOpen = (key: CatwarsTrialKey) => trialAllows(key);
+  const viewKey = catwarsTrialKeyOf(view);
+  if (viewKey && !trialOpen(viewKey)) {
+    // 閉じた項目の画面には 入れない（ボタンから来ても・とちゅうで設定が読めても）
+    return (
+      <div className="fixed inset-0 z-[130]" style={font} data-testid="trial-lock">
+        <TrialLock label={CATWARS_TRIAL_LABEL[viewKey]} onBack={() => { setBattleTicket(null); setView('home'); }} />
+      </div>
+    );
+  }
+
   // ── サブ画面 ───────────────────────────────
   if (view === 'army') return <ArmyRosterScreen onBack={() => setView('home')} />;
   if (view === 'collection') return <CollectionScreen onBack={() => setView('home')} />;
@@ -252,7 +270,11 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-y-auto" style={font}>
       {/* Header */}
       <div className="flex items-center justify-between p-4">
-        {onExit ? <button onClick={onExit} className="text-white/60 hover:text-white text-sm">← メニュー</button> : <span />}
+        {onExit ? <button onClick={onExit} className="text-white/60 hover:text-white text-sm">← メニュー</button>
+          : isTrial() ? (
+            // 体験の入口から来た子が 最初に迷わないよう、小さく しるし（下の kit のしるしで「おわる」もできる）
+            <span className="rounded-full border border-[#fcd34d]/60 bg-[#fcd34d]/10 px-2.5 py-1 text-[11px] font-black text-[#fde68a]" data-testid="trial-chip">たいけんばん</span>
+          ) : <span />}
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {dailyStreak >= 1 && <StatChip icon="🔥" value={`${dailyStreak}`} color="#fb923c" />}
           <StatChip icon="💠" value={Math.floor(resources.gold)} color="#38bdf8" />
@@ -310,18 +332,21 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
 
       {/* Big actions */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4 pt-4">
-        <HubButton icon="⚔️" label="出撃！" sub={homeLock ? `🔒 ${homeLock}` : allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`} color="#ef4444"
-          locked={!!homeLock}
+        <HubButton icon="⚔️" label="出撃！" sub={homeLock ? `🔒 ${homeLock}` : !trialOpen('sortie') ? TRIAL_LOCKED_SUB : allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`} color="#ef4444"
+          locked={!!homeLock || !trialOpen('sortie')}
           onClick={() => {
             // 閉じていても 押せる形のまま。押すと わけを出す（SANMON と同じ）
             if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); return; }
             setSortieMsg(null); resetBattleSession(); setView('range');
           }} big />
-        <HubButton icon="🐱" label="ネコ部隊" sub="レベル・進化・スキル" color="#a3e635"
+        <HubButton icon="🐱" label="ネコ部隊" sub={trialOpen('army') ? 'レベル・進化・スキル' : TRIAL_LOCKED_SUB} color="#a3e635"
+          locked={!trialOpen('army')}
           onClick={() => setView('army')} />
-        <HubButton icon="📖" label="あつめる" sub={coins >= CAPSULE_RULES.cost ? `🪙${coins} カプセルを まわせる！` : '図鑑・バッジ・シール'} color="#7dd3fc"
+        <HubButton icon="📖" label="あつめる" sub={!trialOpen('collection') ? TRIAL_LOCKED_SUB : coins >= CAPSULE_RULES.cost ? `🪙${coins} カプセルを まわせる！` : '図鑑・バッジ・シール'} color="#7dd3fc"
+          locked={!trialOpen('collection')}
           onClick={() => setView('collection')} />
-        <HubButton icon="✨" label="出撃バフ" sub="⚡エナジーで きょうの 戦力アップ" color="#facc15"
+        <HubButton icon="✨" label="出撃バフ" sub={trialOpen('army') ? '⚡エナジーで きょうの 戦力アップ' : TRIAL_LOCKED_SUB} color="#facc15"
+          locked={!trialOpen('army')}
           onClick={() => setView('buffs')} />
       </div>
 
@@ -350,7 +375,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
 
       {/* Mercenaries shortcut */}
       <div className="px-4 pt-3 pb-8">
-        <button onClick={() => setView('mercs')}
+        <button onClick={() => setView('mercs')} aria-disabled={!trialOpen('army') || undefined}
           className="w-full py-3 rounded-xl border border-[#a3e635]/40 text-[#a3e635] text-sm font-bold hover:bg-[#a3e635]/10 transition-all active:scale-95">
           💠 なかまを よぶ（💠で ボスの 宇宙ネコを なかまに）
         </button>

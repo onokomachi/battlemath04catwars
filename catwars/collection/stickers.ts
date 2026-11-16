@@ -9,7 +9,8 @@
  *   ・そろえても特別なごほうびは無い（コンプガチャにしない）。うまり具合を見せるだけ。
  *   ・シールは かざり。強さには ひびかない。
  *
- * 絵はまだ無いので、絵文字・いまあるネコや施設の絵・色のわくで仮に作る。絵ができたら image を差しかえる（docs/ART_LIST.md）。
+ * 絵：ネコ・ボス・施設の絵は いまある PNG。それ以外は 手で書いた SVG（public/assets/stickers/<id>.svg。きまりは docs/ART_STYLE.md）。
+ * 絵が読めないときは 絵文字に もどる（CollectionParts の ArtImg）。絵を描きなおすときは 同じ名前で上書きせず 新しい名前で足す。
  * 引く処理（pullCapsule）は 乱数を外から渡す純粋な関数（scripts/collectionTest.ts で天井と確率を確かめる）。
  */
 
@@ -44,7 +45,7 @@ export interface StickerDef {
   rarity: StickerRarity;
   /** 絵が無いときに出す絵文字（絵ができても のこしておく） */
   emoji: string;
-  /** 絵（あれば）。あとで docs/ART_LIST.md の絵に差しかえる */
+  /** 絵（PNG か SVG）。読めないときは emoji */
   image?: string;
   /** わくの色 */
   frame: string;
@@ -56,9 +57,11 @@ export interface StickerDef {
 
 const CH = '/assets/sprites/chars';
 const SP = '/assets/sprites';
+/** 手で書いた SVG のシール（docs/ART_STYLE.md） */
+const ST = (id: string) => `/assets/stickers/${id}.svg`;
 
 const n = (id: string, name: string, emoji: string, frame: string, note: string, image?: string): StickerDef =>
-  ({ id, name, rarity: 'normal', emoji, frame, note, image });
+  ({ id, name, rarity: 'normal', emoji, frame, note, image: image ?? ST(id) });
 const r = (id: string, name: string, emoji: string, frame: string, note: string, image?: string, tint?: string): StickerDef =>
   ({ id, name, rarity: 'rare', emoji, frame, note, image, tint });
 const s = (id: string, name: string, emoji: string, frame: string, note: string, image?: string): StickerDef =>
@@ -119,8 +122,8 @@ export const STICKERS: StickerDef[] = [
   r('st-plant', 'はつでんしょ', '🔌', '#a3e635', 'エネルギーを つくる 施設。', `${SP}/gold-mine.png`),
   r('st-barracks', 'へいしゃ', '🏠', '#fbbf24', 'あたらしい なかまが やってくる。', `${SP}/barracks.png`),
   r('st-camp', 'キャンプ', '⛺', '#4ade80', 'じゅもんの じゅんびを する ばしょ。', `${SP}/army-camp.png`),
-  r('st-galaxy', 'ぎんがの うず', '🌌', '#818cf8', 'ネコ軍団が めざす ぎんがの まんなか。'),
-  r('st-meteor', 'ながれぼし', '🌠', '#fde047', 'ねがいごとは 「まちがえずに とけますように」。'),
+  r('st-galaxy', 'ぎんがの うず', '🌌', '#818cf8', 'ネコ軍団が めざす ぎんがの まんなか。', ST('st-galaxy')),
+  r('st-meteor', 'ながれぼし', '🌠', '#fde047', 'ねがいごとは 「まちがえずに とけますように」。', ST('st-meteor')),
   // ── スーパーレア（6）──
   s('st-hydra', 'はいどらにゃん', '🐉', '#a855f7', '3つの 頭の 宇宙かいじゅう。', `${CH}/boss-titan-1.png`),
   s('st-mecha', 'めかにゃー', '🤖', '#64748b', 'かたの 大砲で とおくを ねらう。', `${CH}/boss-artillery-1.png`),
@@ -130,7 +133,7 @@ export const STICKERS: StickerDef[] = [
   s('st-kaiser', 'めかかいざー', '⚙️', '#64748b', 'たてものを 一撃で こわす きかいの 王。', `${CH}/boss-artillery-3.png`),
   s('st-darkmage', 'にゃーくめいじ', '📖', '#a78bfa', 'まほうの 本を あやつる 大まほうつかい。', `${CH}/magic-3.png`),
   // ── でんせつ（2）──
-  l('st-emperor', 'にゃーすべいだー', '🌑', '#facc15', '銀河の 皇帝。マントの かげが 戦場に のびる。', `${CH}/boss-overlord-3.png`),
+  l('st-emperor', 'クロマント', '🌑', '#facc15', '銀河の 皇帝。マントの かげが 戦場に のびる。', `${CH}/boss-overlord-3.png`),
   l('st-cosmic', 'こずみっくはいどら', '🌟', '#facc15', '宇宙に ひろがる でんせつの かいじゅう。', `${CH}/boss-titan-3.png`),
 ];
 
