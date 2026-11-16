@@ -41,7 +41,7 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
       <div className="flex items-center gap-3 p-4 border-b border-white/10 sticky top-0 z-10"
         style={{ background: 'rgba(10,14,26,0.95)' }}>
         <button onClick={onBack} className="text-white/50 hover:text-white text-sm">← もどる</button>
-        <h2 className="text-[#22d3ee] font-bold text-base" style={fontMono}>ネコ図鑑</h2>
+        <h2 className="text-[#22d3ee] font-bold text-base" style={fontMono}>ネコ部隊</h2>
         <span className="text-white/40 text-xs ml-auto">{CHARACTERS.length}系統 / {CHARACTERS.length * 3}フォーム</span>
       </div>
 

@@ -17,6 +17,11 @@ import { QUIZ_BASE_REWARD, cardLimitFor } from '../../data/campaign';
 import { familySkillIds } from '../../learn/shards';
 import { NewSkillNotice } from '../army/SkillParts';
 import { grantStudyReward } from '../../bridge';
+import { useCollectionStore } from '../../store/useCollectionStore';
+import { useCampaignStore } from '../../store/useCampaignStore';
+import { refreshCollection } from '../../collection/record';
+import { unitDexKey, bossDexKey } from '../../collection/dex';
+import { GainsSummary, type Gains } from '../collection/CollectionParts';
 import { sfx } from '../../utils/audioEngine';
 import { useProgressStore, BUFF_LEVEL_INFO } from '../../store/useProgressStore';
 import { useArmyStore } from '../../store/useArmyStore';
@@ -24,7 +29,7 @@ import { CHARACTERS, CHARACTER_BY_ID, getCharacterSprite, spriteFamilyForSubType
 import { PinchZoomLayer } from './PinchZoomLayer';
 import {
   CampaignChapter, ChapterDifficulty, ENEMY_UNIT_STATS, ENEMY_UNIT_COST, ASSIST_LEVELS,
-  ENEMY_TRAIT_NOTE, TIER_INFO, type ChapterTier,
+  ENEMY_TRAIT_NOTE, TIER_INFO, tierKey, type ChapterTier,
   EnemyUnitKind, pickWeightedEnemyUnit, enemySpawnRate,
   ENEMY_SPAWN_BUILDINGS, ENEMY_PRODUCTION_RATE, BARRACKS_ONLY_UNITS,
 } from '../../data/campaign';
@@ -290,6 +295,13 @@ export const BattleScene: React.FC<Props> = ({
   const [quizOpen, setQuizOpen] = useState(false);
   /** この戦闘で解いた問題の数・うち まちがえずに解けた数（星と結果の画面に使う） */
   const quizStatsRef = useRef({ answered: 0, perfect: 0 });
+  // ── 図鑑（CW-4c）：見た敵・たおした敵を 盤上の出入りから拾う（sim の外。sim には手を入れない）──
+  const dexSeenRef = useRef<Set<string>>(new Set(isPvp ? [] : [bossDexKey(chapter.id)]));
+  const dexAliveRef = useRef<Map<string, { key: string; x: number; y: number; kamikaze: boolean }>>(new Map());
+  const dexDefeatedRef = useRef<Record<string, number>>({});
+  const shieldsBrokenRef = useRef(0);
+  const coinsAtStartRef = useRef(useCollectionStore.getState().coinsTotal);
+  const [gains, setGains] = useState<Gains | null>(null);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [damagedEntities, setDamagedEntities] = useState<Set<string>>(new Set());
   const [projectiles, setProjectiles] = useState<{ id: string; fromX: number; fromY: number; toX: number; toY: number; startedAt: number; duration: number; type: 'CANNON' | 'TESLA' }[]>([]);
@@ -445,6 +457,28 @@ export const BattleScene: React.FC<Props> = ({
     if (message) showMessage(message.text, message.ms);
   }, []);
 
+  /**
+   * 図鑑のために 敵の兵の出入りを見る（見た目の側だけ。sim の状態は読むだけ）。
+   * 盤上から消えた兵は「たおした」。自爆ロボが 施設のそばで消えたときは 自分で ばくはつした ので 数えない。
+   */
+  const trackEnemies = (ents: BattleEntity[]) => {
+    const alive = dexAliveRef.current;
+    const now = new Set<string>();
+    for (const e of ents) {
+      if (e.team !== 'DEFENDER' || e.type !== 'TROOP' || !e.kind) continue;
+      now.add(e.id);
+      const key = unitDexKey(e.kind);
+      if (!alive.has(e.id)) dexSeenRef.current.add(key);
+      alive.set(e.id, { key, x: e.x, y: e.y, kamikaze: e.kind === 'kamikaze' });
+    }
+    for (const [id, v] of alive) {
+      if (now.has(id)) continue;
+      alive.delete(id);
+      if (v.kamikaze && ents.some(b => b.type === 'BUILDING' && b.team === 'ATTACKER_BUILDING' && Math.hypot(b.x - v.x, b.y - v.y) <= 1.8)) continue;
+      dexDefeatedRef.current[v.key] = (dexDefeatedRef.current[v.key] ?? 0) + 1;
+    }
+  };
+
   // ── メインループ（固定タイムステップ）──
   const pvpRef = useRef(pvp);
   pvpRef.current = pvp;
@@ -475,6 +509,7 @@ export const BattleScene: React.FC<Props> = ({
         }
         const res = r.advance(dt, session ?? providerRef.current);
         if (res.events.length > 0) applyEvents(res.events);
+        if (res.ticks > 0 && !session) trackEnemies(r.state.entities);
         if (session) {
           session.recordChecksum(r.tick, stateChecksum(r.state));
           session.prune(r.tick);
@@ -516,6 +551,26 @@ export const BattleScene: React.FC<Props> = ({
     if (families.length > 0) {
       const events = grantBattleXp(families, battleResult === 'WIN');
       if (events.length > 0) setLevelUps(events);
+    }
+    // 収集（CW-4c）：図鑑・章の星・げきむず パーフェクト → バッジ・ネコの図鑑を決めなおす → 結果画面に「あたらしく 手に入れたもの」
+    if (!isPvp) {
+      try {
+        const win = battleResult === 'WIN';
+        const { answered, perfect } = quizStatsRef.current;
+        const k = tierKey(chapter.id, tier);
+        const prevStars = useCampaignStore.getState().stars[k] ?? 0;
+        const stars = win ? starsFor(answered, perfect) : undefined;
+        const col = useCollectionStore.getState();
+        const rb = col.recordBattle({
+          chapterId: chapter.id, tier, win, stars, prevStars, answered, perfect,
+          shields: shieldsBrokenRef.current, seen: [...dexSeenRef.current], defeated: { ...dexDefeatedRef.current },
+        });
+        const rf = refreshCollection(win && stars && stars > prevStars ? { [k]: stars } : undefined);
+        const after = useCollectionStore.getState();
+        const badges = Object.entries(after.badges).filter(([id, t]) => t > (after.badgesSeen[id] ?? 0)).map(([id, t]) => ({ id, tier: t }));
+        after.markBadgesSeen(badges.map(b => b.id));
+        setGains({ coins: after.coinsTotal - coinsAtStartRef.current, badges, dex: [...rb.newDex, ...rf.cats] });
+      } catch { /* 収集の記録で 戦いの結果を止めない */ }
     }
   }, [battleResult]);
 
@@ -802,7 +857,7 @@ export const BattleScene: React.FC<Props> = ({
              grantStudyReward(perfect, item, formation);
            }}
            shieldLayers={shieldLayers}
-           onShieldBreak={() => issue({ type: 'BREAK_SHIELD', player: localPlayer })}
+           onShieldBreak={() => { shieldsBrokenRef.current += 1; issue({ type: 'BREAK_SHIELD', player: localPlayer }); }}
            cardLimit={isPvp ? null : cardLimitFor(chapter, tier, assistLevel)}
          />
        )}
@@ -1447,6 +1502,7 @@ export const BattleScene: React.FC<Props> = ({
                  <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
                  <p className="text-sm text-gray-200 mb-4 leading-relaxed">{chapter.victoryLine}</p>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} win />
+                 <GainsSummary gains={gains} />
                  <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect))}>
@@ -1466,6 +1522,7 @@ export const BattleScene: React.FC<Props> = ({
                    まけても部隊の経験値は手に入るよ。何回かまけると「サポートモード」で やさしくなるので、あきらめずにもう一回！
                  </div>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
+                 <GainsSummary gains={gains} />
                  <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" variant="secondary" onClick={() => onEndBattle(false, { gold: 0 })}>

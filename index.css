@@ -24,3 +24,13 @@
 .app-paper .simulator-container .\-left-28 { display: none; }
 .app-paper .simulator-container > div:first-child > button:first-child { visibility: hidden; }
 .app-paper .simulator-container button.border-t { display: none; }
+
+/* 収集：カプセルを まわすときの ゆれ（CW-4c） */
+@keyframes cw-capsule-shake {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-12deg) scale(1.05); }
+  75% { transform: rotate(12deg) scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="cw-capsule-shake"] { animation: none !important; }
+}

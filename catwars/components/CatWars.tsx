@@ -23,6 +23,11 @@ import { ArmyRosterScreen } from './army/ArmyRosterScreen';
 import { DailyBuffsPanel } from './learn/DailyBuffsPanel';
 import { ExchangePanel } from './learn/ExchangePanel';
 import { BaseBuilder } from './BaseBuilder';
+import { CollectionScreen } from './collection/CollectionScreen';
+import { NewBadgeNotice, TitleChip, DecorFlag } from './collection/CollectionParts';
+import { useCollectionStore } from '../store/useCollectionStore';
+import { refreshCollection } from '../collection/record';
+import { CAPSULE_RULES } from '../collection/stickers';
 import { sfx } from '../utils/audioEngine';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
@@ -30,7 +35,7 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 
 // 出撃導線: 範囲えらび → ステージえらび → 出撃メンバー（5枠）→ 陣地づくり（施設の買う・レベル上げも ここ）→ 戦闘
 // 陣地はステージごとに組む（ゾーンの広さが章によって変わるため）。
-type View = 'home' | 'army' | 'range' | 'stage' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
+type View = 'home' | 'army' | 'collection' | 'range' | 'stage' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
 
 interface Props {
   /** 上の階のメニューがあるときだけ（いまは CAT-WARS だけで動くので無い） */
@@ -72,6 +77,9 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     updateDailyStreak();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 収集：ホームに もどるたびに バッジ・ネコの図鑑を 決めなおす（傭兵召集・兵舎で ネコが ふえたときも）
+  useEffect(() => { if (view === 'home') { try { refreshCollection(); } catch { /* noop */ } } }, [view]);
+  const coins = useCollectionStore((s) => s.coins);
 
   const handleEndBattle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
     if (win) addResources(Math.round(loot.gold));
@@ -82,6 +90,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
 
   // ── サブ画面 ───────────────────────────────
   if (view === 'army') return <ArmyRosterScreen onBack={() => setView('home')} />;
+  if (view === 'collection') return <CollectionScreen onBack={() => setView('home')} />;
 
   if (view === 'range') {
     return (
@@ -188,6 +197,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           {dailyStreak >= 1 && <StatChip icon="🔥" value={`${dailyStreak}`} color="#fb923c" />}
           <StatChip icon="💠" value={Math.floor(resources.gold)} color="#38bdf8" />
           <StatChip icon="⚡" value={dailyStars} color="#facc15" />
+          <StatChip icon="🪙" value={coins} color="#fde68a" />
         </div>
       </div>
 
@@ -195,7 +205,11 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       <div className="text-center px-4 mt-1 mb-3">
         <h1 className="text-3xl sm:text-4xl font-black text-hologram tracking-wide" style={fontMono}>CAT-WARS</h1>
         <p className="text-[11px] text-[#38bdf8]/80 tracking-[0.3em] mt-1">拠点をきずき ネコ軍団で せめこもう</p>
+        <div className="mt-2"><TitleChip /></div>
       </div>
+
+      {/* あたらしい バッジ（1回だけ） */}
+      <NewBadgeNotice />
 
       {/* Daily goal */}
       <div className="px-5">
@@ -224,11 +238,13 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       </div>
 
       {/* Big actions */}
-      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4 pt-4">
         <HubButton icon="⚔️" label="出撃！" sub={allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`} color="#ef4444"
           onClick={() => { resetBattleSession(); setView('range'); }} big />
-        <HubButton icon="🐱" label="ネコ図鑑" sub="部隊のレベル・進化" color="#a3e635"
+        <HubButton icon="🐱" label="ネコ部隊" sub="レベル・進化・スキル" color="#a3e635"
           onClick={() => setView('army')} />
+        <HubButton icon="📖" label="あつめる" sub={coins >= CAPSULE_RULES.cost ? `🪙${coins} カプセルを まわせる！` : '図鑑・バッジ・シール'} color="#7dd3fc"
+          onClick={() => setView('collection')} />
         <HubButton icon="✨" label="出撃バフ" sub="⚡エナジーで きょうの 戦力アップ" color="#facc15"
           onClick={() => setView('buffs')} />
       </div>
@@ -237,7 +253,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       <div className="px-4 pt-4">
         <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }} data-testid="hub-base">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-white/70 text-xs font-bold" style={fontMono}>基地</span>
+            <span className="flex items-center gap-2"><DecorFlag size={22} /><span className="text-white/70 text-xs font-bold" style={fontMono}>基地</span></span>
             <span className="text-[#facc15] text-[11px]">きょう 動かせる施設 {limit}こ まで（コアのほか）</span>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -290,7 +306,7 @@ const HubButton: React.FC<{
   icon: string; label: string; sub: string; color: string; onClick: () => void; big?: boolean;
 }> = ({ icon, label, sub, color, onClick, big }) => (
   <button onClick={() => { sfx.select(); onClick(); }}
-    className={`relative overflow-hidden rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${big ? 'col-span-2 py-6' : 'py-5'}`}
+    className={`relative overflow-hidden rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${big ? 'col-span-2 md:col-span-3 py-6' : 'py-5'}`}
     style={{ borderColor: `${color}`, background: `${color}18`, boxShadow: big ? `0 0 22px ${color}55` : `0 0 10px ${color}33` }}>
     <span className={big ? 'text-4xl' : 'text-3xl'}>{icon}</span>
     <span className="font-black text-white tracking-wide" style={{ ...fontMono, fontSize: big ? 18 : 15 }}>{label}</span>

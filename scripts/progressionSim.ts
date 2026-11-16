@@ -267,7 +267,6 @@ function run(p: Profile): Result {
           bAnswered++;
           if (okS) { bPerfect++; shields++; unitPerfect[u] = (unitPerfect[u] ?? 0) + 1; }  // かけら（perfect）には 足さない（CW-4a/4b の 育ち方の数を 変えないため）
         }
-        col = { ...col, stats: { ...col.stats, shieldBreaks: col.stats.shieldBreaks + shields } };
         const seen = [...td.unitPool.map(unitDexKey), ...(td.bossAtSpawnCount != null ? [unitDexKey('boss')] : []), bossDexKey(ch.id)];
         const defeated: Record<string, number> = {};
         for (const k of td.unitPool) defeated[unitDexKey(k)] = win ? 6 : 2;

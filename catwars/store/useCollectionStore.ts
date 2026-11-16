@@ -216,6 +216,7 @@ export function applyBattle(save: CollectionSave, b: BattleRecord): { save: Coll
     }
   }
   if (b.answered > 0 && b.perfect === b.answered) st.bestBattlePerfect = Math.max(st.bestBattlePerfect, b.perfect);
+  st.shieldBreaks += Math.max(0, b.shields);
   st.bestBattleShield = Math.max(st.bestBattleShield, b.shields);
   return {
     save: {
