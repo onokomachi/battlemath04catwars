@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { RARITY_INFO, type StickerDef } from '../../collection/stickers';
-import { BADGE_BY_ID, tierColor, tierLabel } from '../../collection/badges';
+import { BADGE_BY_ID, badgeFrame, tierColor, tierLabel } from '../../collection/badges';
 import { ENEMY_DEX_BY_KEY } from '../../collection/dex';
 import { CHARACTER_BY_ID, getCharacterSprite, spriteFamilyForSubType } from '../../data/characters';
 import { DECOR_BY_ID, TITLE_BY_ID } from '../../collection/titles';
@@ -11,23 +11,32 @@ import { CAPSULE_RULES } from '../../collection/stickers';
  * 収集の画面部品（2026-11-16 CW-4c）。
  * StickerView（シール1まい）・BadgeMedal（バッジ）・GainsSummary（戦闘の結果画面の「あたらしく 手に入れたもの」）・
  * NewBadgeNotice（ホームで1回）・TitleChip・DecorFlag。
+ * 絵（シール・バッジ・はたの SVG／PNG）は ArtImg で出す。読めなかったら 絵文字に もどる（docs/ART_STYLE.md）。
  */
 
-/** シール1まい（絵があれば絵、なければ絵文字。わくの色は シールの色、ふちの光は めずらしさ） */
+/** 絵を出す。読めなかったら fallback（絵文字など）を出す */
+export const ArtImg: React.FC<{ src?: string; size: number; fallback: React.ReactNode; style?: React.CSSProperties; alt?: string }> = ({ src, size, fallback, style, alt = '' }) => {
+  const [bad, setBad] = useState(false);
+  useEffect(() => { setBad(false); }, [src]);
+  if (!src || bad) return <>{fallback}</>;
+  return <img src={src} alt={alt} draggable={false} onError={() => setBad(true)} style={{ width: size, height: size, objectFit: 'contain', ...style }} />;
+};
+
+/** シール1まい（絵があれば絵、なければ絵文字。わくの色は シールの色、レアいじょうは ゆっくり光る＝index.css の .cw-glow） */
 export const StickerView: React.FC<{ s: StickerDef; size?: number; owned?: boolean; count?: number }> = ({ s, size = 64, owned = true, count }) => {
   const rc = RARITY_INFO[s.rarity].color;
+  const glow = owned && s.rarity !== 'normal';
   return (
-    <div className="relative flex items-center justify-center rounded-2xl shrink-0"
+    <div className={`relative flex items-center justify-center rounded-2xl shrink-0${glow ? ' cw-glow' : ''}${glow && s.rarity === 'legend' ? ' cw-glow-legend' : ''}`}
       style={{
         width: size, height: size,
         background: owned ? `radial-gradient(circle at 35% 30%, ${s.frame}55, ${s.frame}18 70%)` : 'rgba(255,255,255,0.04)',
         border: `3px solid ${owned ? s.frame : 'rgba(255,255,255,0.12)'}`,
-        boxShadow: owned && s.rarity !== 'normal' ? `0 0 ${s.rarity === 'legend' ? 14 : 8}px ${rc}` : undefined,
-      }}>
+        ['--glow' as string]: glow ? (s.rarity === 'legend' ? rc : `${rc}cc`) : undefined,
+      } as React.CSSProperties}>
       {owned ? (
-        s.image
-          ? <img src={s.image} alt={s.name} draggable={false} style={{ width: size * 0.8, height: size * 0.8, objectFit: 'contain' }} />
-          : <span style={{ fontSize: size * 0.5, lineHeight: 1 }}>{s.emoji}</span>
+        <ArtImg src={s.image} alt={s.name} size={size * 0.84}
+          fallback={<span style={{ fontSize: size * 0.5, lineHeight: 1 }}>{s.emoji}</span>} />
       ) : (
         <span className="text-white/25 font-black" style={{ fontSize: size * 0.4 }}>？</span>
       )}
@@ -38,19 +47,29 @@ export const StickerView: React.FC<{ s: StickerDef; size?: number; owned?: boole
   );
 };
 
-/** バッジの メダル（段の色。まだのときは 灰色） */
+/** バッジの メダル（台＝段の色の SVG、まんなかに 絵柄。まだのときは 台を灰色・絵柄を 灰色のシルエットに） */
 export const BadgeMedal: React.FC<{ id: string; tier: number; size?: number; locked?: boolean }> = ({ id, tier, size = 44, locked }) => {
   const def = BADGE_BY_ID[id];
   if (!def) return null;
   const c = tierColor(def, tier);
+  const got = tier > 0;
+  const motif = size * 0.62;
+  const emoji = <span style={{ fontSize: size * 0.44, lineHeight: 1 }}>{locked ? '❔' : def.icon}</span>;
+  const plain = (
+    <div className="absolute inset-0 rounded-full"
+      style={{ border: `3px solid ${c}`, background: got ? `radial-gradient(circle at 35% 30%, ${c}55, ${c}10 75%)` : 'rgba(255,255,255,0.03)' }} />
+  );
   return (
-    <div className="relative flex items-center justify-center rounded-full shrink-0"
-      style={{
-        width: size, height: size, border: `3px solid ${c}`,
-        background: tier > 0 ? `radial-gradient(circle at 35% 30%, ${c}55, ${c}10 75%)` : 'rgba(255,255,255,0.03)',
-        filter: tier > 0 ? undefined : 'grayscale(1)', opacity: tier > 0 ? 1 : 0.55,
-      }}>
-      <span style={{ fontSize: size * 0.48, lineHeight: 1 }}>{locked ? '❔' : def.icon}</span>
+    <div className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }} data-medal={got ? 'on' : 'off'}>
+      <span className="absolute inset-0" style={{ filter: got ? undefined : 'grayscale(1)', opacity: got ? 1 : 0.4 }}>
+        <ArtImg src={badgeFrame(def, tier)} size={size} fallback={plain} />
+      </span>
+      <span className="relative flex items-center justify-center" style={{ width: motif, height: motif }}>
+        {locked
+          ? <span className="font-black text-white/60" style={{ fontSize: size * 0.4, lineHeight: 1 }}>？</span>
+          : <ArtImg src={def.image} size={motif} fallback={<span style={{ filter: got ? undefined : 'grayscale(1)', opacity: got ? 1 : 0.55 }}>{emoji}</span>}
+              style={got ? undefined : { filter: 'brightness(0) invert(0.75)', opacity: 0.5 }} />}
+      </span>
     </div>
   );
 };
@@ -173,12 +192,12 @@ export const TitleChip: React.FC = () => {
   );
 };
 
-/** 基地の はた（かざり。強さには ひびかない） */
+/** 基地の はた（かざり。強さには ひびかない）。絵が読めないときは 2色の しまの はた＋絵文字 */
 export const DecorFlag: React.FC<{ id?: string; size?: number }> = ({ id, size = 28 }) => {
   const cur = useCollectionStore((s) => s.decor);
   const d = DECOR_BY_ID[id ?? cur] ?? DECOR_BY_ID['flag-blue'];
-  return (
-    <span className="inline-flex items-end shrink-0" style={{ height: size }} title={d.name} data-testid="decor-flag">
+  const plain = (
+    <span className="inline-flex items-end shrink-0" style={{ height: size }}>
       <span style={{ width: 2, height: size, background: '#cbd5e1', borderRadius: 1 }} />
       <span className="flex items-center justify-center"
         style={{
@@ -188,6 +207,11 @@ export const DecorFlag: React.FC<{ id?: string; size?: number }> = ({ id, size =
         }}>
         {d.emoji}
       </span>
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center justify-center shrink-0" style={{ height: size }} title={d.name} data-testid="decor-flag">
+      <ArtImg src={d.image} alt={d.name} size={size * 1.25} fallback={plain} />
     </span>
   );
 };

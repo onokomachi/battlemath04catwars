@@ -57,6 +57,8 @@ export interface BadgeDef {
   id: string;
   name: string;
   icon: string;
+  /** 絵柄（SVG。public/assets/badges/<id>.svg）。メダルの台は badgeFrame。読めないときは icon */
+  image?: string;
   group: BadgeGroup;
   /** 段の しきい値（1つ＝段なし／3つ＝銅・銀・金） */
   tiers: number[];
@@ -87,7 +89,10 @@ const UNIT_BADGES: BadgeDef[] = PACK_UNITS.map((u) => ({
 const allUnitsTen = (i: BadgeInput) => (PACK_UNITS.every((u) => (i.unitPerfect[u.key] ?? 0) >= 10) ? 1 : 0);
 const unitsTouched = (i: BadgeInput) => PACK_UNITS.filter((u) => (i.unitPerfect[u.key] ?? 0) >= 1).length;
 
-export const BADGES: BadgeDef[] = [
+/** 絵柄（docs/ART_STYLE.md）。34こ ぜんぶ 手で書いた SVG がある */
+const withArt = (list: BadgeDef[]): BadgeDef[] => list.map((b) => ({ ...b, image: b.image ?? `/assets/badges/${b.id}.svg` }));
+
+export const BADGES: BadgeDef[] = withArt([
   // ── 学習の量 ──
   { id: 'first-step', name: 'はじめの いっぽ', icon: '👣', group: 'study', tiers: [1],
     measure: (i) => i.perfectTotal, cond: () => '問題を 1問 まちがえずに とく' },
@@ -138,7 +143,7 @@ export const BADGES: BadgeDef[] = [
   { id: 'secret-shield3', name: 'ふくしゅうの ちから', icon: '🔮', group: 'hidden', hidden: true, tiers: [3],
     measure: (i) => i.bestBattleShield, cond: () => '1回の 戦いで シールドを 3まい わる' },
   ...UNIT_BADGES,
-];
+]);
 
 export const BADGE_BY_ID: Record<string, BadgeDef> = Object.fromEntries(BADGES.map((b) => [b.id, b]));
 
@@ -176,6 +181,13 @@ export function tierColor(def: BadgeDef, tier: number): string {
   if (tier <= 0) return 'rgba(255,255,255,0.25)';
   if (def.tiers.length === 1) return TIER_COLOR[3];
   return TIER_COLOR[Math.min(3, tier) as 1 | 2 | 3];
+}
+
+/** メダルの台（わく）の絵：段が1つのバッジは 紺と水色、ほかは 銅・銀・金（まだ取っていないときは 銅の台を 灰色にして出す） */
+export function badgeFrame(def: BadgeDef, tier: number): string {
+  if (def.tiers.length === 1) return '/assets/badges/frame-solo.svg';
+  const t = Math.max(1, Math.min(3, tier));
+  return `/assets/badges/frame-${t === 1 ? 'bronze' : t === 2 ? 'silver' : 'gold'}.svg`;
 }
 
 /** バッジの段を取ったときの シールコインの段（段が1つのバッジは 銀と同じ） */
