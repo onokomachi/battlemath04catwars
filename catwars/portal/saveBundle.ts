@@ -1,14 +1,15 @@
 /**
  * CAT-WARS の セーブを 1つの JSON に まとめる・もどす・大きさを測る（CW-5a・2026-11-16）。
  *
- * CW-5b で サーバの表 `catwars_save` に入れる（docs/CW5B_SERVER_PLAN.md）。**いまは サーバに送らない**。
+ * サーバの表 `catwars_save` に入れる（CW-5b。送る・取りこむのは portal/saveSync.ts。kit の saveCatwarsSave／loadCatwarsSave）。
  * - まとめるのは portal/saveKeys.ts の ストア ぜんぶ（鍵と同じ名前。ストアを足したら STORES にも足す＝型で止まる）。
  * - 中身は 各ストアの persist が localStorage に書くものと同じ（partialize のあと・関数はぬく）。収集は exportSave／importSave。
  * - もどすときは 各ストアの merge（こわれた値を すてる）を通す。収集は sanitizeSave。
- * 大きさの めやすは 5KB 以下（SANMON の sanmon_save と同じくらい）。
+ * 大きさの めやすは 6KB 以下（4週間ぶん。サーバは 64KB まで）。CW-5b で progress.mastery（使っていない）を消して 15.3KB → 約6KB。
+ * 送れていない記録（SAVE_KEYS.outbox）は入れない（STORE_IDS だけ）。
  */
 import type { StoreApi } from 'zustand';
-import { SAVE_KEYS, type SaveStoreId } from './saveKeys';
+import { STORE_IDS, type SaveStoreId } from './saveKeys';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { useProgressStore } from '../store/useProgressStore';
 import { useArmyStore } from '../store/useArmyStore';
@@ -21,7 +22,7 @@ import { useCollectionStore } from '../store/useCollectionStore';
 
 export const SAVE_BUNDLE_VERSION = 1;
 /** めやす（これを こえたら 何が大きいかを見る） */
-export const SAVE_BUNDLE_TARGET_BYTES = 5 * 1024;
+export const SAVE_BUNDLE_TARGET_BYTES = 6 * 1024;
 
 interface PersistApi {
   getOptions: () => { name?: string; partialize?: (s: unknown) => unknown; merge?: (p: unknown, c: unknown) => unknown };
@@ -60,7 +61,7 @@ function exportOne(id: SaveStoreId): unknown {
 /** いまの セーブを 1つに まとめる */
 export function exportBundle(now = Date.now()): SaveBundle {
   const stores: SaveBundle['stores'] = {};
-  for (const id of Object.keys(SAVE_KEYS) as SaveStoreId[]) stores[id] = exportOne(id);
+  for (const id of STORE_IDS) stores[id] = exportOne(id);
   return { v: SAVE_BUNDLE_VERSION, savedAt: now, stores };
 }
 
@@ -69,7 +70,7 @@ export function importBundle(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object') return false;
   const b = raw as Partial<SaveBundle>;
   if (b.v !== SAVE_BUNDLE_VERSION || !b.stores || typeof b.stores !== 'object') return false;
-  for (const id of Object.keys(SAVE_KEYS) as SaveStoreId[]) {
+  for (const id of STORE_IDS) {
     const data = (b.stores as Record<string, unknown>)[id];
     if (data === undefined || data === null || typeof data !== 'object') continue;
     if (id === 'collection') { useCollectionStore.getState().importSave(data); continue; }

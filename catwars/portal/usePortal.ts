@@ -12,11 +12,14 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import { getStudent, subscribeStudent, type StudentIdentity } from 'learning-app-kit/sync';
 import {
-  fetchSanmonStatus, fetchSanmonModes, spendStamina, sanmonShards, isModeOpen,
+  fetchSanmonStatus, fetchSanmonModes, spendStamina, sanmonShards, isModeOpen, isSchoolHoursLocked, reportLockHit,
   type SanmonStatus, type SanmonModes,
 } from 'learning-app-kit/sanmon';
 import { PORTAL, isPortalConfigured, CATWARS_MODE_KEY } from './config';
-import { createSortieGate, lockMessage, type GateDeps, type GateResult } from './gate';
+import { createSortieGate, lockMessage, closedWhilePlayingMessage, type GateDeps, type GateResult } from './gate';
+import { syncAnswersNow, syncAnswersSoon } from './answerSync';
+import { saveSync } from './saveSync';
+import { useStudyStore } from '../store/useStudyStore';
 import { setServerShards } from '../learn/shards';
 
 /** サーバとのやりとり（開発のときだけ 差しかえられる：__cwPortalMock） */
@@ -26,6 +29,8 @@ export interface PortalService {
   fetchStatus: (studentId: string) => Promise<{ ok: true; status: SanmonStatus } | { ok: false; message?: string }>;
   fetchModes: GateDeps['fetchModes'];
   spend: GateDeps['spend'];
+  /** 平日モードで閉じた出撃を押した（先生の PRISM に「押した回数」。サーバは3分に1回だけ残す） */
+  reportLockHit: (studentId: string) => Promise<void>;
 }
 
 const realService: PortalService = {
@@ -34,6 +39,7 @@ const realService: PortalService = {
   fetchStatus: (id) => fetchSanmonStatus(PORTAL, id),
   fetchModes: (id) => fetchSanmonModes(PORTAL, id),
   spend: (id, ev, amount, reason) => spendStamina(PORTAL, id, ev, amount, reason),
+  reportLockHit: (id) => reportLockHit(PORTAL, id, CATWARS_MODE_KEY),
 };
 let service: PortalService = realService;
 
@@ -100,6 +106,28 @@ export function sortieLock(modes: SanmonModes | null): string | null {
   return lockMessage(modes);
 }
 export const sortieOpen = (modes: SanmonModes | null): boolean => isModeOpen(modes, CATWARS_MODE_KEY);
+/** 遊んでいる とちゅうで閉じたときの文（名乗っている子だけ。開いていれば null） */
+export function playingLock(modes: SanmonModes | null): string | null {
+  return usePortalStore.getState().student ? closedWhilePlayingMessage(modes) : null;
+}
+
+/** 閉じた出撃ボタンを押した：平日モード（授業の時間）で閉じているときだけ サーバに残す（SANMON の reportLock と同じ） */
+export function reportSortieLock(): void {
+  const { student, modes } = usePortalStore.getState();
+  if (student && isSchoolHoursLocked(modes, CATWARS_MODE_KEY)) void service.reportLockHit(student.studentId).catch(() => { /* noop */ });
+}
+
+/** 戦闘が おわった（勝ち・負け・とちゅうで もどった）：記録を まとめて送る・セーブを しまう */
+export function afterBattle(): void {
+  syncAnswersSoon();
+  setTimeout(() => { void saveSync.pushSave(); }, 1000);
+}
+
+/** サーバの セーブを見て、新しければ 取りこんで 読みなおす。新しくなければ この端末の セーブを送る */
+async function pullThenPush(): Promise<void> {
+  if (await saveSync.pullSaveIfNewer()) { window.location.reload(); return; }
+  void saveSync.pushSave();
+}
 
 let started = false;
 /** アプリの いちばん上で1回だけ呼ぶ（CatWars.tsx） */
@@ -108,11 +136,28 @@ export function usePortalLifecycle(): void {
     if (started) return;
     started = true;
     void refreshPortal();
-    const unsub = subscribeStudent(() => { void refreshPortal(); });
-    const onVis = () => { if (!document.hidden) void refreshPortal(); };
+    // 記録とセーブ（CW-5b。名乗っているときだけ動く。SANMON の App.tsx と同じ間のあけ方）
+    void pullThenPush();
+    syncAnswersSoon();
+    const unsub = subscribeStudent(() => { void refreshPortal(); void pullThenPush(); syncAnswersSoon(); });
+    const onVis = () => {
+      if (document.hidden) { void syncAnswersNow(); void saveSync.pushSave(); return; }
+      void refreshPortal();
+      void saveSync.pullSaveIfNewer().then((pulled) => { if (pulled) window.location.reload(); });
+    };
     document.addEventListener('visibilitychange', onVis);
     const t = setInterval(() => { if (!document.hidden) void refreshModes(); }, 120_000);
-    return () => { started = false; unsub(); document.removeEventListener('visibilitychange', onVis); clearInterval(t); };
+    const saveIv = setInterval(() => { void saveSync.pushSave(); }, 60_000);
+    // 問題を解いたら 10秒あとに セーブを送る（そのあいだに解いたら まちなおす）
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubStudy = useStudyStore.subscribe(() => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => { saveTimer = null; void saveSync.pushSave(); }, 10_000);
+    });
+    return () => {
+      started = false; unsub(); unsubStudy(); document.removeEventListener('visibilitychange', onVis);
+      clearInterval(t); clearInterval(saveIv); if (saveTimer) clearTimeout(saveTimer);
+    };
   }, []);
 }
 
@@ -120,13 +165,19 @@ export const usePortal = usePortalStore;
 
 // 開発のときだけ：画面の確かめ（Playwright）で サーバを差しかえる。本番のビルドには入らない。
 //   window.__cwPortalMock({ student, status, modes, spend: 'ok' | 'short' | 'offline' | 'closed' })
+//   window.__cwPortalSetModes(modes) … 2分ごとの読みなおしで モードが変わった ことにする（とちゅうで閉じる の確かめ）
+//   記録とセーブ（answerSync／saveSync）は kit の名乗り（getStudent）を見るので、差しかえても 本番のサーバには 何も送らない
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __cwPortalMock?: (o: {
     student?: StudentIdentity; status?: SanmonStatus; modes?: SanmonModes; spend?: 'ok' | 'short' | 'offline' | 'closed';
   }) => Promise<void> }).__cwPortalMock = async (o) => {
     const student = o.student ?? { studentId: 'dev-student', joinCode: 'DEV', number: 1 };
     let status: SanmonStatus = o.status ?? { stamina: 0, towns: {}, earnedToday: 0, apps: {} };
-    const modes: SanmonModes = o.modes ?? {};
+    let modes: SanmonModes = o.modes ?? { catwars: true };
+    (window as unknown as { __cwPortalSetModes?: (m: SanmonModes) => void }).__cwPortalSetModes = (m) => {
+      modes = m;
+      usePortalStore.setState({ modes: m });
+    };
     service = {
       configured: () => true,
       student: () => student,
@@ -138,6 +189,7 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
         status = { ...status, stamina: Math.max(0, status.stamina - amount) };
         return { ok: true, stamina: status.stamina };
       },
+      reportLockHit: async () => { console.info('[mock] reportLockHit catwars'); },
     };
     await refreshPortal();
   };

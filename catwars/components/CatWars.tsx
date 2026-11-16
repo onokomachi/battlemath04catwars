@@ -29,7 +29,7 @@ import { useCollectionStore } from '../store/useCollectionStore';
 import { refreshCollection } from '../collection/record';
 import { CAPSULE_RULES } from '../collection/stickers';
 import { sfx } from '../utils/audioEngine';
-import { usePortalLifecycle, startSortie, usePortal, sortieLock } from '../portal/usePortal';
+import { usePortalLifecycle, startSortie, usePortal, sortieLock, playingLock, reportSortieLock, afterBattle } from '../portal/usePortal';
 import { PortalCard, SortieStamina } from '../portal/PortalCard';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
@@ -98,6 +98,20 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const [sortieBusy, setSortieBusy] = useState(false);
   const [sortieMsg, setSortieMsg] = useState<string | null>(null);
 
+  // 遊んでいる とちゅう（出撃の準備・戦闘）で モードが閉じたら（平日モードの時間になった・先生が閉じた・番号ごとの停止）、
+  // すぐ ホームに もどす（CW-5b。SANMON の App.tsx と同じ）。モードは usePortal が 2分ごと・タブに もどったときに 読みなおす。
+  // その戦闘の 勝ちの ごほうび・章の記録は 無し・出撃の スタミナは もどらない（SANMON と同じ）。解いた問題の ごほうびと記録は のこる。
+  const playLock = playingLock(portalModes);
+  useEffect(() => {
+    if (!playLock) return;
+    if (!['range', 'stage', 'formation', 'prep', 'battle'].includes(view)) return;
+    if (view === 'battle') afterBattle();
+    setBattleTicket(null);
+    setSortieMsg(null);
+    setHomeNotice(playLock);
+    setView('home');
+  }, [playLock, view]);
+
   /** 出撃の関門。ここだけが battleTicket を作る */
   const beginBattle = async (chapterId: string) => {
     if (sortieBusy) return;
@@ -120,6 +134,8 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     campaign.recordResult(activeChapterId, win, stars, activeTier);
     setBattleTicket(null);
     setView('home');
+    // 解いた問題の記録を まとめて送る・セーブを しまう（名乗っているときだけ）
+    afterBattle();
   };
 
   // ── サブ画面 ───────────────────────────────
@@ -287,7 +303,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           locked={!!homeLock}
           onClick={() => {
             // 閉じていても 押せる形のまま。押すと わけを出す（SANMON と同じ）
-            if (homeLock) { setHomeNotice(homeLock); return; }
+            if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); return; }
             setSortieMsg(null); resetBattleSession(); setView('range');
           }} big />
         <HubButton icon="🐱" label="ネコ部隊" sub="レベル・進化・スキル" color="#a3e635"

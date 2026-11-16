@@ -19,31 +19,40 @@ import { difficultyFactor } from './data/problemWeights';
 import { CREDIT_PER_CORRECT, ENERGY_PER_CORRECT, STUDY_XP_PER_CORRECT } from './data/rewards';
 import { recordCollectionAnswer } from './collection/record';
 import type { LogLike } from 'learning-app-kit/sync';
-import { flushEvents, getStudent } from 'learning-app-kit/sync';
-import { PORTAL, isPortalConfigured } from './portal/config';
+import { getStudent } from 'learning-app-kit/sync';
+import { CATALOGS } from 'learning-app-kit/catalog';
+import { isPortalConfigured } from './portal/config';
+import { answerSync, CATWARS_APP_ID } from './portal/answerSync';
 import { PACK_UNITS } from './learn/gradePack';
 
-/* ── 学級ポータルへの 1問の記録（CW-5a・2026-11-16）────────────────────────────
- * 持ち主の決定（2026-11-16）：戦闘の中で解いた問題は **学習の記録として送る**。ただし CW-5a では **まだ送らない**。
- * 送る中身（kit の記録の形 LogLike）は ここで組み立ててある。送るときは PORTAL_SEND_ENABLED を true にするだけ
- * （サーバ側の準備＝CW-5b が おわってから。docs/CW5B_SERVER_PLAN.md §3）。
+/* ── 学級ポータルへの 1問の記録（CW-5a で形・CW-5b・2026-11-16 から送る）─────────────────────
+ * 持ち主の決定（2026-11-16）：戦闘の中で解いた問題は **学習の記録として送る**。
+ * 送り方（端末に のこす・まとめて送る・ことわられたら あとで送りなおす）は portal/answerSync.ts。
  *
  * 形のきまり（スタミナが二重に たまらない・「戦闘→スタミナ→戦闘」の輪に ならないため）：
  *   - app_id は 'catwars'（単元アプリの app_id では送らない。単元アプリの app_id で送ると、サーバの _sanmon_pools が
  *     小4算数のアプリの正解として 町のスタミナを ふやし、熟達・町の解放・出撃1回の数 にも入ってしまう）。
- *   - skill_id は 単元アプリの skill_id（カタログと同じ文字列。前に何も足さない）。module_id は 町の key（SANMON と同じ）。
+ *   - skill_id は 単元アプリの skill_id（カタログと同じ文字列。前に何も足さない）。
+ *   - **カタログ catwars（kit）に無い skill_id は送らない**。module_id は カタログで その項目が入っている町
+ *     （1つの項目は1つの町にだけ入っている。わり算の筆算の 検算などは ÷1けた の町。戦闘の単元と ずれることがある）。
  *   - label は「たたかい：」で はじめる（SANMON の「バトル：」と同じ考え：サーバが 見分けられるように）。
  *   - detail は 付けない（sync_events は detail のある行を 本番テストとして test_result に入れるため）。
  *   - 最初の まちがいの型・答え は 解答画面（apps/）が わたせるように なったら入れる（いまの apps/ の onMiss は 何も わたさない）。
  *   - おためし・体験版は 送らない（getStudent() が null。SANMON の syncLearningToPortal と同じ）。
  */
 
-/** 記録の app_id（PRISM・サーバで CAT-WARS の記録として見分ける） */
-export const CATWARS_APP_ID = 'catwars';
+export { CATWARS_APP_ID };
 /** 記録の label の はじめ（サーバが「戦闘の中の答え」と見分ける） */
 export const CATWARS_LABEL_PREFIX = 'たたかい：';
-/** **ここを true にすると 送る**（CW-5b のサーバの準備のあと。いまは false） */
-export const PORTAL_SEND_ENABLED = false;
+/** 送る（CW-5b。サーバの準備の前は ことわられるが、端末に のこして あとで送りなおす） */
+export const PORTAL_SEND_ENABLED = true;
+
+/** カタログ catwars：skill_id → 町（module_id） */
+const CATALOG_TOWN = new Map<string, string>(
+  (CATALOGS[CATWARS_APP_ID]?.modules ?? []).flatMap((m) => m.skills.map((sk) => [sk.skill_id, m.module_id] as [string, string])),
+);
+/** その skill_id が入っている カタログ catwars の町（無ければ null＝送らない） */
+export const catalogTownOf = (skillId: string): string | null => CATALOG_TOWN.get(skillId) ?? null;
 
 export interface PortalAnswer {
   unitKey: string;
@@ -61,15 +70,17 @@ export interface PortalAnswer {
 }
 
 let seq = 0;
-/** 1問ぶんの記録（kit の LogLike）。送る・送らない に かかわらず 同じ形 */
-export function buildPortalLog(a: PortalAnswer): LogLike {
+/** 1問ぶんの記録（kit の LogLike）。カタログ catwars に無い skill_id は null（送らない） */
+export function buildPortalLog(a: PortalAnswer): LogLike | null {
+  const town = catalogTownOf(a.skillId);
+  if (!town) return null;
   const app = a.appId ?? PACK_UNITS.find((u) => u.key === a.unitKey)?.appId ?? '';
   seq = (seq + 1) % 1000;
   return {
     id: `cw-${a.ts}-${seq}`.slice(0, 64),
     ts: a.ts,
     skillId: a.skillId,
-    moduleId: a.unitKey,
+    moduleId: town,
     correct: a.perfect,
     mistakes: a.perfect ? 0 : 1,
     label: `${CATWARS_LABEL_PREFIX}${app ? `[${app}] ` : ''}${a.label ?? a.skillId}`.slice(0, 80),
@@ -77,16 +88,12 @@ export function buildPortalLog(a: PortalAnswer): LogLike {
   };
 }
 
-/** 送るのを まつ 記録（送れたら へらす。ページを とじたら きえる＝CW-5b で 端末に のこす形に するか 決める） */
-const queue: LogLike[] = [];
-/** 1問の記録を 学級ポータルへ（いまは 組み立てる だけで 送らない） */
+/** 1問の記録を 学級ポータルへ（端末に のこして まとめて送る）。のこした記録を返す（おためし・カタログに無い項目は null） */
 export function sendAnswerToPortal(a: PortalAnswer): LogLike | null {
-  if (!isPortalConfigured || !getStudent()) return null;   // おためし・体験版・つないでいないビルドは 送らない
+  if (!PORTAL_SEND_ENABLED || !isPortalConfigured || !getStudent()) return null;   // おためし・体験版・つないでいないビルドは 送らない
   const log = buildPortalLog(a);
-  if (!PORTAL_SEND_ENABLED) return log;                   // ← CW-5a：ここで止めている
-  queue.push(log);
-  void flushEvents({ appId: CATWARS_APP_ID, ...PORTAL }, [...queue]).then((r) => { if (r?.ok) queue.length = 0; }).catch(() => { /* 次の機会に */ });
-  return log;
+  if (!log) return null;
+  return answerSync.queue(log) ? log : null;
 }
 
 /** むずかしさ3を 1.0 とした倍率（1で約0.75倍、5で約1.25倍） */
@@ -111,7 +118,7 @@ export function grantStudyReward(
   useStudyStore.getState().record(item.unitKey, item.skillId, perfect);
   // 収集：シールコイン（学習の成果だけ）・ふくしゅう・れんぞく学習の記録（collection/）
   try { recordCollectionAnswer({ unitKey: item.unitKey, skillId: item.skillId, difficulty: item.difficulty, perfect }); } catch { /* noop */ }
-  // 学級ポータルへの記録（いまは何もしない。上の sendAnswerToPortal）
+  // 学級ポータルへの記録（名乗っているときだけ。上の sendAnswerToPortal）
   try { sendAnswerToPortal({ unitKey: item.unitKey, skillId: item.skillId, appId: item.appId, label: item.label, perfect, difficulty: item.difficulty, ts: Date.now() }); } catch { /* noop */ }
   if (!perfect) return;
 
