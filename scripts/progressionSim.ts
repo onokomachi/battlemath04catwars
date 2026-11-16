@@ -12,6 +12,8 @@
  *      （上位5系統の平均レベルが 第8章の基準 CHAPTER_BASE_LEVEL[8] 以上）。施設は全種類 Lv4 以上（めやす Lv4〜5）。
  *   2. トップ層（1日90分＝10〜12戦・1戦10問・正答率0.9）が 8週間たっても、
  *      全系統 Lv60 にも、全施設 Lv10（持てる数も全部）にも **届いていない**（どちらにも目標が残る）。
+ *   3. スキル（2026-11-15 CW-4b。かけら 2／4／8 で開く）：エンジョイ勢が 4週間で 5枠の系統に 平均1つ以上／
+ *      トップ層が 4週間たっても 全24個は開いていない（8週間の数も出す）。
  *
  * 決めごと（かんたんな計算のための仮定。数値は報告に書く）：
  *   - 問題は、エンジョイ勢＝出撃の5枠に結びついた単元（図鑑の「つぎの上限：『単元名』を とこう」に合わせる）、
@@ -35,6 +37,7 @@ import {
 } from '../catwars/data/facilities';
 import { BuildingType } from '../catwars/types';
 import { DetRNG } from '../catwars/sim/rng';
+import { SKILLS, unlockedSkillIds } from '../catwars/data/skills';
 
 const VERBOSE = process.env.VERBOSE === '1';
 
@@ -81,10 +84,16 @@ function unitShards(unitKey: string, perfect: Map<string, number>): number {
   const done = sk.filter(k => (perfect.get(k) ?? 0) >= 3).length;
   return Math.floor((done / sk.length) * 8);
 }
-function familyCap(fam: string, perfect: Map<string, number>): number {
+function familyShardsOf(fam: string, perfect: Map<string, number>): number {
   const units = FAMILY_UNITS[fam] ?? PACK_UNITS.map(u => u.key);
-  const s = Math.floor(units.reduce((a, k) => a + unitShards(k, perfect), 0) / units.length);
-  return levelCapForShards(s);
+  return Math.floor(units.reduce((a, k) => a + unitShards(k, perfect), 0) / units.length);
+}
+function familyCap(fam: string, perfect: Map<string, number>): number {
+  return levelCapForShards(familyShardsOf(fam, perfect));
+}
+/** 開いているスキルの数（系統ごと） */
+function skillCount(fam: string, perfect: Map<string, number>): number {
+  return unlockedSkillIds(fam, familyShardsOf(fam, perfect)).length;
 }
 
 interface Result {
@@ -98,6 +107,8 @@ interface Result {
   caps: Record<string, number>;
   /** 日ごとの記録（週の終わり） */
   weekly: string[];
+  /** 日 → 系統ごとの 開いているスキルの数（7日ごと） */
+  skillsByDay: Record<number, Record<string, number>>;
 }
 
 function run(p: Profile): Result {
@@ -113,6 +124,7 @@ function run(p: Profile): Result {
   const cleared: Record<ChapterTier, number> = { normal: 0, hard: 0, extreme: 0 };
   let rot = 0;
   const weekly: string[] = [];
+  const skillsByDay: Record<number, Record<string, number>> = {};
 
   const top5 = () => FAMILIES.map(f => lv[f]).sort((a, b) => b - a).slice(0, 5).reduce((a, b) => a + b, 0) / 5;
   const giveXp = (fam: string, amount: number) => {
@@ -191,13 +203,14 @@ function run(p: Profile): Result {
       credits -= best.cost;
       best.act();
     }
+    if (day % 7 === 0) skillsByDay[day] = Object.fromEntries(FAMILIES.map(f => [f, skillCount(f, perfect)]));
     if (VERBOSE || day % 7 === 0) {
       const fr = frontier();
       weekly.push(
         `${String(day).padStart(3)}日  上位5平均 Lv${top5().toFixed(1).padStart(5)}  ` +
         `系統 ${FAMILIES.map(f => lv[f]).join('/')}  上限 ${FAMILIES.map(f => familyCap(f, perfect)).join('/')}  ` +
         `施設Lv ${TYPES.map(t => facLv[t]).join('/')}  数 ${TYPES.map(t => owned[t]).join('/')}  ` +
-        `💠 累計${earned}・のこり${credits}  つぎ ${fr ? `${TIER_INFO[fr.tier].label}${fr.no}章` : 'ぜんぶクリア'}`,
+        `💠 累計${earned}・のこり${credits}  スキル ${FAMILIES.map(f => skillCount(f, perfect)).join('/')}  つぎ ${fr ? `${TIER_INFO[fr.tier].label}${fr.no}章` : 'ぜんぶクリア'}`,
       );
     }
   }
@@ -206,7 +219,7 @@ function run(p: Profile): Result {
     avgTop5: top5(), levels: lv, facLevels: facLv, owned, creditsEarned: earned, creditsLeft: credits,
     frontier: fr ? `${TIER_INFO[fr.tier].label} 第${fr.no}章` : 'ぜんぶクリア',
     caps: Object.fromEntries(FAMILIES.map(f => [f, familyCap(f, perfect)])),
-    weekly,
+    weekly, skillsByDay,
   };
 }
 
@@ -236,6 +249,20 @@ const facLeft = TYPES.filter(ty => t.facLevels[ty] < MAX_FACILITY_LEVEL).length;
 const ok3 = !allLv && !allFac;
 console.log(`  → Lv60 に届いていない系統 ${lvLeft}/${FAMILIES.length}・Lv10 に届いていない施設 ${facLeft}/${TYPES.length}  ${ok3 ? '✅（どちらにも まだ目標が残っている）' : '❌（どちらかが 全部届いた）'}  最前線：${t.frontier}`);
 if (!ok3) bad++;
+
+// スキルの開く時期
+const sum = (r: Record<string, number>, fams: string[]) => fams.reduce((a, f) => a + (r[f] ?? 0), 0);
+const e28 = e.skillsByDay[28] ?? {};
+const enjoyAvg = sum(e28, FIXED_FORMATION) / FIXED_FORMATION.length;
+const t28 = sum(t.skillsByDay[28] ?? {}, FAMILIES), t56 = sum(t.skillsByDay[56] ?? {}, FAMILIES);
+const ok4 = enjoyAvg >= 1;
+const ok5 = t28 < SKILLS.length;
+console.log(`\n■ スキル（かけら 2／4／8 で開く）`);
+for (const d of [7, 14, 21, 28]) console.log(`  エンジョイ勢 ${String(d).padStart(2)}日：5枠の系統に 平均 ${(sum(e.skillsByDay[d] ?? {}, FIXED_FORMATION) / 5).toFixed(1)}個（${FIXED_FORMATION.map(f => (e.skillsByDay[d] ?? {})[f] ?? 0).join('/')}）`);
+for (const d of [7, 14, 21, 28, 35, 42, 49, 56]) console.log(`  トップ層 ${String(d).padStart(2)}日：${sum(t.skillsByDay[d] ?? {}, FAMILIES)}/${SKILLS.length}個`);
+console.log(`  → エンジョイ勢 4週間で 5枠に 平均 ${enjoyAvg.toFixed(1)}個 ${ok4 ? '✅' : '❌'}（1つ以上）・トップ層 4週間で ${t28}/${SKILLS.length}個 ${ok5 ? '✅' : '❌'}（全部は開いていない）・8週間で ${t56}/${SKILLS.length}個`);
+if (!ok4) bad++;
+if (!ok5) bad++;
 
 if (bad) { console.log(`\n✗ 進み方の条件を ${bad} つ満たしていない（XP・値段を見なおす：data/rewards.ts・data/characters.ts の XP_CURVE・data/facilities.ts）\n`); process.exit(1); }
 console.log('\n✓ エンジョイ勢は4週間で第8章に届き、トップ層は8週間たっても目標が残っている\n');
