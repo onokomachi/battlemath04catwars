@@ -16,6 +16,11 @@ interface CampaignStore {
   stars: Record<string, 1 | 2 | 3>;
   /** 最後に選んだ章（つづきから遊べるように） */
   lastChapterId: string;
+  /**
+   * 結果を入れた いちばん新しい戦闘の id（出撃ごとに1つ。CatWars.tsx の battleTicket）。
+   * 勝ち負けが決まった瞬間に1回だけ 結果（章・★・連敗・💠）を入れるための しるし（二重に入れない）。
+   */
+  settledBattleId: string | null;
 
   isUnlocked: (chapterId: string) => boolean;
   isCleared: (chapterId: string) => boolean;
@@ -28,10 +33,30 @@ interface CampaignStore {
   assistLevelFor: (chapterId: string, tier?: ChapterTier) => 0 | 1 | 2;
   recordAttempt: (chapterId: string, tier?: ChapterTier) => void;
   recordResult: (chapterId: string, win: boolean, stars?: 1 | 2 | 3, tier?: ChapterTier) => void;
+  /** その戦闘の結果を まだ入れていなければ入れる（入れたら true。同じ battleId は2回目から false） */
+  settleResult: (battleId: string, chapterId: string, win: boolean, stars?: 1 | 2 | 3, tier?: ChapterTier) => boolean;
   /** まだクリアしていない最初の章（全クリアなら最終章） */
   nextChapterId: () => string;
   setLastChapter: (chapterId: string) => void;
   reset: () => void;
+}
+
+type ResultState = Pick<CampaignStore, 'stars' | 'clearedChapters' | 'tierCleared' | 'lossStreak'>;
+
+/** 章の結果（★・クリア・連敗）を入れたあとの値 */
+function resultPatch(s: ResultState, chapterId: string, win: boolean, stars: 1 | 2 | 3 | undefined, tier: ChapterTier): ResultState {
+  const k = tierKey(chapterId, tier);
+  const prevStars = s.stars ?? {};
+  const cleared = s.clearedChapters ?? [];
+  const tierCleared = s.tierCleared ?? [];
+  const loss = s.lossStreak ?? {};
+  return {
+    stars: win && stars && stars > (prevStars[k] ?? 0) ? { ...prevStars, [k]: stars } : prevStars,
+    clearedChapters: win && tier === 'normal' && !cleared.includes(chapterId) ? [...cleared, chapterId] : cleared,
+    tierCleared: win && tier !== 'normal' && !tierCleared.includes(k) ? [...tierCleared, k] : tierCleared,
+    // 勝ったら連敗リセット（＝サポートモードも解除）。負けたら+1。段ごとに数える
+    lossStreak: { ...loss, [k]: win ? 0 : (loss[k] ?? 0) + 1 },
+  };
 }
 
 export const useCampaignStore = create<CampaignStore>()(
@@ -43,6 +68,7 @@ export const useCampaignStore = create<CampaignStore>()(
       attempts: {},
       stars: {},
       lastChapterId: CAMPAIGN[0].id,
+      settledBattleId: null,
 
       // 第1章は常に開放。以降は「前の章をクリア」で開放（線形進行）。
       // 進行を1本にすることで「どこまで来たか」が子どもにも一目でわかる。
@@ -76,21 +102,13 @@ export const useCampaignStore = create<CampaignStore>()(
           return { attempts: { ...attempts, [k]: (attempts[k] ?? 0) + 1 }, lastChapterId: chapterId };
         }),
 
-      recordResult: (chapterId, win, stars, tier = 'normal') =>
-        set(s => {
-          const k = tierKey(chapterId, tier);
-          const prevStars = s.stars ?? {};
-          const cleared = s.clearedChapters ?? [];
-          const tierCleared = s.tierCleared ?? [];
-          const loss = s.lossStreak ?? {};
-          return {
-            stars: win && stars && stars > (prevStars[k] ?? 0) ? { ...prevStars, [k]: stars } : prevStars,
-            clearedChapters: win && tier === 'normal' && !cleared.includes(chapterId) ? [...cleared, chapterId] : cleared,
-            tierCleared: win && tier !== 'normal' && !tierCleared.includes(k) ? [...tierCleared, k] : tierCleared,
-            // 勝ったら連敗リセット（＝サポートモードも解除）。負けたら+1。段ごとに数える
-            lossStreak: { ...loss, [k]: win ? 0 : (loss[k] ?? 0) + 1 },
-          };
-        }),
+      recordResult: (chapterId, win, stars, tier = 'normal') => set(s => resultPatch(s, chapterId, win, stars, tier)),
+
+      settleResult: (battleId, chapterId, win, stars, tier = 'normal') => {
+        if (!battleId || get().settledBattleId === battleId) return false;
+        set(s => ({ ...resultPatch(s, chapterId, win, stars, tier), settledBattleId: battleId }));
+        return true;
+      },
 
       nextChapterId: () => {
         const cleared = get().clearedChapters ?? [];
@@ -100,7 +118,7 @@ export const useCampaignStore = create<CampaignStore>()(
 
       setLastChapter: (chapterId) => set({ lastChapterId: chapterId }),
 
-      reset: () => set({ clearedChapters: [], tierCleared: [], lossStreak: {}, attempts: {}, stars: {}, lastChapterId: CAMPAIGN[0].id }),
+      reset: () => set({ clearedChapters: [], tierCleared: [], lossStreak: {}, attempts: {}, stars: {}, lastChapterId: CAMPAIGN[0].id, settledBattleId: null }),
     }),
     {
       name: SAVE_KEYS.campaign,
@@ -114,6 +132,7 @@ export const useCampaignStore = create<CampaignStore>()(
           lossStreak: p.lossStreak ?? {},
           attempts: p.attempts ?? {},
           stars: p.stars ?? {},
+          settledBattleId: typeof p.settledBattleId === 'string' ? p.settledBattleId : null,
         };
       },
     }

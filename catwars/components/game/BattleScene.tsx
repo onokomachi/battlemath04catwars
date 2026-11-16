@@ -243,7 +243,12 @@ interface Props {
     init: SimInit;
     opponentName: string;
   };
-  /** stars＝勝ったときの星（1〜3。まちがえずに解けた割合で決まる） */
+  /**
+   * 勝ち負けが決まった瞬間に1回だけ呼ぶ（勝ちの 💠・章の記録を ここで入れる。結果画面のまま 読みなおしても のこるように）。
+   * 二重に入れない しくみは 呼ぶ側（utils/settleBattle.ts）。対戦（pvp）では 呼ばない。
+   */
+  onSettle?: (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => void;
+  /** 結果画面のボタン・退却（画面を閉じる）。stars＝勝ったときの星（1〜3。まちがえずに解けた割合で決まる） */
   onEndBattle: (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => void;
 }
 
@@ -264,6 +269,7 @@ export const BattleScene: React.FC<Props> = ({
   creditBonus = 0,
   quizSubtopics = [],
   pvp,
+  onSettle,
   onEndBattle,
 }) => {
   /** 自分がどちらのプレイヤーか。PvEでは常に P1 */
@@ -542,6 +548,15 @@ export const BattleScene: React.FC<Props> = ({
     if (!pausedRef.current) lastRealRef.current = 0;
   }, [battlePaused, briefingOpen]);
 
+  /** 勝ったときの 💠（章・段・きょうの「💠 2ばい」・発電所） */
+  const lootFor = (win: boolean): number => {
+    if (!win) return 0;
+    const lootMult = hasBuff('DOUBLE_LOOT') ? 1 + buffVal('DOUBLE_LOOT') / 100 : 1;
+    return Math.round(chapter.rewardCredits * TIER_INFO[tier].rewardMult * lootMult * (1 + creditBonus));
+  };
+  /** 勝ち負けが決まったときに入れた 💠 と ★（結果画面は これを出す） */
+  const [settled, setSettled] = useState<{ gold: number; stars?: 1 | 2 | 3 } | null>(null);
+
   // 戦闘終了時：出撃した系統にXPを付与
   const xpGrantedRef = useRef(false);
   useEffect(() => {
@@ -571,6 +586,11 @@ export const BattleScene: React.FC<Props> = ({
         after.markBadgesSeen(badges.map(b => b.id));
         setGains({ coins: after.coinsTotal - coinsAtStartRef.current, badges, dex: [...rb.newDex, ...rf.cats] });
       } catch { /* 収集の記録で 戦いの結果を止めない */ }
+      // 勝ちの 💠・章の記録（クリア・★・連敗）も ここで入れる（ボタンを待たない）。★の前の値を 収集が読んだあと
+      const win = battleResult === 'WIN';
+      const r = { gold: lootFor(win), stars: win ? starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect) : undefined };
+      setSettled(r);
+      onSettle?.(win, { gold: r.gold }, r.stars);
     }
   }, [battleResult]);
 
@@ -1493,10 +1513,10 @@ export const BattleScene: React.FC<Props> = ({
 
        {/* Result Modal display */}
        {battleResult && (() => {
-         const lootMult = hasBuff('DOUBLE_LOOT') ? 1 + buffVal('DOUBLE_LOOT') / 100 : 1;
          const win = battleResult === 'WIN';
-         // 戦利品は章ごとに設定（難しい章ほど多い）
-         const loot = win ? { gold: Math.round(chapter.rewardCredits * TIER_INFO[tier].rewardMult * lootMult * (1 + creditBonus)) } : { gold: 0 };
+         // 戦利品は章ごとに設定（難しい章ほど多い）。勝ち負けが決まったときに もう入れてある（settled）
+         const loot = { gold: settled ? settled.gold : lootFor(win) };
+         const winStars = settled?.stars ?? starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect);
          // fixed + z-[160] にして、下部のキャラ出撃バー(z-50)より確実に手前へ出す。
          // 以前は両方 z-50 の兄弟要素で、DOM順が後のバーがリザルトを覆っていた。
          return (
@@ -1513,8 +1533,8 @@ export const BattleScene: React.FC<Props> = ({
                  <GainsSummary gains={gains} />
                  <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
-                 <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect))}>
-                   ごほうびを もらって かえる（💠{loot.gold}）{hasBuff('DOUBLE_LOOT') && ' アップ！'}
+                 <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, winStars)}>
+                   {settled ? `基地へ もどる（💠${loot.gold} ゲット！${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}）` : `ごほうびを もらって かえる（💠${loot.gold}）${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}`}
                  </Button>
                </div>
             ) : (

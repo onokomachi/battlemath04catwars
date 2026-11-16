@@ -31,6 +31,7 @@ import { CAPSULE_RULES } from '../collection/stickers';
 import { sfx } from '../utils/audioEngine';
 import { usePortalLifecycle, startSortie, usePortal, sortieLock, playingLock, reportSortieLock, afterBattle } from '../portal/usePortal';
 import { PortalCard, SortieStamina } from '../portal/PortalCard';
+import { settleBattle, newBattleId } from '../utils/settleBattle';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
@@ -47,7 +48,7 @@ interface Props {
 
 export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const [view, setView] = useState<View>('home');
-  const { resources, buildings, troops, lastTick, addResources } = usePlayerStore();
+  const { resources, buildings, troops, lastTick } = usePlayerStore();
   const { resetBattleSession } = useBattleSetupStore();
   const {
     getTodayDailyStars, dailyStreak, todayAnswered, dailyGoal, updateDailyStreak, permanentUnlocks,
@@ -94,7 +95,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
    * 戦闘の きっぷ。出撃の関門（portal/gate.ts）を通ったときだけ できる。戦闘の画面は これが無いと出さない
    * （関門を通らずに戦闘を始める道を残さない）。戦闘が おわったら 消す。
    */
-  const [battleTicket, setBattleTicket] = useState<{ chapterId: string; tier: ChapterTier } | null>(null);
+  const [battleTicket, setBattleTicket] = useState<{ id: string; chapterId: string; tier: ChapterTier } | null>(null);
   const [sortieBusy, setSortieBusy] = useState(false);
   const [sortieMsg, setSortieMsg] = useState<string | null>(null);
 
@@ -121,20 +122,29 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       const r = await startSortie(formation);
       if (r.ok === false) { setSortieMsg(r.message); return; }
       campaign.recordAttempt(chapterId, activeTier);
-      setBattleTicket({ chapterId, tier: activeTier });
+      setBattleTicket({ id: newBattleId(), chapterId, tier: activeTier });
       setView('battle');
     } finally {
       setSortieBusy(false);
     }
   };
 
+  /**
+   * 勝ち負けが決まった瞬間に1回だけ：勝ちの 💠・章の記録（クリア・★・連敗の数）を入れる（utils/settleBattle.ts）。
+   * BattleScene の 戦闘終了の useEffect が呼ぶ。結果画面のまま 読みなおしても のこる。入れたら すぐ セーブを送る。
+   */
+  const handleSettle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
+    if (!battleTicket) return;
+    const done = settleBattle({ battleId: battleTicket.id, chapterId: battleTicket.chapterId, tier: battleTicket.tier, win, gold: loot.gold, stars });
+    if (done) afterBattle();
+  };
+
+  /** 結果画面のボタン・退却：画面を閉じる（まだ結果を入れていない＝退却 のときだけ ここで 負けとして入れる。💠 は無し） */
   const handleEndBattle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
-    if (win) addResources(Math.round(loot.gold));
-    // 章の結果を記録（勝敗で連敗数が更新され、サポートモードの判定に反映される）
-    campaign.recordResult(activeChapterId, win, stars, activeTier);
+    handleSettle(win, loot, stars);
     setBattleTicket(null);
     setView('home');
-    // 解いた問題の記録を まとめて送る・セーブを しまう（名乗っているときだけ）
+    // 解いた問題の記録を まとめて送る・セーブを しまう（名乗っているときだけ。中身が変わっていなければ 送らない）
     afterBattle();
   };
 
@@ -218,6 +228,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         threat={threat}
         threatPct={Math.round((tMult - 1) * 100)}
         quizSubtopics={quizSubtopics}
+        onSettle={handleSettle}
         onEndBattle={handleEndBattle}
       />
     );
