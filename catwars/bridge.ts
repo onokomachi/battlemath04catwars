@@ -6,6 +6,7 @@
 //   ⚡ エナジー    … その日だけの通貨。出撃バフ（DailyBuffsPanel）に使う。
 //   部隊XP         … 出撃の5枠の系統に入る（上限は かけら＝learn/shards.ts）。
 //   学習の記録     … まちがえずに解いた回数（かけら）と、きょうの数（その日に動かせる施設）。useStudyStore。
+//   シールコイン   … 収集のカプセル（collection/coins.ts）。まちがえずに解いたときだけ。useCollectionStore。
 //   （内部の store フィールド名 resources.gold=💠 / dailyStars=⚡ は そのまま）
 //
 // 数は data/rewards.ts（scripts/progressionSim.ts と同じもの）。
@@ -16,6 +17,7 @@ import { useArmyStore } from './store/useArmyStore';
 import { useStudyStore } from './store/useStudyStore';
 import { difficultyFactor } from './data/problemWeights';
 import { CREDIT_PER_CORRECT, ENERGY_PER_CORRECT, STUDY_XP_PER_CORRECT } from './data/rewards';
+import { recordCollectionAnswer } from './collection/record';
 
 /** むずかしさ3を 1.0 とした倍率（1で約0.75倍、5で約1.25倍） */
 function studyMultiplier(difficulty = 3): number {
@@ -37,6 +39,8 @@ export function grantStudyReward(
   // 学習量を記録（バフのティア解放条件・連続日数）
   try { progress.recordAnswer(item.skillId ?? 'study', perfect); } catch { /* noop */ }
   useStudyStore.getState().record(item.unitKey, item.skillId, perfect);
+  // 収集：シールコイン（学習の成果だけ）・ふくしゅう・れんぞく学習の記録（collection/）
+  try { recordCollectionAnswer({ unitKey: item.unitKey, skillId: item.skillId, difficulty: item.difficulty, perfect }); } catch { /* noop */ }
   if (!perfect) return;
 
   const m = studyMultiplier(item.difficulty ?? 3);

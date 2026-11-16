@@ -38,6 +38,13 @@ import {
 import { BuildingType } from '../catwars/types';
 import { DetRNG } from '../catwars/sim/rng';
 import { SKILLS, unlockedSkillIds } from '../catwars/data/skills';
+import { TIER_CARD_LIMIT, tierDifficulty, tierKey } from '../catwars/data/campaign';
+import { starsFor } from '../catwars/data/rewards';
+import { BADGES, BADGE_TIER_TOTAL, badgeTierCount, evalBadges, type BadgeInput } from '../catwars/collection/badges';
+import { CAPSULE_RULES, EXCHANGE_COST, RARITY_ORDER, STICKERS, ownedKinds, pullCapsule, exchangeSticker } from '../catwars/collection/stickers';
+import { ENEMY_DEX, CAT_DEX_KEYS, foundCatKeys, unitDexKey, bossDexKey } from '../catwars/collection/dex';
+import { applyAnswer, applyBattle, applyBadges, emptySave, localDay, type CollectionSave } from '../catwars/store/useCollectionStore';
+import { BARRACKS_UNLOCKS } from '../catwars/data/facilities';
 
 const VERBOSE = process.env.VERBOSE === '1';
 
@@ -66,6 +73,8 @@ const ALL_SKILLS = rounds.map(r => `${r.unitKey}/${r.skillId}`);
 const SKILLS_BY_UNIT: Record<string, string[]> = {};
 for (const r of rounds) (SKILLS_BY_UNIT[r.unitKey] ??= []).push(`${r.unitKey}/${r.skillId}`);
 
+const DIFF_OF: Record<string, number> = Object.fromEntries(rounds.map(r => [`${r.unitKey}/${r.skillId}`, r.difficulty]));
+const HARD_KEYS = ALL_SKILLS.filter(k => (DIFF_OF[k] ?? 3) >= 4);
 const formationSkillCache = new Map<string, string[]>();
 function skillsForFormation(form: string[]): string[] {
   const key = form.join(',');
@@ -109,7 +118,19 @@ interface Result {
   weekly: string[];
   /** 日 → 系統ごとの 開いているスキルの数（7日ごと） */
   skillsByDay: Record<number, Record<string, number>>;
+  /** 収集（CW-4c）：日 → うまり具合 */
+  col: Record<number, ColDay>;
+  /** 収集：何も あたらしく 手に入らなかった日 */
+  emptyDays: number[];
+  /** 収集：1日に あたらしく手に入れた数の いちばん少ない日の数 */
+  minNewPerDay: number;
+  /** あたらしいもの（ダブりでない）が 無かった日 */
+  strictEmpty: number[];
+  colBadges: Record<string, number>;
 }
+
+interface ColDay { stickers: number; badgeTiers: number; badges: number; dex: number; coinsTotal: number; pulls: number; frag: number }
+const DEX_TOTAL = ENEMY_DEX.length + CAT_DEX_KEYS.length;
 
 function run(p: Profile): Result {
   const rng = new DetRNG(20261115);
@@ -125,6 +146,35 @@ function run(p: Profile): Result {
   let rot = 0;
   const weekly: string[] = [];
   const skillsByDay: Record<number, Record<string, number>> = {};
+  // ── 収集（CW-4c）。乱数は べつ（上の育ち方・施設の数を 変えないため）──
+  const crng = new DetRNG(20261116);
+  const crand = () => crng.next();
+  let col: CollectionSave = emptySave();
+  const campStars: Record<string, number> = {};
+  const colByDay: Record<number, ColDay> = {};
+  const emptyDays: number[] = [];
+  const strictEmpty: number[] = [];
+  let minNew = Infinity;
+  const unitPerfect: Record<string, number> = {};
+  const countNew = (before: CollectionSave, after: CollectionSave) =>
+    (ownedKinds(after.cap.stickers) - ownedKinds(before.cap.stickers)) + (badgeTierCount(after.badges) - badgeTierCount(before.badges))
+    + (after.enemySeen.length - before.enemySeen.length) + (after.cats.length - before.cats.length);
+  const badgeInput = (): BadgeInput => {
+    const unitSh: Record<string, number> = {};
+    for (const u of PACK_UNITS) unitSh[u.key] = unitShards(u.key, perfect);
+    let open = 0, famsWith = 0;
+    for (const f of FAMILIES) { const c = skillCount(f, perfect); open += c; if (c > 0) famsWith++; }
+    let total = 0; for (const v of perfect.values()) total += v;
+    const st = col.stats;
+    return {
+      perfectTotal: total, bestDayPerfect: st.bestDayPerfect, bestStreak: st.bestStreak, studyDays: st.studyDays,
+      reviewCleared: st.reviewCleared, unitPerfect: { ...unitPerfect }, unitShards: unitSh, bestRun: st.bestRun,
+      hardPerfect: st.hardPerfect, star3Battles: st.star3Battles, stars: { ...campStars },
+      extremePerfectChapters: st.extremePerfect.length, shieldBreaks: st.shieldBreaks,
+      skillsOpen: open, familiesWithSkill: famsWith, familiesTotal: FAMILIES.length,
+      bestBattlePerfect: st.bestBattlePerfect, bestBattleShield: st.bestBattleShield,
+    };
+  };
 
   const top5 = () => FAMILIES.map(f => lv[f]).sort((a, b) => b - a).slice(0, 5).reduce((a, b) => a + b, 0) / 5;
   const giveXp = (fam: string, amount: number) => {
@@ -142,6 +192,8 @@ function run(p: Profile): Result {
   for (let day = 1; day <= p.days; day++) {
     const [lo, hi] = p.battlesPerDay;
     const battles = lo + rng.int(hi - lo + 1);
+    const today = localDay(new Date(2026, 0, day));
+    const dayStart = col;
     for (let b = 0; b < battles; b++) {
       const form = p.rotateAll
         ? Array.from({ length: 5 }, (_, i) => FAMILIES[(rot + i) % FAMILIES.length])
@@ -149,11 +201,32 @@ function run(p: Profile): Result {
       rot = (rot + 1) % FAMILIES.length;
       // 問題
       let ok = 0;
+      const pool0 = p.range === 'all' ? ALL_SKILLS : skillsForFormation(form);
+      // 収集：どの章・段で戦うかは 下で きまるので、カードの まいすうは 前もって 最前線で見る（げきむず だけ）
+      const frPeek = frontier();
+      const lim = frPeek && frPeek.tier === 'extreme' ? (TIER_CARD_LIMIT.extreme?.[frPeek.no] ?? p.problemsPerBattle) : p.problemsPerBattle;
+      let bAnswered = 0, bPerfect = 0;
       for (let q = 0; q < p.problemsPerBattle; q++) {
-        if (rng.next() >= p.accuracy) continue;
+        const hit = rng.next() < p.accuracy;
+        if (q < lim) {
+          // まちがえた ときの 項目は 収集の乱数で（上の乱数の並びを 変えない）
+          const km = hit ? null : pool0[crng.int(pool0.length)];
+          if (km) {
+            bAnswered++;
+            const [u, sk] = [km.slice(0, km.indexOf('/')), km.slice(km.indexOf('/') + 1)];
+            col = applyAnswer(col, { unitKey: u, skillId: sk, difficulty: DIFF_OF[km], perfect: false }, today).save;
+          }
+        }
+        if (!hit) continue;
         ok++;
-        const pool = p.range === 'all' ? ALL_SKILLS : skillsForFormation(form);
+        const pool = pool0;
         const k = pool[rng.int(pool.length)];
+        if (q < lim) {
+          bAnswered++; bPerfect++;
+          const u = k.slice(0, k.indexOf('/'));
+          unitPerfect[u] = (unitPerfect[u] ?? 0) + 1;
+          col = applyAnswer(col, { unitKey: u, skillId: k.slice(k.indexOf('/') + 1), difficulty: DIFF_OF[k], perfect: true }, today).save;
+        }
         perfect.set(k, (perfect.get(k) ?? 0) + 1);
         credits += CREDIT_PER_CORRECT; earned += CREDIT_PER_CORRECT;
         for (const f of form) giveXp(f, STUDY_XP_PER_CORRECT);
@@ -169,7 +242,10 @@ function run(p: Profile): Result {
           fr = fr.no > 1 ? { tier: fr.tier, no: fr.no - 1 } : { tier: TIER_ORDER[TIER_ORDER.indexOf(fr.tier) - 1], no: CAMPAIGN.length };
         }
       } else {
-        fr = { tier: 'extreme', no: CAMPAIGN.length };
+        // ぜんぶクリアしたら、★3 で ない 章・段を くりかえす（収集の「ぜんぶ ★3」のため。無ければ げきむず 第8章）
+        let pickT: { tier: ChapterTier; no: number } = { tier: 'extreme', no: CAMPAIGN.length };
+        outer: for (const t of TIER_ORDER) for (const c of CAMPAIGN) if ((campStars[tierKey(c.id, t)] ?? 0) < 3) { pickT = { tier: t, no: c.no }; break outer; }
+        fr = pickT;
         replay = true;
       }
       const ch = CAMPAIGN[fr.no - 1];
@@ -178,6 +254,29 @@ function run(p: Profile): Result {
       const gap = avg - base;
       const wr = Math.max(0.05, p.winRate * (gap >= 0 ? 1 : Math.max(0.1, 1 + 0.04 * gap)));
       const win = rng.next() < wr;
+      // 収集：ボスのシールドは ふくしゅうカード（まちがえた項目 → 無ければ むずかしい項目）。まちがえずに とけたら 1まい われる
+      {
+        const td = tierDifficulty(ch, fr.tier);
+        let shields = 0;
+        for (let i = 0; i < (td.bossShield ?? 0); i++) {
+          const pend = col.stats.reviewPending;
+          const k = pend.length ? pend[crng.int(pend.length)] : HARD_KEYS[crng.int(HARD_KEYS.length)];
+          const okS = crng.next() < p.accuracy;
+          const u = k.slice(0, k.indexOf('/'));
+          col = applyAnswer(col, { unitKey: u, skillId: k.slice(k.indexOf('/') + 1), difficulty: DIFF_OF[k], perfect: okS }, today).save;
+          bAnswered++;
+          if (okS) { bPerfect++; shields++; unitPerfect[u] = (unitPerfect[u] ?? 0) + 1; }  // かけら（perfect）には 足さない（CW-4a/4b の 育ち方の数を 変えないため）
+        }
+        col = { ...col, stats: { ...col.stats, shieldBreaks: col.stats.shieldBreaks + shields } };
+        const seen = [...td.unitPool.map(unitDexKey), ...(td.bossAtSpawnCount != null ? [unitDexKey('boss')] : []), bossDexKey(ch.id)];
+        const defeated: Record<string, number> = {};
+        for (const k of td.unitPool) defeated[unitDexKey(k)] = win ? 6 : 2;
+        const tk = tierKey(ch.id, fr.tier);
+        const stars = win ? starsFor(bAnswered, bPerfect) : undefined;
+        const prev = campStars[tk] ?? 0;
+        col = applyBattle(col, { chapterId: ch.id, tier: fr.tier, win, stars, prevStars: prev, answered: bAnswered, perfect: bPerfect, shields, seen, defeated }).save;
+        if (win && stars && stars > prev) campStars[tk] = stars;
+      }
       for (const f of form) giveXp(f, win ? BATTLE_XP_WIN : BATTLE_XP_LOSS);
       if (win) {
         const bonus = powerPlantBonus(owned[BuildingType.GOLD_MINE], facLv[BuildingType.GOLD_MINE]);
@@ -203,6 +302,40 @@ function run(p: Profile): Result {
       credits -= best.cost;
       best.act();
     }
+    // 収集：ネコの図鑑・バッジ → シールコインで カプセル → シールのかけらで こうかん
+    {
+      const unlocked = [...FAMILIES.filter(f => CHARACTERS.find(c => c.id === f)?.isStarter)];
+      for (const u of BARRACKS_UNLOCKS) if (owned[BuildingType.BARRACKS] >= u.need) unlocked.push(...u.ids);
+      const cats = foundCatKeys(unlocked, lv).filter(k => !col.cats.includes(k));
+      if (cats.length) col = { ...col, cats: [...col.cats, ...cats] };
+      col = applyBadges(col, evalBadges(badgeInput())).save;
+      while (col.coins >= CAPSULE_RULES.cost) {
+        const r = pullCapsule(col.cap, crand);
+        col = { ...col, coins: col.coins - CAPSULE_RULES.cost, cap: { ...r.next, pulls: col.cap.pulls + 1 } };
+      }
+      // こうかん：たりる いちばん めずらしい まだのシール
+      for (;;) {
+        const cand = [...RARITY_ORDER].reverse().flatMap(rr => STICKERS.filter(x => x.rarity === rr && !(col.cap.stickers[x.id] > 0)))
+          .find(x => col.cap.frag >= EXCHANGE_COST[x.rarity]);
+        if (!cand) break;
+        col = { ...col, cap: { ...exchangeSticker(col.cap, cand.id), pulls: col.cap.pulls } };
+      }
+      // 「何か手に入れた」＝ あたらしい バッジの段・図鑑・シール、または カプセルで シールを1まい（ダブりでも かけらになる）
+      const nNew = countNew(dayStart, col);
+      const pulled = col.cap.pulls - dayStart.cap.pulls;
+      if (nNew === 0 && pulled === 0) emptyDays.push(day);
+      if (nNew === 0) strictEmpty.push(day);
+      minNew = Math.min(minNew, nNew + pulled);
+      if (process.env.BADGEDAY && Number(process.env.BADGEDAY) === day) {
+        const bi = badgeInput();
+        console.log(`[${p.label} ${day}日] バッジ ` + BADGES.map(b => `${b.id}=${col.badges[b.id] ?? 0}/${b.tiers.length}(${b.measure(bi)})`).join(' '));
+      }
+      colByDay[day] = {
+        stickers: ownedKinds(col.cap.stickers), badgeTiers: badgeTierCount(col.badges),
+        badges: Object.keys(col.badges).length, dex: col.enemySeen.length + col.cats.length,
+        coinsTotal: col.coinsTotal, pulls: col.cap.pulls, frag: col.cap.frag,
+      };
+    }
     if (day % 7 === 0) skillsByDay[day] = Object.fromEntries(FAMILIES.map(f => [f, skillCount(f, perfect)]));
     if (VERBOSE || day % 7 === 0) {
       const fr = frontier();
@@ -219,7 +352,7 @@ function run(p: Profile): Result {
     avgTop5: top5(), levels: lv, facLevels: facLv, owned, creditsEarned: earned, creditsLeft: credits,
     frontier: fr ? `${TIER_INFO[fr.tier].label} 第${fr.no}章` : 'ぜんぶクリア',
     caps: Object.fromEntries(FAMILIES.map(f => [f, familyCap(f, perfect)])),
-    weekly, skillsByDay,
+    weekly, skillsByDay, col: colByDay, emptyDays, strictEmpty, minNewPerDay: minNew, colBadges: col.badges,
   };
 }
 
@@ -263,6 +396,30 @@ for (const d of [7, 14, 21, 28, 35, 42, 49, 56]) console.log(`  トップ層 ${S
 console.log(`  → エンジョイ勢 4週間で 5枠に 平均 ${enjoyAvg.toFixed(1)}個 ${ok4 ? '✅' : '❌'}（1つ以上）・トップ層 4週間で ${t28}/${SKILLS.length}個 ${ok5 ? '✅' : '❌'}（全部は開いていない）・8週間で ${t56}/${SKILLS.length}個`);
 if (!ok4) bad++;
 if (!ok5) bad++;
+
+// ── 収集（CW-4c）──
+const pct = (a: number, b: number) => `${Math.round((a / b) * 100)}%`;
+const colLine = (r: Result, d: number) => {
+  const c = r.col[d];
+  return c ? `${String(d).padStart(2)}日：シール ${c.stickers}/${STICKERS.length}（${pct(c.stickers, STICKERS.length)}）・バッジ ${c.badgeTiers}/${BADGE_TIER_TOTAL}段（${pct(c.badgeTiers, BADGE_TIER_TOTAL)}・${c.badges}/${BADGES.length}こ）・図鑑 ${c.dex}/${DEX_TOTAL}・コイン累計 ${c.coinsTotal}・回した ${c.pulls}回・のこりのかけら ${c.frag}` : '';
+};
+const tc = run({ ...TOP, days: 84 });
+console.log(`\n■ 収集（シール ${STICKERS.length}しゅるい・バッジ ${BADGES.length}こ／${BADGE_TIER_TOTAL}段・図鑑 ${DEX_TOTAL}）`);
+for (const d of [1, 2, 3, 7, 14, 21, 28]) console.log(`  エンジョイ勢 ${colLine(e, d)}`);
+for (const d of [7, 14, 21, 28, 42, 56, 70, 84]) console.log(`  トップ層 ${colLine(tc, d)}`);
+const ec28 = e.col[28], t28c = tc.col[28], t56c = tc.col[56], t84c = tc.col[84];
+const sr = (c: ColDay) => c.stickers / STICKERS.length, br = (c: ColDay) => c.badgeTiers / BADGE_TIER_TOTAL;
+const okC1 = e.emptyDays.length === 0;
+const okC2 = sr(ec28) >= 0.4 && sr(ec28) <= 0.6;
+const okC3 = br(ec28) >= 0.3 && br(ec28) <= 0.5;
+const okC4 = sr(t28c) < 0.8 && br(t28c) < 0.8;
+const okC5 = sr(t84c) >= 0.9 && br(t84c) >= 0.85;
+console.log(`  → エンジョイ勢：何も 手に入らない日 ${e.emptyDays.length}日${e.emptyDays.length ? `（${e.emptyDays.join(',')}日め）` : ''}・1日に 手に入れた数の いちばん少ない日 ${e.minNewPerDay} ${okC1 ? '✅' : '❌'}（毎日1つ以上）。ダブりでない あたらしいものが 無かった日 ${e.strictEmpty.length}日${e.strictEmpty.length ? `（${e.strictEmpty.join(',')}日め）` : ''}`);
+console.log(`     28日で シール ${pct(ec28.stickers, STICKERS.length)} ${okC2 ? '✅' : '❌'}（40〜60%）・バッジ ${pct(ec28.badgeTiers, BADGE_TIER_TOTAL)} ${okC3 ? '✅' : '❌'}（30〜50%）`);
+console.log(`  → トップ層：28日で シール ${pct(t28c.stickers, STICKERS.length)}・バッジ ${pct(t28c.badgeTiers, BADGE_TIER_TOTAL)} ${okC4 ? '✅' : '❌'}（どちらも 80%未満）／56日で シール ${pct(t56c.stickers, STICKERS.length)}・バッジ ${pct(t56c.badgeTiers, BADGE_TIER_TOTAL)}／84日で シール ${pct(t84c.stickers, STICKERS.length)}・バッジ ${pct(t84c.badgeTiers, BADGE_TIER_TOTAL)} ${okC5 ? '✅' : '❌'}（シール90%・バッジ85% いじょう）`);
+const lastBadges = BADGES.filter(b => (tc.colBadges?.[b.id] ?? 0) < b.tiers.length).map(b => b.id);
+if (VERBOSE) console.log(`  84日で のこっている バッジ：${lastBadges.join(', ')}`);
+for (const ok of [okC1, okC2, okC3, okC4, okC5]) if (!ok) bad++;
 
 if (bad) { console.log(`\n✗ 進み方の条件を ${bad} つ満たしていない（XP・値段を見なおす：data/rewards.ts・data/characters.ts の XP_CURVE・data/facilities.ts）\n`); process.exit(1); }
 console.log('\n✓ エンジョイ勢は4週間で第8章に届き、トップ層は8週間たっても目標が残っている\n');

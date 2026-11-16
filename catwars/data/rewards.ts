@@ -15,3 +15,12 @@ export const BATTLE_XP_LOSS = 50;
 export const START_CREDITS = 500;
 /** 💠 の上限（事実上なし。前は 8000 で、施設を持ちつづける形では すぐ止まってしまう） */
 export const MAX_CREDITS = 9_999_999;
+
+/** 星（★1〜3）：勝ったうえで、まちがえずに解けた割合で決める。速さでは決めない（急いで雑に解くことを得にしない） */
+export function starsFor(answered: number, perfect: number): 1 | 2 | 3 {
+  if (answered <= 0) return 1;
+  const rate = perfect / answered;
+  if (answered >= 8 && rate >= 0.9) return 3;
+  if (answered >= 5 && rate >= 0.7) return 2;
+  return 1;
+}

@@ -255,11 +255,5 @@ export const ProblemCards: React.FC<Props> = ({
   );
 };
 
-/** 星（★1〜3）：勝ったうえで、まちがえずに解けた割合で決める。速さでは決めない（急いで雑に解くことを得にしない） */
-export function starsFor(answered: number, perfect: number): 1 | 2 | 3 {
-  if (answered <= 0) return 1;
-  const rate = perfect / answered;
-  if (answered >= 8 && rate >= 0.9) return 3;
-  if (answered >= 5 && rate >= 0.7) return 2;
-  return 1;
-}
+/** 星（★1〜3）は data/rewards.ts（進み方の計算と同じもの） */
+export { starsFor } from '../../data/rewards';
