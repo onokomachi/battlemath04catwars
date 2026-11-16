@@ -18,10 +18,15 @@ export const SAVE_KEYS = {
   collection: 'catwars-collection-v1',
   /** 学級ポータルへ まだ送れていない 1問の記録（直近500件。portal/outbox.ts）。ストアではない・サーバのセーブには入れない */
   outbox: 'catwars-portal-outbox',
+  /**
+   * 最後に サーバへ送った（または サーバから取りこんだ）セーブの中身の目印（短いハッシュ。portal/saveSync.ts）。
+   * 同じ中身なら 送らない（アプリを開くたび・取りこんだ直後に 送りなおさない）。ストアではない・サーバのセーブには入れない
+   */
+  sentHash: 'catwars_portal_sent_hash',
 } as const;
 
 /** ストアではない鍵（学級／おためし の入れかえには入るが、サーバに送るセーブ＝saveBundle には入れない） */
-export const NON_STORE_KEYS = ['outbox'] as const;
+export const NON_STORE_KEYS = ['outbox', 'sentHash'] as const;
 
 /** zustand の persist で しまっている ストアの id（saveBundle が まとめる） */
 export type SaveStoreId = Exclude<keyof typeof SAVE_KEYS, (typeof NON_STORE_KEYS)[number]>;
