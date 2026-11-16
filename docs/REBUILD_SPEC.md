@@ -308,6 +308,21 @@ CW-4b で 0.99 にした（1手の速さを そろえたら「にがて」の +0
 - PRISM：SANMON タブのモードの開け閉めに CAT-WARS を足す。**SOL の一覧にはまだ出さない**（`apps` に足すとき `default_open = false`・SOL 側で非表示）。
 - おためし・デモ・体験版は SANMON と同じ扱い（名乗らないと記録を送らない・セーブは別）。
 
+### 4a. 実装ずみ（CW-5a・2026-11-16）：端末の側だけ つないだ
+くわしくは `docs/PORTAL.md`。サーバ・kit・PRISM・SANMON・SOL は変えていない。サーバ側の下書きは `docs/CW5B_SERVER_PLAN.md`。
+- 名乗り（kit の JoinGate・SOL からの `#c=&n=`）。つないでいないビルド（環境変数なし）は 今までどおり。
+- おためし・体験版：全部あそべる・スタミナを使わない・送らない。セーブは学級と別（`portal/saveProfile.ts`。鍵の一覧は `portal/saveKeys.ts` の1か所）。学級コードの入った端末の体験タブでは あそばせない（SANMON と同じ）。
+- 出撃の関門（`portal/gate.ts`）：出撃1回＝SANMON の ぼうけんのバトル1回（**サーバが町の達成度で 2〜5 を決める**。上の §4 の「5」は 達成度が50％より下のとき）。reason `catwars@<町>`。
+  町＝出撃メンバーの系統の単元のうち 町のスタミナが いちばん多い町。eventId は1出撃に1つ。たりない・閉じている・通信できない ときは 出撃しない。
+- モードの鍵は いまは `adventure`（`CATWARS_MODE_KEY`）。平日モード・番号ごとの停止も効く。
+- かけら：名乗っているときは サーバ（kit の `sanmonShards`）。入口は `learn/shards.ts` の `unitShards`。
+- 記録：持ち主の決定（2026-11-16）で **送る**。中身は `bridge.ts` の `buildPortalLog`（app_id `catwars`・skill_id は単元アプリのまま・module_id は町・label「たたかい：」・detail なし）。
+  **CW-5a では送らない**（`PORTAL_SEND_ENABLED = false`）。スタミナに数えない しくみ は CW-5b。
+- セーブ：`portal/saveBundle.ts`（全ストアを1つの JSON に）。4週間で 15.3KB（めやす 5KB を こえる。`progress.mastery` が 9.2KB。どこからも読まれていない）。
+- 文の手入れ：戦闘の まほう（かいふく・げきおこ）・結果画面（「だい1しょう クリア！」「ごほうびを もらって かえる（💠300）」）・章の物語の文・出撃バフの名前・「傭兵召集」→「なかまを よぶ」。
+  「エナジー増産（GOLD_BOOST）」は「カード エナジー」に作り直した：**問題カードで もらえる ⚡ が +20／35／50％**（BattleScene の `baseReward`。sim は さわっていない＝決定性・数値は そのまま。対戦では効かない）。
+- 試験：`npm run test:portal`（`npm run check` に入れた）。`BAND=1 RUNS=12` の勝率は 前と同じ（想定プレイヤーはバフなし）。
+
 ## 5. 遠征・対戦（CW-6）
 - **週がわりの遠征**：毎週月曜に、種（seed）とルール（例：空中の敵だけ・霧で射程−1・敵の出現2倍）が変わる。学級の合計スコア（星の合計）で目標を目指す。個人の順位は出さない。
 - **同時対戦（本命）**：決定的な戦闘の計算（`catwars/sim/`）とロックステップ（`catwars/net/lockstep.ts`）を Supabase Realtime Broadcast に載せかえる（`net/transport.ts` の実装を1つ足す）。

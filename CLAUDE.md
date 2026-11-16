@@ -1,7 +1,7 @@
 # CAT-WARS（battlemath04catwars）
 
 小4算数のごほうびゲーム。基地をきずき、ネコ軍団で敵の基地をせめる。**問題を解くことがゲームを動かす**（解かないと進まない）。
-学級ポータルにつなぐ予定（SANMON と同じ共通スタミナ）。**まだつないでいない・SOL にも出していない**（2026-11-15）。
+学級ポータルには **端末の側だけ** つないだ（CW-5a・2026-11-16：名乗り・おためし・SANMON と共通のスタミナ・サーバのかけら）。**記録とセーブはまだ送らない・SOL にも出していない**。サーバ側は CW-5b（`docs/CW5B_SERVER_PLAN.md`）。くわしくは `docs/PORTAL.md`。
 
 進み具合の正本は知識集 `onokomachi-master-DB` の `techspecs/catwars-rebuild-plan-and-status.md`。
 
@@ -10,7 +10,7 @@ Vite 6 + React 19 + TypeScript + Tailwind 3 + Zustand 5。Next.js ではない�
 
 ```bash
 npm run dev
-npm run check   # 型・学年パックの検査・戦闘の試験・ビルド（終わる前に必ず）
+npm run check   # 型・学年パックの検査・戦闘の試験・収集・ポータルの試験・ビルド（終わる前に必ず）
 npm run test:balance   # 全章の勝率（数値を変えたら流す）
 npm run test:progress  # 進み方の計算（XP・値段を変えたら流す。数秒）
 ```
@@ -24,9 +24,10 @@ npm run test:progress  # 進み方の計算（XP・値段を変えたら流す�
 - `docs/REBUILD_SPEC.md` … **作り直しの仕様（決めたこと・数値・合格条件）。実装の前に読む**
 - `catwars/components/game/ProblemCards.tsx` … 問題カード（戦闘の主役の操作）と星の決め方
 - `catwars/data/facilities.ts` … 基地の施設（持ちつづける・Lv1〜10・値段・その日に動かせる数）。`store/useBaseStore.ts` が持ち物
-- `catwars/learn/shards.ts` … かけら（レベルの上限＝20＋5×かけら）。いまは端末の中だけの数え方（`store/useStudyStore.ts`）。CW-5 で kit の `sanmonShards` に置きかえる
+- `catwars/learn/shards.ts` … かけら（レベルの上限＝20＋5×かけら）。入口は `unitShards` の1つ：名乗っているときは サーバ（kit の `sanmonShards`）、おためしは 端末の数え方（`store/useStudyStore.ts`）
 - `catwars/components/army/FormationScreen.tsx` … 出撃の5枠（5枠の外の系統は sim の表に入らない＝出せない）
 - `catwars/data/skills.ts` … スキル（8系統×3。かけら 2／4／8 で開く・いつも効く）。効き目のきまりは `sim/simulate.ts`（`applyHit` など）
+- `catwars/portal/` … 学級ポータル（名乗り・おためしのセーブの入れかえ・出撃の関門・スタミナ・saveBundle）。`docs/PORTAL.md`。セーブの鍵は `portal/saveKeys.ts` だけに書く
 - `catwars/collection/`・`store/useCollectionStore.ts` … 収集（図鑑・バッジ34・シール60のカプセル・称号・はた）。保存は `catwars-collection-v1` の1つ（`exportSave`/`importSave`）。画面は `components/collection/`。くわしくは 仕様 §3d、絵の表は `docs/ART_LIST.md`
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
@@ -44,6 +45,8 @@ npm run test:progress  # 進み方の計算（XP・値段を変えたら流す�
 - 戦闘の計算（`catwars/sim/`）は決定的に保つ（乱数は `sim/rng.ts`。`Math.random` を使わない）。対戦を作り直すときに要る。
 - 他社ゲームの固有名（タウンホール・エリクサー・バーバリアンなど）を新しく足さない。残っているものは独自の名前に置きかえる。
 - **収集（バッジ・シールコイン）は学習の量と質だけで手に入る。** 速さ・勝ち負けの数・ログイン時間・放置・💠・お金 を条件や通貨にしない。カプセルは 確率を出す・10回で天井・そろえても ごほうびなし。数を変えたら `npm run test:collection` と `npm run test:progress`（エンジョイ勢が毎日1つ・28日で シール4〜6割、トップ層が28日で8割未満）。
+- **戦闘は かならず 出撃の関門（`portal/usePortal.ts` の `startSortie`＝`portal/gate.ts`）を通して始める。** 関門を通らずに 戦闘の画面を出す道を作らない（`CatWars.tsx` の `battleTicket`）。
+- **スタミナの数・かけら・モードの開け閉めは サーバと kit が決める。** CAT-WARS で 数を決めない（送った数は サーバが決めなおす）。おためし・体験版は 記録もセーブも 送らない。
 - `window.confirm()` / `alert()` を使わない（iPad で出ないことがある）。
 - 子どもの氏名は扱わない。APIキー・トークン・パスワードはファイルにも知識集にも書かない。
 
