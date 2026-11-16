@@ -12,7 +12,7 @@ import { DECORS, TITLES, isOpen } from '../../collection/titles';
 import { CHARACTERS, getCharacterSprite, spriteFamilyForSubType } from '../../data/characters';
 import { TIER_INFO, TIER_ORDER } from '../../data/campaign';
 import { refreshCollection, buildBadgeInput } from '../../collection/record';
-import { BadgeMedal, DecorFlag, StickerView } from './CollectionParts';
+import { ArtImg, BadgeMedal, DecorFlag, StickerView } from './CollectionParts';
 import { sfx } from '../../utils/audioEngine';
 
 /**
@@ -358,7 +358,7 @@ const CapsuleTab: React.FC<{ onAlbum: () => void }> = ({ onAlbum }) => {
                   onClick={() => { if (exchange(s.id)) { sfx.select(); setMsg(`「${s.name}」と こうかんした！`); } }}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] border"
                   style={{ borderColor: ok ? RARITY_INFO[s.rarity].color : 'rgba(255,255,255,0.08)', color: ok ? '#fff' : 'rgba(255,255,255,0.35)' }}>
-                  <span>{ok ? s.emoji : '？'}</span>{ok ? s.name : RARITY_INFO[s.rarity].label}<span className="text-white/50">🧩{cost}</span>
+                  {ok ? <ArtImg src={s.image} size={18} fallback={<span>{s.emoji}</span>} /> : <span>？</span>}{ok ? s.name : RARITY_INFO[s.rarity].label}<span className="text-white/50">🧩{cost}</span>
                 </button>
               );
             })}

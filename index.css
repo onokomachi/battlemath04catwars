@@ -34,3 +34,14 @@
 @media (prefers-reduced-motion: reduce) {
   [style*="cw-capsule-shake"] { animation: none !important; }
 }
+
+/* 収集：レア以上の シールが ゆっくり光る（CW-4c 絵。docs/ART_STYLE.md）。--glow は めずらしさの色 */
+@keyframes cw-glow {
+  0%, 100% { box-shadow: 0 0 6px 0 var(--glow); }
+  50% { box-shadow: 0 0 18px 4px var(--glow); }
+}
+.cw-glow { animation: cw-glow 2.8s ease-in-out infinite; }
+.cw-glow-legend { animation-duration: 2.2s; }
+@media (prefers-reduced-motion: reduce) {
+  .cw-glow { animation: none; box-shadow: 0 0 10px 2px var(--glow); }
+}

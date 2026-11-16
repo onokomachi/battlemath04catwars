@@ -39,22 +39,23 @@ export const TITLES: TitleDef[] = [
 export interface DecorDef {
   id: string;
   name: string;
-  /** はたの 絵文字（仮。docs/ART_LIST.md の絵に差しかえる） */
+  /** はたの 絵文字（絵が読めないときに出す） */
   emoji: string;
   /** はたの 色（2色のしま） */
   colors: [string, string];
+  /** 絵（SVG。public/assets/flags/<id>.svg。docs/ART_STYLE.md） */
   image?: string;
   need: UnlockNeed;
   how: string;
 }
 
 export const DECORS: DecorDef[] = [
-  { id: 'flag-blue', name: 'あおい はた', emoji: '🏳️', colors: ['#2563eb', '#38bdf8'], need: {}, how: 'はじめから' },
-  { id: 'flag-paw', name: 'にくきゅうの はた', emoji: '🐾', colors: ['#f97316', '#fde68a'], need: { badgeTiers: 3 }, how: 'バッジを 3こ' },
-  { id: 'flag-star', name: 'ほしの はた', emoji: '⭐', colors: ['#1e1b4b', '#facc15'], need: { badgeTiers: 12 }, how: 'バッジを 12こ' },
-  { id: 'flag-rainbow', name: 'にじの はた', emoji: '🌈', colors: ['#ec4899', '#22d3ee'], need: { stickers: 15 }, how: 'シールを 15しゅるい' },
-  { id: 'flag-moon', name: 'つきよの はた', emoji: '🌙', colors: ['#312e81', '#c4b5fd'], need: { stickers: 25 }, how: 'シールを 25しゅるい' },
-  { id: 'flag-gold', name: 'きんの はた', emoji: '👑', colors: ['#a16207', '#fde047'], need: { badgeTiers: 40 }, how: 'バッジを 40こ' },
+  { id: 'flag-blue', name: 'あおい はた', emoji: '🏳️', colors: ['#2563eb', '#38bdf8'], image: '/assets/flags/flag-blue.svg', need: {}, how: 'はじめから' },
+  { id: 'flag-paw', name: 'にくきゅうの はた', emoji: '🐾', colors: ['#f97316', '#fde68a'], image: '/assets/flags/flag-paw.svg', need: { badgeTiers: 3 }, how: 'バッジを 3こ' },
+  { id: 'flag-star', name: 'ほしの はた', emoji: '⭐', colors: ['#1e1b4b', '#facc15'], image: '/assets/flags/flag-star.svg', need: { badgeTiers: 12 }, how: 'バッジを 12こ' },
+  { id: 'flag-rainbow', name: 'にじの はた', emoji: '🌈', colors: ['#ec4899', '#22d3ee'], image: '/assets/flags/flag-rainbow.svg', need: { stickers: 15 }, how: 'シールを 15しゅるい' },
+  { id: 'flag-moon', name: 'つきよの はた', emoji: '🌙', colors: ['#312e81', '#c4b5fd'], image: '/assets/flags/flag-moon.svg', need: { stickers: 25 }, how: 'シールを 25しゅるい' },
+  { id: 'flag-gold', name: 'きんの はた', emoji: '👑', colors: ['#a16207', '#fde047'], image: '/assets/flags/flag-gold.svg', need: { badgeTiers: 40 }, how: 'バッジを 40こ' },
 ];
 
 export const TITLE_BY_ID: Record<string, TitleDef> = Object.fromEntries(TITLES.map((t) => [t.id, t]));

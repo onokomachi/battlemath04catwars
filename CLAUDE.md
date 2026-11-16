@@ -30,6 +30,7 @@ npm run test:progress  # 進み方の計算（XP・値段を変えたら流す�
 - `catwars/data/skills.ts` … スキル（8系統×3。かけら 2／4／8 で開く・いつも効く）。効き目のきまりは `sim/simulate.ts`（`applyHit` など）
 - `catwars/portal/` … 学級ポータル（名乗り・おためしのセーブの入れかえ・出撃の関門・スタミナ・記録の送信 `answerSync.ts`・セーブのサーバ保存 `saveSync.ts`）。`docs/PORTAL.md`。セーブの鍵は `portal/saveKeys.ts` だけに書く
 - `catwars/collection/`・`store/useCollectionStore.ts` … 収集（図鑑・バッジ34・シール60のカプセル・称号・はた）。保存は `catwars-collection-v1` の1つ（`exportSave`/`importSave`）。画面は `components/collection/`。くわしくは 仕様 §3d、絵の表は `docs/ART_LIST.md`
+- `public/assets/stickers|badges|flags/` … シール・バッジ（絵柄と メダルの台）・基地のはた の SVG（手書き）。**きまりは `docs/ART_STYLE.md`**（線・パレット・ダイカット）。**同じ名前で上書きしない**（新しい名前で足して `image` を書きかえる）
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
 ## 必ず守ること
