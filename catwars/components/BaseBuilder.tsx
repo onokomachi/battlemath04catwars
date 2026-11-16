@@ -302,7 +302,7 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed }) => 
 
       {/* Loadout summary */}
       <div className="px-4 py-1 text-[10px] text-white/55 flex flex-wrap gap-x-3 gap-y-0.5 border-t border-white/10 flex-shrink-0">
-        <span className="text-white/40">今日つかえる力 →</span>
+        <span className="text-white/40">きょう つかえる力 →</span>
         <span className="text-[#a3e635]">🐱 {loadout.unlockedTroopTypes.length}系統</span>
         <span>💊 ヒール{loadout.healCharges}</span>
         <span>😤 レイジ{loadout.rageCharges}</span>

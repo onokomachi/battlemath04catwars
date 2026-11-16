@@ -14,6 +14,8 @@ import { SimCommand, SimEvent, SimConfig, PlayerId, TICK_MS } from '../../sim/ty
 import type { LockstepSession, LockstepStatus } from '../../net/lockstep';
 import { ProblemCards, starsFor } from './ProblemCards';
 import { QUIZ_BASE_REWARD, cardLimitFor } from '../../data/campaign';
+import { familySkillIds } from '../../learn/shards';
+import { NewSkillNotice } from '../army/SkillParts';
 import { grantStudyReward } from '../../bridge';
 import { sfx } from '../../utils/audioEngine';
 import { useProgressStore, BUFF_LEVEL_INFO } from '../../store/useProgressStore';
@@ -332,6 +334,9 @@ export const BattleScene: React.FC<Props> = ({
     }
     const levels: Record<string, number> = {};
     for (const c of CHARACTERS) levels[c.id] = getLevel(c.id);
+    // スキル：かけらで開いているものを 試合開始時に決めて sim に焼きこむ（戦闘中に開いても この試合には効かない）
+    const skills: Record<string, string[]> = {};
+    for (const id of formation) skills[id] = familySkillIds(id);
 
     const cfg = buildSimConfig({
       mode: 'PVE',
@@ -340,7 +345,7 @@ export const BattleScene: React.FC<Props> = ({
       // ——クライアントが選べると有利な乱数を引くまで作り直せてしまうため。
       seed: (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0,
       chapter, difficulty, battleMap: battleMap ?? null,
-      p1: { levels, buffs: { values }, formation },
+      p1: { levels, buffs: { values }, formation, skills },
     });
     runnerRef.current = new SimRunner(cfg, {
       defenderBuildings: defenderBuildings.map(b => ({ type: b.type, x: b.x, y: b.y })),
@@ -537,7 +542,7 @@ export const BattleScene: React.FC<Props> = ({
       const cost = IN_BATTLE_BUILD_COSTS[buildMode] ?? 999;
       if (Math.floor(gold) < cost) { showMessage('⚡ エナジーがたりない！', 1400); setBuildMode(null); return; }
       if (!canDeployAt(r.state, r.statics, localPlayer, x, y)) {
-        showMessage('⛔ ここには建設できない！お城の近くに置こう', 1600); setBuildMode(null); return;
+        showMessage('⛔ ここには たてられない！ コアの ちかくに おこう', 1600); setBuildMode(null); return;
       }
       issue({ type: 'BUILD', player: localPlayer, building: buildMode, x, y });
       setBuildMode(null);
@@ -562,12 +567,12 @@ export const BattleScene: React.FC<Props> = ({
     if (!selectedTroopId) return;
     if (isBlockedCell(r.state, r.statics, x, y)) return;
     if (!canDeployAt(r.state, r.statics, localPlayer, x, y)) {
-      showMessage('⛔ ここには出せないよ！ お城やキャンプの近くから出そう', 1800);
+      showMessage('⛔ ここには 出せないよ！ コアや キャンプの ちかくから 出そう', 1800);
       return;
     }
     const line = r.cfg.unitStats[localPlayer][selectedTroopId];
     if (line && gold < Math.round(line.cost * r.cfg.costMult[localPlayer])) {
-      showMessage('⚡ エナジーがたりない！ 問題を解くか、待ってためよう', 1600);
+      showMessage('⚡ エナジーが たりない！ 問題カードを といて ためよう', 1600);
       return;
     }
     issue({ type: 'DEPLOY', player: localPlayer, troopId: selectedTroopId, x, y });
@@ -765,7 +770,7 @@ export const BattleScene: React.FC<Props> = ({
             )}
             {selectedSpell && (
               <span className="text-xs bg-purple-600/50 text-purple-200 px-2 py-0.5 rounded-full select-none animate-bounce border border-purple-400/30">
-                🔮 呪文投下ポインター
+                🔮 呪文を おく 場所を タップ
               </span>
             )}
           </div>
@@ -777,7 +782,7 @@ export const BattleScene: React.FC<Props> = ({
               <span className="text-[#facc15] font-bold text-sm">{Math.floor(gold)}</span>
             </div>
             <Button variant="secondary" size="xs" onClick={() => onEndBattle(false, { gold: 0 })}>
-              全軍撤退（降伏）
+              たいきゃく する
             </Button>
           </div>
        </div>
@@ -1415,7 +1420,7 @@ export const BattleScene: React.FC<Props> = ({
             {!battleStarted && (
                <div className="absolute inset-0 border-4 border-dashed border-teal-400/40 pointer-events-none flex items-center justify-center iso-item">
                   <span className="text-white text-xs font-black bg-slate-950/90 py-3 px-6 rounded-full border border-teal-400/30 shadow-2xl backdrop-blur-md animate-pulse">
-                     👈 外側の空地（砂地）をタップして、味方部隊やアクティブ呪文を投入せよ
+                     👈 自分の じんち（すなの ところ）を タップして、ネコや 呪文を 出そう
                   </span>
                </div>
             )}
@@ -1442,6 +1447,7 @@ export const BattleScene: React.FC<Props> = ({
                  <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
                  <p className="text-sm text-gray-200 mb-4 leading-relaxed">{chapter.victoryLine}</p>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} win />
+                 <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect))}>
                    戦利品を獲得して帰還 (💠{loot.gold} クレジット){hasBuff('DOUBLE_LOOT') && ' ×2!'}
@@ -1460,6 +1466,7 @@ export const BattleScene: React.FC<Props> = ({
                    まけても部隊の経験値は手に入るよ。何回かまけると「サポートモード」で やさしくなるので、あきらめずにもう一回！
                  </div>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
+                 <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" variant="secondary" onClick={() => onEndBattle(false, { gold: 0 })}>
                    基地へ もどる

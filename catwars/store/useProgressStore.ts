@@ -91,32 +91,32 @@ export interface BuffTierInfo {
 
 export const BUFF_TIERS: Record<BuffTier, BuffTierInfo> = {
   1: { tier: 1, name: '一般',   color: '#94a3b8', unlockLabel: 'いつでも' },
-  2: { tier: 2, name: '上級',   color: '#38bdf8', unlockLabel: '本日10問' },
-  3: { tier: 3, name: '精鋭',   color: '#a78bfa', unlockLabel: '本日25問 or 連続5日' },
-  4: { tier: 4, name: '伝説',   color: '#facc15', unlockLabel: '本日40問 かつ 連続3日' },
+  2: { tier: 2, name: '上級',   color: '#38bdf8', unlockLabel: 'きょう10問' },
+  3: { tier: 3, name: '精鋭',   color: '#a78bfa', unlockLabel: 'きょう25問 か 5日つづけて' },
+  4: { tier: 4, name: '伝説',   color: '#facc15', unlockLabel: 'きょう40問 と 3日つづけて' },
 };
 
 export const BUFF_CONFIG: Record<BuffType, { label: string; icon: string; description: string; cost: number; tier: BuffTier }> = {
   // T1 一般
-  FAST_DEPLOY:    { tier: 1, label: '即時出撃',       icon: '⚡',  description: '兵士のインターバルがゼロになる',         cost: 15 },
-  COST_REDUCTION: { tier: 1, label: 'コスト30%オフ',  icon: '💸',  description: '戦闘中の兵士補充コストが30%安くなる',   cost: 20 },
-  GOLD_RUSH:      { tier: 1, label: 'エナジーラッシュ', icon: '⚡', description: '戦闘開始時にエナジー+150',              cost: 15 },
-  GOLD_BOOST:     { tier: 1, label: 'エナジー増産',   icon: '📈',  description: '戦闘中のエナジーのたまり方が50%アップ',       cost: 18 },
+  FAST_DEPLOY:    { tier: 1, label: '即時出撃',       icon: '⚡',  description: 'ネコを 出したあとの まち時間が みじかくなる',         cost: 15 },
+  COST_REDUCTION: { tier: 1, label: 'コスト30%オフ',  icon: '💸',  description: 'ネコを 出す ⚡ が やすくなる',   cost: 20 },
+  GOLD_RUSH:      { tier: 1, label: 'エナジーラッシュ', icon: '⚡', description: 'はじめの ⚡ が ふえる',              cost: 15 },
+  GOLD_BOOST:     { tier: 1, label: 'エナジー増産',   icon: '📈',  description: '⚡ の たまり方が アップ',       cost: 18 },
   // T2 上級
-  RARE_BARBARIAN: { tier: 2, label: 'レア・近接系', icon: '⚔️💥', description: '近接系のHP+50% 攻撃力+40%',          cost: 30 },
-  RARE_ARCHER:    { tier: 2, label: 'レア・遠距離系', icon: '🏹✨', description: '遠距離系の射程+ 速度+30%',           cost: 25 },
-  POWER_BOOST:    { tier: 2, label: '全軍強化',          icon: '💪',  description: '全兵士の攻撃力が40%アップ',           cost: 35 },
-  EXTRA_TROOPS:   { tier: 2, label: '援軍パック',        icon: '🪖',  description: '戦闘開始エナジー+120',                cost: 40 },
-  SWIFT_ARMY:     { tier: 2, label: '俊足の軍勢',        icon: '👟',  description: '全兵士の移動速度が40%アップ',         cost: 28 },
+  RARE_BARBARIAN: { tier: 2, label: 'レア・近接系', icon: '⚔️💥', description: '近接系の HPと こうげきが アップ',          cost: 30 },
+  RARE_ARCHER:    { tier: 2, label: 'レア・遠距離系', icon: '🏹✨', description: '遠距離系の しゃていが のびて、うつのが はやくなる',           cost: 25 },
+  POWER_BOOST:    { tier: 2, label: '全軍強化',          icon: '💪',  description: 'ぜんぶの ネコの こうげきが アップ',           cost: 35 },
+  EXTRA_TROOPS:   { tier: 2, label: '援軍パック',        icon: '🪖',  description: 'はじめの ⚡ が ふえる',                cost: 40 },
+  SWIFT_ARMY:     { tier: 2, label: '俊足の軍勢',        icon: '👟',  description: 'ぜんぶの ネコが はやく うごく',         cost: 28 },
   // T3 精鋭
-  HEAL_AURA:      { tier: 3, label: 'ヒーリングオーラ', icon: '💚',  description: '全兵士が3秒ごとにHPを回復する',        cost: 50 },
-  GIANT_FORTRESS: { tier: 3, label: '鋼の要塞',         icon: '🛡️', description: 'タンク系のHPが2倍になる',             cost: 55 },
-  DOUBLE_LOOT:    { tier: 3, label: 'ダブルリターン',   icon: '💎',  description: '勝利時の戦利品が2倍になる',            cost: 65 },
-  WIZARD_SUPPORT: { tier: 3, label: '魔導士の援護',     icon: '🔮',  description: '戦闘開始エナジー+140',                cost: 60 },
+  HEAL_AURA:      { tier: 3, label: 'ヒーリングオーラ', icon: '💚',  description: 'ぜんぶの ネコが 3びょうごとに すこし 回復',        cost: 50 },
+  GIANT_FORTRESS: { tier: 3, label: '鋼の要塞',         icon: '🛡️', description: 'タンク系の HPが アップ',             cost: 55 },
+  DOUBLE_LOOT:    { tier: 3, label: 'ダブルリターン',   icon: '💎',  description: '勝ったときの 💠 が ふえる',            cost: 65 },
+  WIZARD_SUPPORT: { tier: 3, label: '魔導士の援護',     icon: '🔮',  description: 'はじめの ⚡ が ふえる',                cost: 60 },
   // T4 伝説
-  DRAGON_SUMMON:  { tier: 4, label: 'ドラゴンの宝庫',   icon: '🐉',  description: '戦闘開始エナジー+160',                cost: 100 },
-  ARMAGEDDON:     { tier: 4, label: 'アルマゲドン',     icon: '☄️', description: '全兵士の攻撃力が70%アップ',           cost: 90 },
-  GENIUS_COMMANDER:{tier: 4, label: '天才指揮官',       icon: '👑',  description: '全兵士のHP・攻撃力が20%アップ',        cost: 80 },
+  DRAGON_SUMMON:  { tier: 4, label: 'ドラゴンの宝庫',   icon: '🐉',  description: 'はじめの ⚡ が たくさん ふえる',                cost: 100 },
+  ARMAGEDDON:     { tier: 4, label: 'アルマゲドン',     icon: '☄️', description: 'ぜんぶの ネコの こうげきが 大きく アップ',           cost: 90 },
+  GENIUS_COMMANDER:{tier: 4, label: '天才指揮官',       icon: '👑',  description: 'ぜんぶの ネコの HPと こうげきが アップ',        cost: 80 },
 };
 
 // 各バフのレベル別効果量（小・中・大）。表示と戦闘計算の両方で使う。

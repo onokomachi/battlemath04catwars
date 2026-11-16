@@ -112,7 +112,7 @@ export const DailyBuffsPanel: React.FC<Props> = ({ compact }) => {
           <div className="text-white/50 text-xs">エナジー（きょうかぎり）</div>
         </div>
         <div className="text-right">
-          <div className="text-white/70 text-xs">本日 <span className="text-[#a3e635] font-bold">{todayCount}</span>問</div>
+          <div className="text-white/70 text-xs">きょう <span className="text-[#a3e635] font-bold">{todayCount}</span>問</div>
           <div className="text-white/70 text-xs">連続 <span className="text-[#fb923c] font-bold">{loginStreak}</span>日</div>
         </div>
       </div>

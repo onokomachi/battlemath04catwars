@@ -229,7 +229,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           onClick={() => { resetBattleSession(); setView('range'); }} big />
         <HubButton icon="🐱" label="ネコ図鑑" sub="部隊のレベル・進化" color="#a3e635"
           onClick={() => setView('army')} />
-        <HubButton icon="✨" label="出撃バフ" sub="⚡エナジーで今日の戦力UP" color="#facc15"
+        <HubButton icon="✨" label="出撃バフ" sub="⚡エナジーで きょうの 戦力アップ" color="#facc15"
           onClick={() => setView('buffs')} />
       </div>
 
