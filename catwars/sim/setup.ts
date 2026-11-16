@@ -11,6 +11,7 @@
 // 送り、**両者がまったく同じ SimConfig オブジェクトを持つ**状態にしてから始める。
 
 import { CHARACTERS, CHARACTER_BY_ID, levelMult } from '../data/characters';
+import { mergeSkillEffects } from '../data/skills';
 import type { CampaignChapter, ChapterDifficulty } from '../data/campaign';
 import type { BattleMap } from '../types';
 import { SimConfig, UnitStatLine, SimBuffs, PlayerId } from './types';
@@ -33,6 +34,8 @@ export function resolveUnitStats(
   levels: Record<string, number>,
   buffs: ResolvedBuffs,
   formation?: string[],
+  /** 系統ID → 開いているスキルの id（data/skills.ts。試合開始時に決めて渡す） */
+  skills?: Record<string, string[]>,
 ): Record<string, UnitStatLine> {
   const out: Record<string, UnitStatLine> = {};
 
@@ -69,6 +72,10 @@ export function resolveUnitStats(
     const fd = v(buffs, 'FAST_DEPLOY');
     const cooldownMs = Math.max(400, Math.round(c.cooldownMs * (fd > 0 ? 1 - fd / 100 : 1)));
 
+    const skillIds = skills?.[c.id] ?? [];
+    const sk = mergeSkillEffects(skillIds);
+    if (sk?.rangeBonus) range += sk.rangeBonus;
+
     out[c.id] = {
       hp: Math.round(hp),
       damage: Math.round(damage),
@@ -77,8 +84,9 @@ export function resolveUnitStats(
       moveSpeed,
       cost: c.cost.gold,
       cooldownMs,
-      buildingDamageMult: c.buildingDamageMult,
+      buildingDamageMult: c.buildingDamageMult + (sk?.buildingDamageBonus ?? 0),
       target: c.base.target,
+      ...(sk ? { skills: sk, skillIds } : {}),
     };
   }
   return out;
@@ -115,6 +123,8 @@ export interface PlayerSetup {
   buffs: ResolvedBuffs;
   /** 出撃の5枠（無ければ全系統。PvE の敵側・試験用） */
   formation?: string[];
+  /** 系統ID → 開いているスキルの id（無ければ スキルなし） */
+  skills?: Record<string, string[]>;
 }
 
 /** 相手の情報が無い場合（PvE）に使う、素の設定 */
@@ -132,7 +142,7 @@ export function buildSimConfig(args: {
   const p2 = args.p2 ?? NEUTRAL_SETUP;
 
   const mk = (s: PlayerSetup) => {
-    const unitStats = resolveUnitStats(s.levels, s.buffs, s.formation);
+    const unitStats = resolveUnitStats(s.levels, s.buffs, s.formation, s.skills);
     const costMult = resolveCostMult(s.buffs);
     let minCost = Infinity;
     for (const id of Object.keys(unitStats)) {

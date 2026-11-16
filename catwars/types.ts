@@ -84,6 +84,10 @@ export interface BattleEntity {
   kind?: string;
   /** ボスのシールドの残り枚数。1枚でもあると、うけるダメージは1割。復習の問題を解くと1枚われる */
   shield?: number;
+  /** 出てきた tick（スキル「ダッシュ」の むてきの時間に使う。sim の中だけ） */
+  bornTick?: number;
+  /** さいしょの1発を うったか（スキル「せんせいの いちげき」） */
+  firstHitDone?: boolean;
 }
 
 // LAVA = 溶岩。乗っているあいだ継続ダメージ（敵味方・中立すべてに適用）。通行は可能。

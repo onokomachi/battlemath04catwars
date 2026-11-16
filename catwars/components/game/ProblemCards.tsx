@@ -16,6 +16,9 @@ import { useReviewStore } from '../../store/useReviewStore';
  * - ボスにシールドがあるときは、手札の上に 4枚めの「🛡️ シールドを わる（ふくしゅう）」カードが出る（2026-11-15）。
  *   中身は その子が まちがえた項目（useReviewStore。ポータルにつなぐ前の「復習の時期が来た項目」の代わり）。
  *   無ければ「むずかしい」帯から。まちがえずに解けたら シールドが1枚われて、ふつうの ⚡ も入る。まちがえても罰はない
+ * - げきむず だけ、1戦で引ける カードの まいすうに上限がある（cardLimit。2026-11-15 CW-4b）。答えを出した カードを1まい と数える
+ *  （「やめて もどる」で答えずに閉じたものは数えない。シールドの カードは数えない）。まちがえずに解くほど ⚡ が多く入る＝正確さへの ごほうび。
+ *   使いきると 手札は出なくなり、のこりの ⚡ と 盤上のネコで たたかう
  */
 interface Props {
   /** 出撃前にえらんだ単元の鍵 */
@@ -33,6 +36,8 @@ interface Props {
   shieldLayers?: number;
   /** シールドのカードを まちがえずに解けた（シールドを1枚わる） */
   onShieldBreak?: () => void;
+  /** 1戦で引ける カードの まいすう（げきむず だけ。null・無しは 上限なし） */
+  cardLimit?: number | null;
 }
 
 /** 手札の中で シールドのカードを指す番号 */
@@ -51,8 +56,12 @@ const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 export const comboMultiplier = (n: number): number => Math.min(2.0, 1 + (Math.max(1, n) - 1) * 0.2);
 
 export const ProblemCards: React.FC<Props> = ({
-  unitKeys, baseReward, poor, onOpenChange, onReward, onAnswered, shieldLayers = 0, onShieldBreak,
+  unitKeys, baseReward, poor, onOpenChange, onReward, onAnswered, shieldLayers = 0, onShieldBreak, cardLimit = null,
 }) => {
+  /** 答えを出した カードの数（シールドの カードは数えない） */
+  const [usedCards, setUsedCards] = useState(0);
+  const cardsLeft = cardLimit == null ? null : Math.max(0, cardLimit - usedCards);
+  const outOfCards = cardsLeft === 0;
   const addMiss = useReviewStore((s) => s.addMiss);
   const clearOne = useReviewStore((s) => s.clearOne);
   const [pack, setPack] = useState<{ registry: RoundRegistry; rounds: PackRound[] } | null>(null);
@@ -114,6 +123,7 @@ export const ProblemCards: React.FC<Props> = ({
 
   const onFirstResult = useCallback((perfect: boolean) => {
     if (!item) return;
+    if (!isShield) setUsedCards((n) => n + 1);
     onAnswered(item, perfect);
     if (perfect) {
       const n = comboRef.current + 1;
@@ -148,6 +158,18 @@ export const ProblemCards: React.FC<Props> = ({
         <div className="text-[10px] font-black text-white/80 px-1" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
           📚 といて ⚡ を ためよう{combo >= 1 ? `　🔥${combo}` : ''}
         </div>
+        {cardsLeft !== null && (
+          <div data-testid="cards-left" className="rounded-lg px-2 py-1 text-[11px] font-black flex items-center justify-between"
+            style={{ background: 'rgba(239,68,68,0.16)', border: '1px solid rgba(239,68,68,0.6)', color: '#fecaca' }}>
+            <span>🃏 のこり {cardsLeft} まい</span>
+            <span className="text-[9px] font-bold text-white/60">/ {cardLimit}</span>
+          </div>
+        )}
+        {outOfCards && (
+          <div data-testid="cards-out" className="rounded-xl px-2.5 py-2 text-[11px] font-bold leading-snug text-[#fde68a] bg-slate-900/90 border border-[#fde68a]/50">
+            カードを つかいきった！<br />いまの ネコで がんばれ
+          </div>
+        )}
         {shieldLayers > 0 && shieldCard && (
           <button data-testid="shield-card" onClick={() => open(SHIELD_IDX)}
             className="text-left rounded-xl px-2.5 py-1.5 active:scale-95 transition-transform"
@@ -167,7 +189,7 @@ export const ProblemCards: React.FC<Props> = ({
         )}
         {!pack && <div className="rounded-xl px-2 py-3 text-[11px] text-white/70 bg-slate-900/85 border border-white/15">よみこみ中…</div>}
         {pack && pool.length === 0 && <div className="rounded-xl px-2 py-3 text-[11px] text-white/70 bg-slate-900/85 border border-white/15">出せる問題がありません</div>}
-        {hand.map((c, i) => c && (
+        {!outOfCards && hand.map((c, i) => c && (
           <button key={`${i}-${c.unitKey}-${c.skillId}`} onClick={() => open(i)}
             className="text-left rounded-xl px-2.5 py-1.5 active:scale-95 transition-transform"
             style={{

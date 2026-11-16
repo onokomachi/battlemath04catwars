@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test:sim": "tsx scripts/simTest.ts",
     "test:balance": "tsx scripts/balanceTest.ts",
-    "test:balance:all": "BAND=1 RUNS=24 tsx scripts/balanceTest.ts && BAND=1 RUNS=24 TIER=hard tsx scripts/balanceTest.ts && BAND=1 RUNS=24 TIER=extreme tsx scripts/balanceTest.ts && THREAT=1 RUNS=24 tsx scripts/balanceTest.ts",
+    "test:balance:all": "BAND=1 RUNS=24 tsx scripts/balanceTest.ts && BAND=1 RUNS=24 TIER=hard tsx scripts/balanceTest.ts && BAND=1 RUNS=24 TIER=extreme tsx scripts/balanceTest.ts && THREAT=1 RUNS=24 tsx scripts/balanceTest.ts && ACCURACY=1 RUNS=24 tsx scripts/balanceTest.ts",
     "test:pack": "tsx scripts/verifyPack.ts",
     "test:progress": "tsx scripts/progressionSim.ts",
     "lint": "tsc --noEmit",

@@ -7,6 +7,7 @@
  *   TIER=hard / TIER=extreme npm run test:balance  … むずかしい・げきむず（目標は ふつう −15／−30）
  *   THREAT=1 npm run test:balance  … 脅威レベルの試験（育てた手持ちでも 勝率が大きく変わらないこと）
  *   BAND=1 …「にがて」の勝率が目標の帯の外なら不合格にする（npm run test:balance:all は これで流す）
+ *   ACCURACY=1 npm run test:balance … 正確さの試験（げきむず：正答率だけ 0.9 と 0.6 にした2人の勝率の差が 平均20ポイント以上）
  *
  * 決定論シミュレーションの上で小4を模したAIプレイヤーを走らせ、
  * 章ごとの勝率・所要時間・敵の出現数を実測する。
@@ -42,12 +43,50 @@ const TIER_MINUS: Record<ChapterTier, number> = { normal: 0, hard: 15, extreme: 
 const BASE_TARGET: Record<number, number> = { 1: 85, 2: 85, 3: 70, 4: 70, 5: 70, 6: 70, 7: 55, 8: 55 };
 const TARGET: Record<number, number> = Object.fromEntries(Object.entries(BASE_TARGET).map(([k, v]) => [k, v - TIER_MINUS[TIER]]));
 /**
- * 「ふつう」の勝率の帯（トップ層が むずかしい・げきむず で手ごたえを感じること。2026-11-15 CW-4a）。
- * ふつう の段は 決めない（にがての帯で決まる）。
+ * 「ふつう」の勝率の帯（げきむず だけ。2026-11-15 CW-4b）。
+ * むずかしい の帯（70〜98）は やめた：問題を解く間は戦闘が止まるので、にがての帯と両立させるには 1手の速さの差しかなく、
+ * 「速さを報酬にしない」とずれる。げきむず は カードの まいすう（cardLimit）で 正確さが効くので、帯と
+ * 「じょうず − にがて ≥ 30ポイント」（正確さが効いている証拠）を見る。
  */
-const NORMAL_BAND: Record<ChapterTier, [number, number] | null> = { normal: null, hard: [70, 98], extreme: [50, 85] };
+const NORMAL_BAND: Record<ChapterTier, [number, number] | null> = { normal: null, hard: null, extreme: [50, 90] };
+/** じょうず − にがて の勝率の差の下限（段ごと。無ければ見ない） */
+const SKILL_GAP_MIN: Record<ChapterTier, number | null> = { normal: null, hard: null, extreme: 30 };
 // CH=5 のように章を絞れる（1章だけ詰めたいときに使う）
 const ONLY = (process.env.CH ?? '').split(',').map(s => Number(s.trim())).filter(n => n > 0);
+
+/**
+ * ACCURACY=1：正確さの試験（2026-11-15 CW-4b）。
+ * げきむず の各章で、ほかを全部そろえて（「ふつう」の想定プレイヤー：1手 3.5秒・根気・編成）**正答率だけ** 0.9 と 0.6 にした2人の勝率の差を測る。
+ * 差の平均が 20ポイント以上なら合格（章ごとの値も出す）。ふつうの段は 参考に出すだけ（差が小さくてよい）。
+ */
+if (process.env.ACCURACY === '1') {
+  const HI_ACC = 0.9, LO_ACC = 0.6, MIN_GAP = Number(process.env.MINGAP ?? 20);
+  const measure = (tier: ChapterTier) => {
+    const gaps: number[] = [];
+    console.log(`\n段：${TIER_INFO[tier].label}（各 ${RUNS}回。正答率だけ ${HI_ACC} と ${LO_ACC}）`);
+    console.log('章   正答率0.9   正答率0.6   差');
+    for (let i = 0; i < CAMPAIGN.length; i++) {
+      const ch = CAMPAIGN[i];
+      if (ONLY.length > 0 && !ONLY.includes(ch.no)) continue;
+      const rate = (acc: number) => {
+        let w = 0;
+        for (let r = 0; r < RUNS; r++) if (playOnce(i, seedFor(r), { skill: { ...NORMAL_SKILL, accuracy: acc }, tier, maxSeconds: MAX_SECONDS }).win) w++;
+        return (w / RUNS) * 100;
+      };
+      const hi = rate(HI_ACC), lo = rate(LO_ACC);
+      gaps.push(hi - lo);
+      console.log(`${String(ch.no).padStart(2)}   ${hi.toFixed(0).padStart(6)}%    ${lo.toFixed(0).padStart(6)}%    ${(hi - lo >= 0 ? '+' : '') + (hi - lo).toFixed(0)}`);
+    }
+    const avg = gaps.reduce((a, b) => a + b, 0) / Math.max(1, gaps.length);
+    console.log(`  平均の差 ${avg >= 0 ? '+' : ''}${avg.toFixed(1)}ポイント`);
+    return avg;
+  };
+  const ext = measure('extreme');
+  if (process.env.REF !== '0') { measure('normal'); console.log('  （ふつうの段は参考。合否には使わない）'); }
+  if (ext < MIN_GAP) { console.log(`\n✗ げきむず で 正確さの差が 平均 ${ext.toFixed(1)}ポイント（${MIN_GAP}ポイント以上が合格）\n`); process.exit(1); }
+  console.log(`\n✓ げきむず では 正確に解くほど 勝てる（平均 +${ext.toFixed(1)}ポイント）\n`);
+  process.exit(0);
+}
 
 /**
  * THREAT=1：脅威レベルの試験（ふつうの段）。
@@ -131,7 +170,8 @@ for (let i = 0; i < CAMPAIGN.length; i++) {
   const probsOk = normalWins.length === 0 || probs <= MAX_PROBLEMS_BY_TIER[TIER];
   const bandOk = Math.abs(diff) <= 15;
   const nb = NORMAL_BAND[TIER];
-  const normalOk = !nb || (rates[1] >= nb[0] && rates[1] <= nb[1]);
+  const gapMin = SKILL_GAP_MIN[TIER];
+  const normalOk = (!nb || (rates[1] >= nb[0] && rates[1] <= nb[1])) && (gapMin == null || rates[0] - rates[2] >= gapMin);
   if (!noSolveOk || !probsOk) failed++;
   if (!bandOk) offBand++;
   if (!normalOk) offNormal++;
@@ -139,16 +179,16 @@ for (let i = 0; i < CAMPAIGN.length; i++) {
   console.log(
     `${String(ch.no).padStart(2)}  ${String(target).padStart(3)}%  ` +
     rates.map(r => `${r.toFixed(0).padStart(6)}%`).join(' ') +
-    `  ${noneRate.toFixed(0).padStart(5)}%${noSolveOk ? '✓' : '✗'}  ${balance}   ${nb ? (normalOk ? ' ✓      ' : (rates[1] > nb[1] ? ' ✗易    ' : ' ✗難    ')) : ' −      '}  ` +
+    `  ${noneRate.toFixed(0).padStart(5)}%${noSolveOk ? '✓' : '✗'}  ${balance}   ${nb ? (normalOk ? ' ✓      ' : (rates[1] > nb[1] ? ' ✗易    ' : rates[1] < nb[0] ? ' ✗難    ' : ' ✗差    ')) : ' −      '}  ` +
     `${probs.toFixed(1).padStart(8)}問${probsOk ? '✓' : '✗'}        ${corrects.toFixed(1).padStart(5)}  ${avgSec.toFixed(0).padStart(5)}秒  ${avgSpawn.toFixed(1).padStart(7)}体`
   );
 }
 console.log('\n（判定：「にがて」の勝率が目標±15ポイント以内なら ✅。とかない＝問題を解かない子は 0% でなければ ✗）');
-if (NORMAL_BAND[TIER]) console.log(`（ふつうの帯：「ふつう」の勝率が ${NORMAL_BAND[TIER]![0]}〜${NORMAL_BAND[TIER]![1]}% なら ✓。トップ層が手ごたえを感じること）`);
+if (NORMAL_BAND[TIER]) console.log(`（ふつうの帯：「ふつう」の勝率が ${NORMAL_BAND[TIER]![0]}〜${NORMAL_BAND[TIER]![1]}%${SKILL_GAP_MIN[TIER] != null ? `、かつ じょうず − にがて が ${SKILL_GAP_MIN[TIER]}ポイント以上` : ''} なら ✓（✗差＝正確さの差が足りない）`);
 if (failed) { console.log(`\n✗ ${failed} 章で不合格（解かずに勝てる、または 解く問題が多すぎる）\n`); process.exit(1); }
 // 目標の帯は BAND=1 のときだけ不合格にする（試合数が少ないと ゆれるため。test:balance:all は BAND=1 で流す）
 if ((offBand || offNormal) && process.env.BAND === '1') {
-  console.log(`\n✗ ${offBand} 章で「にがて」の勝率が 目標の帯（±15ポイント）の外・${offNormal} 章で「ふつう」の勝率が 帯の外\n`);
+  console.log(`\n✗ ${offBand} 章で「にがて」の勝率が 目標の帯（±15ポイント）の外・${offNormal} 章で「ふつう」の帯 または じょうず−にがて の差が 外\n`);
   process.exit(1);
 }
 console.log(`\n✓ 解かない子はどの章でも勝てず、解く問題の数も目安の中${offBand ? `（帯の外 ${offBand} 章）` : '・にがての勝率も 目標の帯の中'}\n`);

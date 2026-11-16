@@ -492,11 +492,37 @@ export const TIER_INFO: Record<ChapterTier, {
   bossShield: number;
   /** 手持ちのレベルの めやす に足す分（脅威レベルの基準） */
   baseLevelPlus: number;
+  /**
+   * 1戦で引ける 問題カードの まいすう（無ければ 上限なし）。章ごとの値は TIER_CARD_LIMIT（こちらは めやす・説明用）。
+   * 正確に解くほど 多く出撃できる（docs/REBUILD_SPEC.md §1）。
+   */
+  cardLimit?: number;
 }> = {
   normal:  { label: 'ふつう',     color: '#38bdf8', hpMult: 1.0,  damageMult: 1.0,  rewardMult: 1.0, bossShield: 1, baseLevelPlus: 0 },
   hard:    { label: 'むずかしい', color: '#f59e0b', hpMult: 1.35, damageMult: 1.1,  rewardMult: 1.5, bossShield: 2, baseLevelPlus: 12 },
-  extreme: { label: 'げきむず',   color: '#ef4444', hpMult: 1.8,  damageMult: 1.2,  rewardMult: 2.2, bossShield: 3, baseLevelPlus: 24 },
+  extreme: { label: 'げきむず',   color: '#ef4444', hpMult: 1.8,  damageMult: 1.2,  rewardMult: 2.2, bossShield: 3, baseLevelPlus: 24, cardLimit: 14 },
 };
+
+/**
+ * げきむず の 問題カードの まいすう（章ごと。2026-11-15 CW-4b）。
+ *
+ * 問題を解いている間は戦闘が止まり、まちがえても何も失わないので、正答率は 勝ち負けに ほとんど効いていなかった
+ *（勝率を分けていたのは 1手の速さ）。げきむず だけ カードの まいすうに上限をつけ、
+ * **まちがえずに解いた カードだけが ⚡ になる＝正確に解くほど 多く出撃できる** 形にした。
+ * 数えるのは「解きはじめた」カード（「やめて もどる」で答えずに閉じたものは数えない）。シールドを わる カードは数えない。
+ * サポートモードでは +3／+6（ASSIST_CARD_BONUS）。決め方は scripts/balanceTest.ts（ACCURACY=1 と げきむず の帯）。
+ */
+export const TIER_CARD_LIMIT: Partial<Record<ChapterTier, Record<number, number>>> = {
+  extreme: { 1: 14, 2: 14, 3: 14, 4: 14, 5: 14, 6: 14, 7: 14, 8: 14 },
+};
+/** サポートモードで まいすうに足す（Lv1／Lv2） */
+export const ASSIST_CARD_BONUS: Record<0 | 1 | 2, number> = { 0: 0, 1: 3, 2: 6 };
+
+/** その章・その段の カードの まいすう（上限なしは null） */
+export function cardLimitFor(ch: Pick<CampaignChapter, 'no'>, tier: ChapterTier, assist: 0 | 1 | 2 = 0): number | null {
+  const base = TIER_CARD_LIMIT[tier]?.[ch.no] ?? TIER_INFO[tier].cardLimit;
+  return base == null ? null : base + ASSIST_CARD_BONUS[assist];
+}
 
 /** 段ごとに足す敵（その章の ふつう の敵に足す）。むずかしい＝1〜2種類、げきむず＝新しい敵がそろう */
 const TIER_EXTRA_POOL: Record<ChapterTier, (no: number) => EnemyUnitKind[]> = {

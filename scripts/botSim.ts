@@ -9,8 +9,9 @@ import { SimRunner, CommandProvider } from '../catwars/sim/runner';
 import { buildSimConfig, ResolvedBuffs } from '../catwars/sim/setup';
 import { SimCommand, TICK_MS, TICKS_PER_SEC } from '../catwars/sim/types';
 import {
-  CAMPAIGN, ChapterDifficulty, QUIZ_BASE_REWARD, ChapterTier, tierDifficulty, withThreat, threatMultFor, chapterBaseLevel,
+  CAMPAIGN, ChapterDifficulty, QUIZ_BASE_REWARD, ChapterTier, tierDifficulty, withThreat, threatMultFor, chapterBaseLevel, cardLimitFor,
 } from '../catwars/data/campaign';
+import { unlockedSkillIds } from '../catwars/data/skills';
 import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../catwars/data/battleMaps';
 import { facilityMult } from '../catwars/data/facilities';
 import { BuildingType } from '../catwars/types';
@@ -34,6 +35,7 @@ export interface Skill {
   /**
    * 次の一手までの秒数（戦場を見る → 決める → 出す）。機械の速さで出しつづけると、どの章も楽勝に見えてしまう。
    * 8〜10歳の選択反応は大人より遅い（campaign.ts 冒頭の Kail 1991）。問題を解く時間は入れない（その間は戦闘が止まる）。
+   * 操作の速さは 算数の力ではないので、3段の差は小さくしてある（2026-11-15 CW-4b：2.0／3.0／4.5 → 2.5／3.5／4.0）。
    */
   actionIntervalSec: number;
 }
@@ -44,11 +46,11 @@ export interface Skill {
  * 「とかない」は、問題を1問も解かない子。**どの章でも勝てないこと**を毎回確かめる（解かずに勝てる作りに戻さない）。
  */
 export const SKILL_LEVELS: Skill[] = [
-  { label: 'じょうず', accuracy: 0.92, maxProblems: 30, tankRatio: 0.35, actionIntervalSec: 2.0 },
-  { label: 'ふつう',   accuracy: 0.78, maxProblems: 30, tankRatio: 0.25, actionIntervalSec: 3.0 },
-  { label: 'にがて',   accuracy: 0.58, maxProblems: 30, tankRatio: 0.10, actionIntervalSec: 4.5 },
+  { label: 'じょうず', accuracy: 0.92, maxProblems: 30, tankRatio: 0.35, actionIntervalSec: 2.5 },
+  { label: 'ふつう',   accuracy: 0.78, maxProblems: 30, tankRatio: 0.25, actionIntervalSec: 3.5 },
+  { label: 'にがて',   accuracy: 0.58, maxProblems: 30, tankRatio: 0.10, actionIntervalSec: 4.0 },
 ];
-export const NO_SOLVE_SKILL: Skill = { label: 'とかない', accuracy: 0, maxProblems: 0, tankRatio: 0.25, actionIntervalSec: 3.0 };
+export const NO_SOLVE_SKILL: Skill = { label: 'とかない', accuracy: 0, maxProblems: 0, tankRatio: 0.25, actionIntervalSec: 3.5 };
 
 export const NORMAL_SKILL: Skill = SKILL_LEVELS[1];
 export const WEAK_SKILL: Skill = SKILL_LEVELS[2];
@@ -70,6 +72,20 @@ export interface Loadout {
   buildings: { type: BuildingType; x: number; y: number; mult?: number }[];
   /** 出撃の5枠（この外の系統は出せない） */
   formation: string[];
+  /** 系統ID → 開いているスキル（無ければ スキルなし） */
+  skills?: Record<string, string[]>;
+}
+
+/**
+ * レベル level に届くのに要る かけら（上限＝20＋5×かけら なので ceil((level−20)/5)。0〜8）。
+ * その かけらで開く スキルを 想定プレイヤーに持たせる（2026-11-15 CW-4b）。
+ */
+export function shardsForLevel(level: number): number {
+  return Math.max(0, Math.min(8, Math.ceil((level - 20) / 5)));
+}
+export function skillsForLevel(level: number): Record<string, string[]> {
+  const sh = shardsForLevel(level);
+  return Object.fromEntries(ALL_FAMILIES.map(id => [id, unlockedSkillIds(id, sh)]));
 }
 
 const CORE_ONLY = [{ type: BuildingType.TOWN_HALL, x: 0, y: 7 }];
@@ -115,6 +131,7 @@ export function loadoutForLevel(level: number, chNo = 8, tier: ChapterTier = 'no
     buffs: { values: buffs },
     buildings: base.map(b => ({ ...b, mult: facilityMult(b.type, fl) })),
     formation: BOT_FORMATION,
+    skills: skillsForLevel(lv),
   };
 }
 
@@ -143,9 +160,14 @@ export class BotPlayer implements CommandProvider {
   /** 解いた問題の数・うち まちがえずに解けた数 */
   problems = 0;
   corrects = 0;
+  /** 引いた 問題カード（シールドの カードは数えない） */
+  cards = 0;
+  /** 1戦で引ける カードの まいすう（げきむず は cardLimit、ほかは 根気＝maxProblems） */
+  private cardCap: number;
 
-  constructor(private runner: SimRunner, private skill: Skill, seed: number, private tiered = false) {
+  constructor(private runner: SimRunner, private skill: Skill, seed: number, private tiered = false, cardLimit: number | null = null) {
     this.rng = new DetRNG(seed);
+    this.cardCap = cardLimit == null ? skill.maxProblems : Math.min(skill.maxProblems, cardLimit);
   }
 
   think(): void {
@@ -186,8 +208,9 @@ export class BotPlayer implements CommandProvider {
       const cdTicks = Math.max(1, Math.round(line.cooldownMs / TICK_MS));
       if (last !== undefined && st.tick - last < cdTicks) continue;
       // 足りないときは、足りるまで問題を解く（解いている間は戦闘が止まるので、時間は進まない）
-      while (p.energy + pending < cost && this.problems < this.skill.maxProblems) {
+      while (p.energy + pending < cost && this.cards < this.cardCap && this.problems < this.skill.maxProblems) {
         this.problems++;
+        this.cards++;
         if (this.rng.next() < this.skill.accuracy) {
           this.streak++;
           this.corrects++;
@@ -243,6 +266,10 @@ export interface PlayOptions {
   plusLevel?: number;
   /** 脅威レベルを はたらかせない（くらべるため） */
   noThreat?: boolean;
+  /** スキルを持たせない（くらべるため） */
+  noSkills?: boolean;
+  /** カードの まいすうを 差しかえる（null＝上限なし。無ければ 段のきまり） */
+  cardLimit?: number | null;
 }
 
 /** 1試合ぶんシミュレーションして結果を返す（同じ seed なら必ず同じ結果） */
@@ -261,7 +288,7 @@ export function playOnce(chapterIndex: number, seed: number, opts: PlayOptions =
     mode: 'PVE', seed, chapter: ch,
     difficulty,
     battleMap: map,
-    p1: { levels: kit.levels, buffs: kit.buffs, formation: kit.formation },
+    p1: { levels: kit.levels, buffs: kit.buffs, formation: kit.formation, skills: opts.noSkills ? undefined : kit.skills },
   });
   const runner = new SimRunner(cfg, {
     defenderBuildings: tierEnemyBase(map, tier),
@@ -270,7 +297,8 @@ export function playOnce(chapterIndex: number, seed: number, opts: PlayOptions =
   });
   // 特別な敵（空中・盾持ち など）が出る章では、それに合う系統を混ぜる（章の画面に 敵の種類と たおし方を出している）
   const special = difficulty.unitPool.some(k => k === 'flyer' || k === 'guard' || k === 'medic' || k === 'kamikaze');
-  const bot = new BotPlayer(runner, skill, seed ^ 0x5bf03635, special);
+  const limit = opts.cardLimit !== undefined ? opts.cardLimit : cardLimitFor(ch, tier);
+  const bot = new BotPlayer(runner, skill, seed ^ 0x5bf03635, special, limit);
 
   const maxTicks = (opts.maxSeconds ?? 300) * TICKS_PER_SEC;
   let peak = 0;

@@ -13,7 +13,7 @@ import { stateChecksum } from '../../sim/checksum';
 import { SimCommand, SimEvent, SimConfig, PlayerId, TICK_MS } from '../../sim/types';
 import type { LockstepSession, LockstepStatus } from '../../net/lockstep';
 import { ProblemCards, starsFor } from './ProblemCards';
-import { QUIZ_BASE_REWARD } from '../../data/campaign';
+import { QUIZ_BASE_REWARD, cardLimitFor } from '../../data/campaign';
 import { grantStudyReward } from '../../bridge';
 import { sfx } from '../../utils/audioEngine';
 import { useProgressStore, BUFF_LEVEL_INFO } from '../../store/useProgressStore';
@@ -798,6 +798,7 @@ export const BattleScene: React.FC<Props> = ({
            }}
            shieldLayers={shieldLayers}
            onShieldBreak={() => issue({ type: 'BREAK_SHIELD', player: localPlayer })}
+           cardLimit={isPvp ? null : cardLimitFor(chapter, tier, assistLevel)}
          />
        )}
 
@@ -1667,6 +1668,12 @@ export const BattleScene: React.FC<Props> = ({
 
              <p className="text-white/85 text-xs leading-relaxed mb-2">▸ {chapter.briefing}</p>
              <p className="text-[#facc15]/90 text-[11px] leading-relaxed mb-4">💡 {chapter.hint}</p>
+             {!isPvp && cardLimitFor(chapter, tier, assistLevel) != null && (
+               <p className="text-[#fecaca] text-[11px] leading-relaxed mb-4 p-2 rounded-lg" data-testid="briefing-card-limit"
+                 style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.4)' }}>
+                 🃏 この たたかいの カードは {cardLimitFor(chapter, tier, assistLevel)} まいまで。まちがえずに とくほど ⚡ が ふえて、たくさん 出撃できるよ
+               </p>
+             )}
 
              {assistLevel > 0 && (
                <div className="p-2.5 rounded-xl mb-4 text-[11px] leading-relaxed"

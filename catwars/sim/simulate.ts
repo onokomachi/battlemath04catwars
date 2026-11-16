@@ -31,6 +31,7 @@ import {
   SimState, SimConfig, SimCommand, SimEvent, PlayerId, PlayerSimState,
   TICK_MS, TICKS_PER_SEC, msToTicks, TEAM_OF, OPPONENT,
 } from './types';
+import type { SkillEffects } from '../data/skills';
 
 // 旧実装は「1フレームあたり moveSpeed*0.013」だった。60fps 換算で
 // moveSpeed 1 あたり毎秒 0.78 マス。バランスを変えないようこの係数を保つ。
@@ -65,7 +66,7 @@ function isHostile(a: BattleEntity, b: BattleEntity): boolean {
 }
 
 /**
- * 特別なきまりを通したダメージ（盾持ち・ボスのシールド）。攻撃は必ずここを通す。
+ * 特別なきまりを通したダメージ（盾持ち・ボスのシールド）。攻撃は applyHit か ここを通す。
  * attackerSub は こうげきした側の subType（施設の こうげきは null）。
  */
 function dealDamage(target: BattleEntity, amount: number, attackerSub: string | null): void {
@@ -75,6 +76,133 @@ function dealDamage(target: BattleEntity, amount: number, attackerSub: string | 
   }
   if ((target.shield ?? 0) > 0) a *= SHIELD_DAMAGE_MULT;
   target.hp -= a;
+}
+
+// ── スキル（data/skills.ts。2026-11-15 CW-4b）──────────────────────────────
+// 効き目の数値は 試合開始時に cfg.unitStats[player][系統].skills に焼きこみずみ。ここは きまりだけ。
+
+/** プレイヤーのネコの スキル（敵AIの兵・施設・中立には無い） */
+function skillsOf(cfg: SimConfig, e: BattleEntity): SkillEffects | undefined {
+  if (e.type !== 'TROOP' || e.kind) return undefined;
+  const owner = playerOf(e);
+  if (!owner) return undefined;
+  return cfg.unitStats[owner][e.subType]?.skills;
+}
+
+/** こうげきしない施設（スキル「うらまわり」の相手） */
+const SUPPORT_BUILDINGS: string[] = [BuildingType.GOLD_MINE, BuildingType.ARMY_CAMP, BuildingType.BARRACKS];
+
+const within = (a: BattleEntity, b: BattleEntity, r: number): boolean => dist2(a.x, a.y, b.x, b.y) <= r * r;
+
+/**
+ * 1回の こうげき（スキルを通す）。
+ * amount＝この相手への ダメージ（施設への倍率は 掛けずみ）。splashBase＝まわりに あたるときの もとの こうげき力（0 なら まわりには あたらない）。
+ */
+function applyHit(
+  state: SimState, cfg: SimConfig, attacker: BattleEntity | null, target: BattleEntity, amount: number, splashBase = 0,
+): void {
+  const ak = attacker ? skillsOf(cfg, attacker) : undefined;
+  let a = amount;
+  if (ak && attacker) {
+    if (ak.vsFlyerMult && target.kind === 'flyer') a *= ak.vsFlyerMult;
+    if (ak.vsGuardMult && target.kind === 'guard') a *= ak.vsGuardMult;
+    if (ak.vsPreferMult && ak.preferKind && target.kind === ak.preferKind) a *= ak.vsPreferMult;
+    if (target.type === 'BUILDING') {
+      if (ak.vsSupportMult && SUPPORT_BUILDINGS.includes(target.subType)) a *= ak.vsSupportMult;
+      if (ak.vsWallMult && target.subType === BuildingType.WALL) a *= ak.vsWallMult;
+    }
+    if (ak.firstHitMult && splashBase > 0 && !attacker.firstHitDone) { a *= ak.firstHitMult; attacker.firstHitDone = true; }
+  }
+  // シールドのある ボスの こうげきは、ちかくの「しずめの うた」で よわまる（1体ぶんだけ）
+  if (attacker && attacker.kind === 'boss' && (attacker.shield ?? 0) > 0) {
+    for (const h of state.entities) {
+      const hk = h.hp > 0 ? skillsOf(cfg, h) : undefined;
+      if (hk?.bossWeakenPct && isHostile(h, attacker) && within(h, attacker, hk.bossWeakenRadius ?? 3)) { a *= 1 - hk.bossWeakenPct; break; }
+    }
+  }
+  const tk = skillsOf(cfg, target);
+  if (tk) {
+    if (tk.spawnGuardMs && target.bornTick !== undefined && state.tick - target.bornTick < msToTicks(tk.spawnGuardMs)) return;
+    if (tk.packAllies) {
+      let n = 0;
+      for (const o of state.entities) {
+        if (o !== target && o.type === 'TROOP' && o.hp > 0 && o.team === target.team && within(o, target, tk.packRadius ?? 1.6)) n++;
+      }
+      if (n >= tk.packAllies) a *= tk.packTakenMult ?? 1;
+    }
+  }
+  // 施設の こうげきを、ちかくのタンク（かばう）が 一部 ひきうける
+  if (attacker && attacker.type === 'BUILDING' && target.type === 'TROOP' && !target.kind && target.subType !== 'giant') {
+    for (const g of state.entities) {
+      const gk = g.hp > 0 ? skillsOf(cfg, g) : undefined;
+      if (!gk?.coverPct || g.team !== target.team || !within(g, target, gk.coverRadius ?? 2)) continue;
+      const share = a * gk.coverPct;
+      a -= share;
+      const resist = CHARACTER_BY_ID[g.subType]?.defenseResist ?? 0;
+      g.hp -= share * (1 - resist);
+      break;
+    }
+  }
+  const before = target.hp;
+  dealDamage(target, a, attacker && attacker.type === 'TROOP' ? attacker.subType : null);
+  if (ak?.healOnKillPct && attacker && before > 0 && target.hp <= 0) {
+    attacker.hp = Math.min(attacker.maxHp, attacker.hp + attacker.maxHp * ak.healOnKillPct);
+  }
+  // まわりにも あたる（魔法・爆発）。まわりの相手には もう一度は ひろがらない
+  if (ak?.splashPct && attacker && splashBase > 0) {
+    const r = ak.splashRadius ?? 1;
+    const owner = playerOf(attacker);
+    const bMult = owner ? (cfg.unitStats[owner][attacker.subType]?.buildingDamageMult ?? 1) : 1;
+    for (const o of state.entities) {
+      if (o === target || o.hp <= 0 || o.isHidden || !isHostile(attacker, o) || !canReach(attacker, o)) continue;
+      if (!within(o, target, r)) continue;
+      applyHit(state, cfg, attacker, o, splashBase * ak.splashPct * (o.type === 'BUILDING' ? bMult : 1), 0);
+    }
+  }
+}
+
+/** たおれたネコの スキル（さいごの はげまし・さいごの ばくはつ）。死んだものを取りのぞく前に 1回だけ */
+function applyDeathSkills(state: SimState, cfg: SimConfig): void {
+  const dead = state.entities.filter(e => e.hp <= 0);
+  for (const e of dead) {
+    const sk = skillsOf(cfg, e);
+    if (!sk) continue;
+    if (sk.deathHealPct) {
+      const r = sk.deathHealRadius ?? 2.5;
+      for (const o of state.entities) {
+        if (o === e || o.type !== 'TROOP' || o.hp <= 0 || o.team !== e.team || !within(o, e, r)) continue;
+        o.hp = Math.min(o.maxHp, o.hp + o.maxHp * sk.deathHealPct);
+      }
+    }
+    if (sk.deathBlastMult) {
+      const r = sk.deathBlastRadius ?? 1.5;
+      const owner = playerOf(e);
+      const bMult = owner ? (cfg.unitStats[owner][e.subType]?.buildingDamageMult ?? 1) : 1;
+      for (const o of state.entities) {
+        if (o.hp <= 0 || o.isHidden || !isHostile(e, o) || !within(o, e, r)) continue;
+        dealDamage(o, e.damage * sk.deathBlastMult * (o.type === 'BUILDING' ? bMult : 1), e.subType);
+      }
+    }
+  }
+}
+
+/** 回復のスキル（いやしの ひかり・はねやすめ） */
+function applyHealSkills(state: SimState, cfg: SimConfig, wallEntities: BattleEntity[]): void {
+  for (const h of state.entities) {
+    const sk = h.hp > 0 ? skillsOf(cfg, h) : undefined;
+    if (!sk) continue;
+    if (sk.healPct && state.tick % msToTicks(sk.healIntervalMs ?? 2000) === 0) {
+      const r = (sk.healRadius ?? 2.5) + (sk.healRadiusBonus ?? 0);
+      for (const o of state.entities) {
+        if (o.type !== 'TROOP' || o.hp <= 0 || o.hp >= o.maxHp || o.team !== h.team || !within(o, h, r)) continue;
+        o.hp = Math.min(o.maxHp, o.hp + o.maxHp * sk.healPct);
+      }
+    }
+    if (sk.wallRestHealPct && state.tick % TICKS_PER_SEC === 0 && h.hp < h.maxHp
+      && wallEntities.some(w => w.hp > 0 && within(w, h, 1.5))) {
+      h.hp = Math.min(h.maxHp, h.hp + h.maxHp * sk.wallRestHealPct);
+    }
+  }
 }
 
 /** 空中の敵には、近接のネコ（射程2未満・飛行でない）の こうげきが とどかない */
@@ -249,6 +377,7 @@ function makeTroop(
     moveSpeed: line.moveSpeed,
     targetPreference: line.target,
     path: [],
+    bornTick: state.tick,
   };
 }
 
@@ -547,6 +676,7 @@ export function simulateTick(
   state.tick += 1;
 
   // ── 1. 死亡処理と撃破報酬 ──
+  applyDeathSkills(state, cfg);
   for (const e of state.entities) {
     if (e.hp > 0) continue;
     const owner = playerOf(e);
@@ -692,10 +822,13 @@ export function simulateTick(
     }
   }
 
+  // ── 9c. 回復のスキル ──
+  applyHealSkills(state, cfg, state.entities.filter(e => e.type === 'BUILDING' && e.subType === BuildingType.WALL));
+
   // ── 10. エンティティの更新 ──
   for (const entity of state.entities) {
     if (entity.type === 'BUILDING') {
-      updateBuilding(state, entity, wallCells, out);
+      updateBuilding(state, cfg, entity, wallCells, out);
     } else {
       updateTroop(state, cfg, statics, entity, obstacles, obstaclesNoWall, wallCells, out);
     }
@@ -707,7 +840,7 @@ export function simulateTick(
 // ── 建物（防衛施設）の攻撃 ────────────────────────────────────────────
 
 function updateBuilding(
-  state: SimState, entity: BattleEntity, wallCells: Set<string>, out: SimEvent[],
+  state: SimState, cfg: SimConfig, entity: BattleEntity, wallCells: Set<string>, out: SimEvent[],
 ): void {
   if (!entity.damage || entity.damage <= 0 || !entity.attackRange) return;
 
@@ -726,7 +859,9 @@ function updateBuilding(
 
   // 照準時間（新しい標的をとらえてから初弾までの予告）
   const stats = BUILDING_STATS[entity.subType as BuildingType];
-  const aimTicks = stats?.aimTimeMs ? msToTicks(stats.aimTimeMs) : 0;
+  // スキル「ジグザグ ひこう」：ねらうまでが おそくなる
+  const dodge = target ? skillsOf(cfg, target)?.aimDelayMs ?? 0 : 0;
+  const aimTicks = (stats?.aimTimeMs ? msToTicks(stats.aimTimeMs) : 0) + (dodge > 0 ? msToTicks(dodge) : 0);
   let aimed = true;
   if (target) {
     const rec = state.aim[entity.id];
@@ -754,7 +889,7 @@ function updateBuilding(
 
   const resist = CHARACTER_BY_ID[target.subType]?.defenseResist ?? 0;
   const dealt = Math.max(1, Math.round(entity.damage * (1 - resist)));
-  dealDamage(target, dealt, null);
+  applyHit(state, cfg, entity, target, dealt);
   out.push({ type: 'DAMAGED', entityId: target.id });
   entity.lastAttack = state.tick;
 }
@@ -792,6 +927,17 @@ function updateTroop(
 
   // いちばん近い相手を選ぶ。距離が同点のときは id 順で決める（決定論のため）
   let best: BattleEntity | null = focused;
+  // スキル（かいふくやを ねらえ・ばくだん とめ）：その種類の敵が ちかくにいれば 先にねらう
+  const mySkills = skillsOf(cfg, entity);
+  if (!best && mySkills?.preferKind) {
+    const pr = mySkills.preferRadius ?? 5;
+    let minD = pr * pr;
+    for (const t of potential) {
+      if (t.kind !== mySkills.preferKind) continue;
+      const d = dist2(t.x, t.y, entity.x, entity.y);
+      if (d < minD || (d === minD && best && t.id < best.id)) { minD = d; best = t; }
+    }
+  }
   if (!best) {
     let minD = Infinity;
     for (const t of preferred) {
@@ -825,6 +971,8 @@ function updateTroop(
       entity.hp = Math.min(entity.maxHp, entity.hp + 0.3 * (60 / TICKS_PER_SEC));
     }
   }
+  // スキル「ふんばり」：HPが半分以下で こうげきが はやい
+  if (mySkills?.lowHpAtkIntervalMult && entity.hp <= entity.maxHp * 0.5) atkSpeed *= mySkills.lowHpAtkIntervalMult;
 
   const distToTarget = distToEntity(entity, target);
 
@@ -850,7 +998,7 @@ function updateTroop(
       const bMult = target.type === 'BUILDING' && owner && !entity.kind
         ? (cfg.unitStats[owner][entity.subType]?.buildingDamageMult ?? 1)
         : 1;
-      dealDamage(target, damage * bMult, entity.subType);
+      applyHit(state, cfg, entity, target, damage * bMult, damage);
       entity.lastAttack = state.tick;
       // 自爆ロボは1回きり
       if (isKamikaze) entity.hp = 0;
@@ -902,7 +1050,7 @@ function updateTroop(
           d.subType === BuildingType.WALL && isHostile(entity, d) &&
           Math.abs(d.x - entity.x) < 0.8 && Math.abs(d.y - entity.y) < 0.8);
         if (wall && state.tick - entity.lastAttack >= msToTicks(atkSpeed)) {
-          wall.hp -= damage;
+          applyHit(state, cfg, entity, wall, damage);
           entity.lastAttack = state.tick;
           if (isKamikaze) entity.hp = 0;
           out.push({ type: 'DAMAGED', entityId: wall.id });

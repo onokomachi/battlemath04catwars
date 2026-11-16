@@ -10,6 +10,7 @@
 
 import { BattleEntity, BuildingType, BattleMap } from '../types';
 import type { ChapterDifficulty, EnemyUnitKind } from '../data/campaign';
+import type { SkillEffects } from '../data/skills';
 
 /** シミュレーションの刻み幅。20Hz。描画は60fpsのまま補間する。 */
 export const TICK_MS = 50;
@@ -185,6 +186,13 @@ export interface UnitStatLine {
   /** 建物に当てたときのダメージ倍率（攻城役ほど大きい） */
   buildingDamageMult: number;
   target: BattleEntity['targetPreference'];
+  /**
+   * 開いているスキルの効き目（data/skills.ts を 試合開始時に解決したもの。無ければ スキルなし）。
+   * 射程・施設へのダメージは 上の値に焼きこみずみ。のこりは sim/simulate.ts が見る。
+   */
+  skills?: SkillEffects;
+  /** 開いているスキルの id（表示・試験用。計算には使わない） */
+  skillIds?: string[];
 }
 
 /**

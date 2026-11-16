@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   CAMPAIGN, ASSIST_LEVELS, CampaignChapter, ChapterTier, TIER_ORDER, TIER_INFO, ENEMY_UNIT_STATS, ENEMY_TRAIT_NOTE,
-  tierDifficulty, threatLevel, threatMultFor, chapterBaseLevel,
+  tierDifficulty, threatLevel, threatMultFor, chapterBaseLevel, cardLimitFor,
 } from '../../data/campaign';
 import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../../data/battleMaps';
 import { BUILDING_STATS } from '../../constants';
@@ -185,6 +185,21 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, avgLevel, onBack, 
               )}
             </ul>
           </div>
+
+          {/* げきむず：カードの まいすう（正確に解くほど 多く出撃できる） */}
+          {cardLimitFor(selected, tier, assist) != null && (
+            <div className="mt-3 p-3 rounded-xl flex items-start gap-2" data-testid="card-limit"
+              style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.4)' }}>
+              <span className="text-lg leading-none">🃏</span>
+              <div>
+                <div className="text-[#fca5a5] font-bold text-xs">カードは {cardLimitFor(selected, tier, assist)} まいまで。まちがえずに とくほど 有利</div>
+                <p className="text-white/70 text-[11px] leading-relaxed mt-0.5">
+                  まちがえずに とけた カードは ⚡ に なる。ていねいに とくほど たくさん 出撃できるよ。
+                  {assist > 0 && `（サポートモードで +${cardLimitFor(selected, tier, assist)! - cardLimitFor(selected, tier, 0)!} まい）`}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* 脅威レベル（隠れた調整はしない。強くなっているときは はっきり出す） */}
           {threat >= 1 && (
