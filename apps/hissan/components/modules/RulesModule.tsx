@@ -6,6 +6,7 @@
  */
 import React, { useState } from 'react';
 import { useRoundRecorder } from 'learning-app-kit/react';
+import { missCalc, missBlank, missPickSet } from '../../lib/missTypes';
 import confetti from 'canvas-confetti';
 import { Wand2 } from 'lucide-react';
 import { AppShell } from '../shared/AppShell';
@@ -116,7 +117,9 @@ export const RulesRound: React.FC<{
       finish(`${problem.dividend} ÷ ${problem.divisor}`);
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1);
+      rec.mistake({ type: missCalc(problem.quotient, withRemainder ? problem.remainder : 0, problem.divisor, Number(q), withRemainder ? Number(r || '0') : 0), answer: q });
+      onMiss?.();
       setHint(problem.hint);
     }
   };
@@ -126,7 +129,7 @@ export const RulesRound: React.FC<{
       finish(`${problem.exprLeft} ＝ ${problem.exprRight}`);
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missBlank(problem.blankAnswer ?? 0, Number(v)), answer: v }); onMiss?.();
       setHint(problem.hint);
     }
   };
@@ -153,7 +156,7 @@ export const RulesRound: React.FC<{
       finish(`${problem.dividend} ÷ ${problem.divisor} と 商が等しい式`);
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missPickSet(want, got) }); onMiss?.();
       setHint(problem.hint);
     }
   };

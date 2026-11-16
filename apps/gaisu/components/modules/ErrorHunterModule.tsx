@@ -7,6 +7,7 @@
  */
 import React, { useState } from 'react';
 import { useRoundRecorder } from 'learning-app-kit/react';
+import { missErrorHunter } from '../../lib/missTypes';
 import { motion } from 'motion/react';
 import { ChevronLeft, Search, Check, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -70,6 +71,9 @@ export const GaisuErrorRound: React.FC<{
   // 離れたときも1件記録する（learning-app-kit/react）
   const rec = useRoundRecorder({ moduleId: 'error-hunter', skillId: ex.isCorrect ? 'eh-judge' : 'eh-fix', record: recordResult });
 
+  // その問題の まちがいの種類（理由の文）。正しい例（isCorrect）には無いので「正しい例」とする
+  const ehReason = ex.isCorrect ? '正しい例' : (ex.reasonOptions[ex.correctReasonIndex] ?? 'その他');
+
   const finish = () => {
     setStage('done');
     playClear();
@@ -85,7 +89,7 @@ export const GaisuErrorRound: React.FC<{
       else setStage('fix');
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missErrorHunter('判定', ehReason) }); onMiss?.();
       setHint(
         ex.isCorrect
           ? 'もう一度 よく見て。じっさいに 自分でも 四捨五入して たしかめてみよう。'
@@ -100,7 +104,7 @@ export const GaisuErrorRound: React.FC<{
       setStage('reason');
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missErrorHunter('直す', ehReason), answer: v }); onMiss?.();
       setHint(ex.fixHint);
     }
   };
@@ -109,7 +113,7 @@ export const GaisuErrorRound: React.FC<{
     if (i === ex.correctReasonIndex) finish();
     else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missErrorHunter('理由', ehReason) }); onMiss?.();
       setHint('うーん、ちがうみたい。もとの問題と 正しい答えを くらべて、どこが ちがったか 考えよう。');
     }
   };

@@ -7,6 +7,7 @@
  */
 import React, { useState } from 'react';
 import { useRoundRecorder } from 'learning-app-kit/react';
+import { missErrorHunter } from '../../lib/missTypes';
 import { motion } from 'motion/react';
 import { ChevronLeft, Lightbulb, Search, Check, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -71,6 +72,9 @@ export const DivErrorRound: React.FC<{
   // 離れたときも1件記録する（learning-app-kit/react）
   const rec = useRoundRecorder({ moduleId: 'error-hunter', skillId: ex.isCorrect ? 'eh-judge' : 'eh-fix', record: recordResult });
 
+  // その問題の まちがいの種類（理由の文）。正しい例（isCorrect）には無いので「正しい例」とする
+  const ehReason = ex.isCorrect ? '正しい例' : (ex.reasonOptions[ex.correctReasonIndex] ?? 'その他');
+
   const finish = () => {
     setStage('done');
     playClear();
@@ -89,7 +93,7 @@ export const DivErrorRound: React.FC<{
       else setStage(numbersAreRight ? 'reason' : 'fix'); // まちがいを「まちがい」と見ぬけた
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missErrorHunter('判定', ehReason) }); onMiss?.();
       setHint(
         ex.isCorrect
           ? 'もう一度 よく見て。たしかめ算（わる数 × 商 ＋ あまり）を すると 合っているか わかるよ。'
@@ -106,7 +110,7 @@ export const DivErrorRound: React.FC<{
       setStage('reason');
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missErrorHunter('直す', ehReason), answer: q }); onMiss?.();
       setHint(ex.fixHint);
     }
   };
@@ -115,7 +119,7 @@ export const DivErrorRound: React.FC<{
     if (i === ex.correctReasonIndex) finish();
     else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missErrorHunter('理由', ehReason) }); onMiss?.();
       setHint('うーん、ちがうみたい。どんな まちがいだったか、もとの式と 正しい答えを くらべて 考えよう。');
     }
   };

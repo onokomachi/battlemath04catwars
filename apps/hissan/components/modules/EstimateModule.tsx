@@ -6,6 +6,7 @@
  */
 import React, { useState } from 'react';
 import { useRoundRecorder } from 'learning-app-kit/react';
+import { missQuotientPlace, missQuotientDigits, missEstimateValue, missEstimateDigits } from '../../lib/missTypes';
 import confetti from 'canvas-confetti';
 import { Wand2 } from 'lucide-react';
 import { AppShell } from '../shared/AppShell';
@@ -110,7 +111,9 @@ export const EstimateRound: React.FC<{
       finish();
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1);
+      rec.mistake({ type: level === 'est-digits' ? missQuotientDigits(i, problem.answerIndex ?? 0) : missQuotientPlace(i, problem.answerIndex ?? 0) });
+      onMiss?.();
       setPickedWrong(i);
       setHint(problem.hint);
     }
@@ -121,7 +124,9 @@ export const EstimateRound: React.FC<{
       finish();
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1);
+      rec.mistake({ type: missEstimateValue(problem.dividend, problem.divisor, problem.answerValue ?? 0, Number(v)), answer: v });
+      onMiss?.();
       setHint(problem.hint);
     }
   };
@@ -137,7 +142,7 @@ export const EstimateRound: React.FC<{
       finish();
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missEstimateDigits(want, got) }); onMiss?.();
       setHint(problem.hint);
     }
   };

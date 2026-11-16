@@ -6,6 +6,7 @@
  */
 import React, { useState } from 'react';
 import { useRoundRecorder } from 'learning-app-kit/react';
+import { missRangeMin, missRangeMax, missRangeExpress } from '../../lib/missTypes';
 import confetti from 'canvas-confetti';
 import { Wand2 } from 'lucide-react';
 import { AppShell } from '../shared/AppShell';
@@ -110,7 +111,7 @@ export const RangeRound: React.FC<{
       setStage('max');
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missRangeMin(problem.target, problem.min, Number(v)), answer: v }); onMiss?.();
       setHint(problem.hint);
     }
   };
@@ -122,7 +123,7 @@ export const RangeRound: React.FC<{
       setStage('express');
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missRangeMax(problem.target, problem.max, Number(v)), answer: v }); onMiss?.();
       setHint(`いちばん大きい整数は、${problem.target}より ${problem.unit / 2}大きい数の 一つ手前だよ。`);
     }
   };
@@ -132,7 +133,7 @@ export const RangeRound: React.FC<{
       finish();
     } else {
       playSoftTry();
-      setMistakes((m) => m + 1); rec.mistake(); onMiss?.();
+      setMistakes((m) => m + 1); rec.mistake({ type: missRangeExpress(problem.min, problem.max, problem.choices[i]) }); onMiss?.();
       setPickedWrong(i);
       setHint(problem.expressWrongHint);
     }

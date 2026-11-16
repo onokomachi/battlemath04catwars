@@ -170,6 +170,7 @@
       "files": [
         "lib/problems.ts",
         "lib/praise.ts",
+        "lib/missTypes.ts",
         "components/shared/AnswerEntry.tsx",
         "components/shared/Keypad.tsx",
         "components/modules/MeaningModule.tsx",
@@ -193,6 +194,7 @@
       "repo": "wari-hissann3",
       "files": [
         "lib/problems.ts",
+        "lib/missTypes.ts",
         "components/shared/AnswerEntry.tsx",
         "components/shared/Keypad.tsx",
         "components/shared/QuotRemEntry.tsx",

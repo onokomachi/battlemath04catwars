@@ -6,6 +6,7 @@
  */
 import React, { useState } from 'react';
 import { useRoundRecorder } from 'learning-app-kit/react';
+import { missRoundValue, missRoundDigits, missRoundChoose, missWhichPlace } from '../../lib/missTypes';
 import confetti from 'canvas-confetti';
 import { Wand2 } from 'lucide-react';
 import { AppShell } from '../shared/AppShell';
@@ -117,25 +118,25 @@ export const RoundRound: React.FC<{
   const submitPlace = (v: string) => {
     if (!placeP) return;
     if (Number(v) === placeP.answer) finish(`${placeP.n} → ${placeP.placeLabel}まで`);
-    else { playSoftTry(); setMistakes((m) => m + 1); rec.mistake(); onMiss?.(); setHint(placeP.hint); }
+    else { playSoftTry(); setMistakes((m) => m + 1); rec.mistake({ type: missRoundValue(placeP.n, placeP.unit, Number(v)), answer: v }); onMiss?.(); setHint(placeP.hint); }
   };
 
   const submitDigit = (v: string) => {
     if (!digitP) return;
     if (Number(v) === digitP.answer) finish(`${digitP.n} → 上から${digitP.k}けた`);
-    else { playSoftTry(); setMistakes((m) => m + 1); rec.mistake(); onMiss?.(); setHint(digitP.hint); }
+    else { playSoftTry(); setMistakes((m) => m + 1); rec.mistake({ type: missRoundDigits(digitP.n, digitP.k, Number(v)), answer: v }); onMiss?.(); setHint(digitP.hint); }
   };
 
   const chooseAnswer = (i: number) => {
     if (!chooseP) return;
     if (i === chooseP.answerIndex) finish(chooseP.choices[i]);
-    else { playSoftTry(); setMistakes((m) => m + 1); rec.mistake(); onMiss?.(); setPickedWrong(i); setHint(chooseP.hint); }
+    else { playSoftTry(); setMistakes((m) => m + 1); rec.mistake({ type: missRoundChoose(chooseP.v1, Number(chooseP.choices[i])), answer: chooseP.choices[i] }); onMiss?.(); setPickedWrong(i); setHint(chooseP.hint); }
   };
 
   const chooseWhichPlace = (i: number) => {
     if (!whichPlaceP) return;
     if (i === whichPlaceP.answerIndex) finish(`${whichPlaceP.n} → ${whichPlaceP.choices[i]}を 四捨五入`);
-    else { playSoftTry(); setMistakes((m) => m + 1); rec.mistake(); onMiss?.(); setPickedWrong(i); setHint(whichPlaceP.hint); }
+    else { playSoftTry(); setMistakes((m) => m + 1); rec.mistake({ type: missWhichPlace(whichPlaceP.targetLabel, whichPlaceP.choices[i]) }); onMiss?.(); setPickedWrong(i); setHint(whichPlaceP.hint); }
   };
 
   return (
