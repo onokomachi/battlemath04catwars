@@ -16,12 +16,12 @@ export const PORTAL = {
 export const isPortalConfigured = !!(PORTAL.supabaseUrl && PORTAL.supabaseKey);
 
 /**
- * CAT-WARS の出撃が したがう モードの鍵。
- * いまは CAT-WARS 専用の鍵が サーバに無いので、SANMON の「ぼうけん」の鍵にしたがう（先生の開け閉め・平日モード・番号ごとの停止）。
- * サーバの sanmon_spend も、reason の 'catwars' を「ぼうけん」として あつかう（'speed_duel'／'monster_duel' 以外は adventure）。
- * CW-5b で サーバに 'catwars' を足したら、ここを 'catwars' にする（docs/CW5B_SERVER_PLAN.md）。
+ * CAT-WARS の出撃が したがう モードの鍵（CW-5b・2026-11-16〜 CAT-WARS 専用の 'catwars'）。
+ * 先生が PRISM の SANMON タブで学級ごとに開ける。**はじめは閉じている**（kit の SANMON_MODES_DEFAULT_CLOSED。サーバも書いていなければ false）。
+ * 平日モード（SCHOOL_HOURS_MODES に入っている）・番号ごとの停止も効く。サーバの sanmon_spend も reason の 'catwars' を この鍵で確かめる。
+ * サーバの SQL（PRISM supabase/sql/2026-11-16-catwars-*.sql）を流す前は、サーバが catwars を返さないので kit の isModeOpen で閉じて見える。
  */
-export const CATWARS_MODE_KEY: SanmonModeKey = 'adventure';
+export const CATWARS_MODE_KEY: SanmonModeKey = 'catwars';
 
 /** スタミナを使うときの reason の前の部分（後ろに「@町の key」を付ける） */
 export const CATWARS_SPEND_REASON = 'catwars';

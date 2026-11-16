@@ -12,7 +12,7 @@
  *     通信できない         → 出撃しない（SANMON と同じ：sanmon_spend に とどかないと バトルは始まらない）
  * サーバの関数は deps で差しかえられる（scripts/portalTest.ts）。
  */
-import { isModeOpen, modeLockMessage, type SanmonModes, type SanmonStatus } from 'learning-app-kit/sanmon';
+import { isModeOpen, isSchoolHoursLocked, modeLockMessage, type SanmonModes, type SanmonStatus } from 'learning-app-kit/sanmon';
 import { CATWARS_MODE_KEY, CATWARS_SPEND_REASON } from './config';
 import { sortieStamina, shortageMessage } from './stamina';
 
@@ -45,6 +45,21 @@ export const studentLocked = (modes: SanmonModes | null | undefined): boolean =>
 export function lockMessage(modes: SanmonModes | null | undefined): string | null {
   if (studentLocked(modes)) return STUDENT_LOCK_MESSAGE;
   return modeLockMessage(modes, CATWARS_MODE_KEY);
+}
+
+/**
+ * 遊んでいる とちゅう（出撃の準備・戦闘）で モードが閉じたときの やさしい1行（開いていれば null）。CW-5b。
+ * SANMON と同じく、閉じたら すぐ ホームに もどす（CatWars.tsx）。その戦闘の勝ちの ごほうび・章の記録は 無し・
+ * 出撃で使った スタミナは もどらない（SANMON の ぼうけんも同じ）。それまでに 解いた問題の ごほうび（💠・⚡・XP・コイン）と記録は のこる。
+ */
+export function closedWhilePlayingMessage(modes: SanmonModes | null | undefined): string | null {
+  if (isModeOpen(modes, CATWARS_MODE_KEY)) return null;
+  if (studentLocked(modes)) return STUDENT_LOCK_MESSAGE;
+  const sh = modes?._school_hours;
+  if (isSchoolHoursLocked(modes, CATWARS_MODE_KEY) && (!sh?.base || isModeOpen(sh.base, CATWARS_MODE_KEY))) {
+    return `じゅぎょうの じかんに なったよ。つづきは ${sh!.end}から あそべるよ`;
+  }
+  return '先生が CAT-WARS を とじたよ。つづきは また こんどね';
 }
 
 export interface SortieInput {
