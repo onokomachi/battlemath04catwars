@@ -320,3 +320,57 @@ export function playOnce(chapterIndex: number, seed: number, opts: PlayOptions =
 
 /** 計測のたねを固定しておく（毎回同じ試合列を回すので、差分が読める） */
 export const seedFor = (run: number): number => 1000 + run * 7919;
+
+// ── 週がわりの遠征（CW-6a・2026-11-17）──────────────────────────────────
+// 画面（CatWars.tsx → BattleScene）と同じ組み立て：expeditionDifficulty（脅威レベル 基準Lv1）・expeditionEnemyBase・tuneExpeditionConfig。
+import {
+  expeditionForWeek, expeditionDifficulty, expeditionEnemyBase, tuneExpeditionConfig, expeditionChapter,
+} from '../catwars/expedition/expedition';
+import { CHAPTER_BASE_LEVEL } from '../catwars/data/campaign';
+
+/** そのレベルの子が 今いる章（めやすの レベルが level 以下の いちばん後の章）。施設・バフの見積もりに使う */
+export function chapterNoForLevel(level: number): number {
+  let no = 1;
+  for (const [k, v] of Object.entries(CHAPTER_BASE_LEVEL)) if (v <= level && Number(k) > no) no = Number(k);
+  return no;
+}
+
+export interface ExpeditionPlayOptions {
+  skill?: Skill;
+  maxSeconds?: number;
+  /** 想定装備を 差しかえる（無ければ loadoutForLevel(level, いまの章)） */
+  loadout?: Loadout;
+}
+
+/** 遠征を1試合（同じ week・level・seed なら必ず同じ結果） */
+export function playExpedition(week: number, level: number, seed: number, opts: ExpeditionPlayOptions = {}): PlayResult & { checksum: string } {
+  const e = expeditionForWeek(week);
+  const kit = opts.loadout ?? loadoutForLevel(level, chapterNoForLevel(level), 'normal');
+  const difficulty = expeditionDifficulty(e, level);
+  const cfg = tuneExpeditionConfig(e, buildSimConfig({
+    mode: 'PVE', seed, chapter: expeditionChapter(e), difficulty, battleMap: e.map,
+    p1: { levels: kit.levels, buffs: kit.buffs, formation: kit.formation, skills: kit.skills },
+  }));
+  const runner = new SimRunner(cfg, {
+    defenderBuildings: expeditionEnemyBase(e),
+    playerBuildings: kit.buildings,
+    spellCharges: { P1: { HEAL: 2, RAGE: 2 }, P2: { HEAL: 0, RAGE: 0 } },
+  });
+  const special = difficulty.unitPool.some(k => k === 'flyer' || k === 'guard' || k === 'medic' || k === 'kamikaze');
+  const bot = new BotPlayer(runner, opts.skill ?? NORMAL_SKILL, seed ^ 0x5bf03635, special, null);
+  const maxTicks = (opts.maxSeconds ?? 300) * TICKS_PER_SEC;
+  let peak = 0;
+  for (let i = 0; i < maxTicks; i++) {
+    bot.think();
+    runner.advance(TICK_MS, bot);
+    if (i % 20 === 0 && runner.state.entities.length > peak) peak = runner.state.entities.length;
+    if (runner.state.result) break;
+  }
+  const s = runner.state;
+  const checksum = `${s.tick}|${s.result}|${s.ai.spawnCount}|${s.entities.length}|${s.rngState}|${Math.round(s.players.P1.energy)}|`
+    + s.entities.map(x => `${x.id}:${Math.round(x.hp)}:${x.x.toFixed(2)},${x.y.toFixed(2)}`).join(';');
+  return {
+    win: s.result === 'P1', seconds: runner.tick / TICKS_PER_SEC, enemySpawned: s.ai.spawnCount,
+    peakEntities: peak, problems: bot.problems, corrects: bot.corrects, checksum,
+  };
+}

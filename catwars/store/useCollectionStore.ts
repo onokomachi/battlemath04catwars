@@ -189,6 +189,11 @@ export interface BattleRecord {
   seen: string[];
   /** この戦いで たおした数（図鑑の鍵 → 数） */
   defeated: Record<string, number>;
+  /**
+   * 週がわりの遠征（CW-6a）：章の星・ボスの たおした印・げきむず パーフェクト には 数えない
+   * （章の星の シールコインは 章の記録が ふえたときだけ。遠征の星は 学級の目標に入る）。★3の たたかい（バッジ）には 数える。
+   */
+  expedition?: boolean;
 }
 
 /** 戦いの記録（純粋な関数）。あたらしく図鑑に のった鍵と、もらった シールコインを返す */
@@ -205,7 +210,9 @@ export function applyBattle(save: CollectionSave, b: BattleRecord): { save: Coll
     marks.add(markKey(k, b.tier));
   }
   let coins = 0;
-  if (b.win) {
+  if (b.win && b.expedition) {
+    if ((b.stars ?? 1) >= 3) st.star3Battles += 1;
+  } else if (b.win) {
     const bk = `boss:${b.chapterId}`;
     defeated[bk] = (defeated[bk] ?? 0) + 1;
     marks.add(markKey(bk, b.tier));
@@ -228,6 +235,15 @@ export function applyBattle(save: CollectionSave, b: BattleRecord): { save: Coll
   };
 }
 
+/**
+ * 週がわりの遠征の 学級の目標の ごほうび（純粋な関数。CW-6a）。1週に1回・その週に 遠征で まちがえずに といた子だけ（呼ぶ側で きめる）。
+ * 学習の成果（学級みんなの「まちがえずに とけた」星）なので シールコインの きまり（coins.ts）の中。速さ・勝った数・放置では ふえない。
+ */
+export function applyGoalCoins(save: CollectionSave, coins: number): CollectionSave {
+  const c = Math.max(0, Math.floor(coins));
+  return c ? { ...save, coins: save.coins + c, coinsTotal: save.coinsTotal + c } : save;
+}
+
 /** バッジを入れる（純粋な関数）。あたらしく取った段と シールコインを返す（段は下がらない） */
 export function applyBadges(save: CollectionSave, earned: Record<string, number>): { save: CollectionSave; gained: { id: string; tier: number }[]; coins: number } {
   const badges = { ...save.badges };
@@ -248,6 +264,8 @@ export function applyBadges(save: CollectionSave, earned: Record<string, number>
 interface CollectionStore extends CollectionSave {
   recordAnswer: (a: { unitKey: string; skillId: string; difficulty?: number; perfect: boolean }) => number;
   recordBattle: (b: BattleRecord) => { newDex: string[]; coins: number };
+  /** 遠征の 学級の目標の ごほうび（applyGoalCoins） */
+  addGoalCoins: (coins: number) => void;
   setBadges: (earned: Record<string, number>) => { id: string; tier: number }[];
   setCats: (keys: string[]) => string[];
   markBadgesSeen: (ids?: string[]) => void;
@@ -283,6 +301,8 @@ export const useCollectionStore = create<CollectionStore>()(
         set(r.save);
         return { newDex: r.newDex, coins: r.coins };
       },
+
+      addGoalCoins: (coins) => set(applyGoalCoins(pick(get()), coins)),
 
       setBadges: (earned) => {
         const r = applyBadges(pick(get()), earned);

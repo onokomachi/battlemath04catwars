@@ -388,7 +388,17 @@ const TIER_EXTRA_DEFENSE: Record<ChapterTier, BuildingType[]> = {
 export function tierEnemyBase(map: BattleMap, tier: ChapterTier): BattleMap['enemyBase'] {
   const extra = TIER_EXTRA_DEFENSE[tier];
   if (extra.length === 0) return map.enemyBase;
-  const base = map.enemyBase.slice();
+  return withExtraDefenses(map, map.enemyBase, extra);
+}
+
+/**
+ * 敵の基地 base に、施設 extra を コアの手前（3〜5マス）に足して返す（毎回同じ結果）。
+ * 難易度の段（tierEnemyBase）と 週がわりの遠征の「砲台の まち」（expedition/rules.ts）が使う。
+ */
+export function withExtraDefenses(
+  map: BattleMap, enemyBase: BattleMap['enemyBase'], extra: BuildingType[],
+): BattleMap['enemyBase'] {
+  const base = enemyBase.slice();
   const core = base.find(b => b.type === BuildingType.TOWN_HALL) ?? base[0];
   if (!core) return base;
   const terrain = new Set(map.terrain.filter(t => t.type !== 'GRASS').map(t => `${t.x},${t.y}`));

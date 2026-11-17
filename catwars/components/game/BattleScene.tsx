@@ -248,7 +248,14 @@ interface Props {
    * 勝ち負けが決まった瞬間に1回だけ呼ぶ（勝ちの 💠・章の記録を ここで入れる。結果画面のまま 読みなおしても のこるように）。
    * 二重に入れない しくみは 呼ぶ側（utils/settleBattle.ts）。対戦（pvp）では 呼ばない。
    */
-  onSettle?: (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => void;
+  onSettle?: (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3, quiz?: { answered: number; perfect: number }) => void;
+  /**
+   * 週がわりの遠征（CW-6a）：上の帯・はじめの説明・結果画面を 遠征の文にする。章の星・ボスの印には 数えない（収集の expedition）。
+   * enemyLevel＝「てきの つよさ Lv.n」。resultExtra＝結果画面に足すもの（今週の自分の星・学級の合計）。
+   */
+  expedition?: { enemyLevel: number; ruleIcon: string; ruleName: string; resultExtra?: React.ReactNode };
+  /** 試合の前に SimConfig を書きかえる（遠征のルール。sim の外で1回だけ。決定的な関数を わたす） */
+  tuneConfig?: (cfg: SimConfig) => SimConfig;
   /** 結果画面のボタン・退却（画面を閉じる）。stars＝勝ったときの星（1〜3。まちがえずに解けた割合で決まる） */
   onEndBattle: (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => void;
 }
@@ -272,6 +279,8 @@ export const BattleScene: React.FC<Props> = ({
   pvp,
   onSettle,
   onEndBattle,
+  expedition,
+  tuneConfig,
 }) => {
   /** 自分がどちらのプレイヤーか。PvEでは常に P1 */
   const localPlayer: PlayerId = pvp?.localPlayer ?? 'P1';
@@ -303,7 +312,7 @@ export const BattleScene: React.FC<Props> = ({
   /** この戦闘で解いた問題の数・うち まちがえずに解けた数（星と結果の画面に使う） */
   const quizStatsRef = useRef({ answered: 0, perfect: 0 });
   // ── 図鑑（CW-4c）：見た敵・たおした敵を 盤上の出入りから拾う（sim の外。sim には手を入れない）──
-  const dexSeenRef = useRef<Set<string>>(new Set(isPvp ? [] : [bossDexKey(chapter.id)]));
+  const dexSeenRef = useRef<Set<string>>(new Set(isPvp || expedition ? [] : [bossDexKey(chapter.id)]));
   const dexAliveRef = useRef<Map<string, { key: string; x: number; y: number; kamikaze: boolean }>>(new Map());
   const dexDefeatedRef = useRef<Record<string, number>>({});
   const shieldsBrokenRef = useRef(0);
@@ -357,7 +366,7 @@ export const BattleScene: React.FC<Props> = ({
     const skills: Record<string, string[]> = {};
     for (const id of formation) skills[id] = familySkillIds(id);
 
-    const cfg = buildSimConfig({
+    const built = buildSimConfig({
       mode: 'PVE',
       // ソロプレイなので seed はローカルで決めてよい。
       // PvP ではサーバー（RTDBのserverTimestamp由来）が確定させた値を使う
@@ -366,6 +375,7 @@ export const BattleScene: React.FC<Props> = ({
       chapter, difficulty, battleMap: battleMap ?? null,
       p1: { levels, buffs: { values }, formation, skills },
     });
+    const cfg = tuneConfig ? tuneConfig(built) : built;
     runnerRef.current = new SimRunner(cfg, {
       defenderBuildings: defenderBuildings.map(b => ({ type: b.type, x: b.x, y: b.y })),
       playerBuildings: playerDeployments.map(b => ({ type: b.type, x: b.x, y: b.y, mult: facilityMults[b.type] ?? 1 })),
@@ -574,14 +584,15 @@ export const BattleScene: React.FC<Props> = ({
         const win = battleResult === 'WIN';
         const { answered, perfect } = quizStatsRef.current;
         const k = tierKey(chapter.id, tier);
-        const prevStars = useCampaignStore.getState().stars[k] ?? 0;
+        const prevStars = expedition ? 0 : useCampaignStore.getState().stars[k] ?? 0;
         const stars = win ? starsFor(answered, perfect) : undefined;
         const col = useCollectionStore.getState();
         const rb = col.recordBattle({
           chapterId: chapter.id, tier, win, stars, prevStars, answered, perfect,
           shields: shieldsBrokenRef.current, seen: [...dexSeenRef.current], defeated: { ...dexDefeatedRef.current },
+          expedition: !!expedition,
         });
-        const rf = refreshCollection(win && stars && stars > prevStars ? { [k]: stars } : undefined);
+        const rf = refreshCollection(!expedition && win && stars && stars > prevStars ? { [k]: stars } : undefined);
         const after = useCollectionStore.getState();
         const badges = Object.entries(after.badges).filter(([id, t]) => t > (after.badgesSeen[id] ?? 0)).map(([id, t]) => ({ id, tier: t }));
         after.markBadgesSeen(badges.map(b => b.id));
@@ -591,7 +602,7 @@ export const BattleScene: React.FC<Props> = ({
       const win = battleResult === 'WIN';
       const r = { gold: lootFor(win), stars: win ? starsFor(quizStatsRef.current.answered, quizStatsRef.current.perfect) : undefined };
       setSettled(r);
-      onSettle?.(win, { gold: r.gold }, r.stars);
+      onSettle?.(win, { gold: r.gold }, r.stars, { ...quizStatsRef.current });
     }
   }, [battleResult]);
 
@@ -829,7 +840,7 @@ export const BattleScene: React.FC<Props> = ({
        <div className="h-16 bg-black/75 flex justify-between items-center px-4 text-white z-50 relative border-b border-white/5">
           <div className="font-bold text-sm tracking-tight flex items-center gap-2 min-w-0">
             <Swords className="text-red-500 animate-pulse flex-shrink-0" size={18} />
-            <span className="text-red-400 font-extrabold text-base whitespace-nowrap">第{chapter.no}章</span>
+            <span className="text-red-400 font-extrabold text-base whitespace-nowrap">{expedition ? `${expedition.ruleIcon} 遠征` : `第${chapter.no}章`}</span>
             <span className="text-white/60 text-xs truncate hidden sm:inline" style={{ fontFamily: '"M PLUS Rounded 1c", sans-serif' }}>
               {chapter.title}
             </span>
@@ -837,6 +848,13 @@ export const BattleScene: React.FC<Props> = ({
               <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
                 style={{ background: `${TIER_INFO[tier].color}22`, borderColor: TIER_INFO[tier].color, color: TIER_INFO[tier].color }}>
                 {TIER_INFO[tier].label}
+              </span>
+            )}
+            {expedition && (
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0" data-testid="expedition-enemy-level"
+                title="てきの つよさは きみの ネコの レベルに あわせて きまるよ"
+                style={{ background: 'rgba(244,114,182,0.14)', borderColor: 'rgba(244,114,182,0.6)', color: '#f472b6' }}>
+                てき Lv.{expedition.enemyLevel}
               </span>
             )}
             {threat >= 1 && (
@@ -1543,7 +1561,7 @@ export const BattleScene: React.FC<Props> = ({
                <div className="text-center p-6 bg-slate-900/70 border border-yellow-500/30 rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto backdrop-blur-md shadow-2xl">
                  <Trophy className="w-16 h-16 text-yellow-400 mx-auto mb-3 animate-bounce" />
                  <div className="text-[10px] tracking-[0.25em] text-yellow-400/70 mb-1" style={{ fontFamily: 'Orbitron, monospace' }}>
-                   だい{chapter.no}しょう クリア！
+                   {expedition ? '遠征 せいこう！' : `だい${chapter.no}しょう クリア！`}
                  </div>
                  <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
                  <div className="flex items-center gap-2 mb-4 text-left">
@@ -1554,6 +1572,7 @@ export const BattleScene: React.FC<Props> = ({
                    <p className="text-sm text-gray-200 leading-relaxed">{chapter.victoryLine}</p>
                  </div>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} win />
+                 {expedition?.resultExtra}
                  <GainsSummary gains={gains} />
                  <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
@@ -1571,9 +1590,12 @@ export const BattleScene: React.FC<Props> = ({
                  </p>
                  {/* 連敗時は次回サポートが入ることを先に伝える（隠れた調整はしない） */}
                  <div className="text-[11px] text-[#a3e635] mb-3 leading-relaxed">
-                   まけても ネコたちの けいけんちは 手に入るよ。何回か まけると「サポートモード」で やさしく なるので、あきらめずに もう一回！
+                   {expedition
+                     ? 'まけても ネコたちの けいけんちは 手に入るよ。遠征は 今週 なんかいでも ちょうせん できる。いちばん よい 星が のこるよ！'
+                     : 'まけても ネコたちの けいけんちは 手に入るよ。何回か まけると「サポートモード」で やさしく なるので、あきらめずに もう一回！'}
                  </div>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
+                 {expedition?.resultExtra}
                  <GainsSummary gains={gains} />
                  <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
@@ -1768,7 +1790,7 @@ export const BattleScene: React.FC<Props> = ({
                fontFamily: '"M PLUS Rounded 1c", sans-serif',
              }}>
              <div className="text-[10px] tracking-[0.3em] text-[#38bdf8]/80" style={{ fontFamily: 'Orbitron, monospace' }}>
-               CHAPTER {chapter.no}
+               {expedition ? 'WEEKLY EXPEDITION' : `CHAPTER ${chapter.no}`}
              </div>
              <h2 className="text-white font-black text-xl mt-1 mb-3 leading-tight">{chapter.title}</h2>
 

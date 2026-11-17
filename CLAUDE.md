@@ -11,9 +11,10 @@ Vite 6 + React 19 + TypeScript + Tailwind 3 + Zustand 5。Next.js ではない�
 
 ```bash
 npm run dev
-npm run check   # 型・学年パックの検査・戦闘の試験・収集・ポータルの試験・ビルド（終わる前に必ず）
+npm run check   # 型・学年パックの検査・戦闘の試験・収集・ポータル・遠征の試験・ビルド（終わる前に必ず）
 npm run test:balance   # 全章の勝率（数値を変えたら流す）
 npm run test:progress  # 進み方の計算（XP・値段を変えたら流す。数秒）
+npm run test:expedition:balance  # 週がわりの遠征の 全部の戦場×ルール×レベル（遠征・sim の数値を変えたら流す。約30分）
 ```
 
 ## 構成
@@ -31,6 +32,7 @@ npm run test:progress  # 進み方の計算（XP・値段を変えたら流す�
 - `catwars/portal/` … 学級ポータル（名乗り・おためし／デモのセーブの入れかえ・出撃の関門・スタミナ・記録の送信 `answerSync.ts`・セーブのサーバ保存 `saveSync.ts`・体験版の項目 `trialFeatures.ts`・デモ `demo.ts`）。`docs/PORTAL.md`。セーブの鍵は `portal/saveKeys.ts` だけに書く
 - `catwars/collection/`・`store/useCollectionStore.ts` … 収集（図鑑・バッジ34・シール60のカプセル・称号・はた）。保存は `catwars-collection-v1` の1つ（`exportSave`/`importSave`）。画面は `components/collection/`。くわしくは 仕様 §3d、絵の表は `docs/ART_LIST.md`
 - `public/assets/stickers|badges|flags/` … シール・バッジ（絵柄と メダルの台）・基地のはた の SVG（手書き）。**きまりは `docs/ART_STYLE.md`**（線・パレット・ダイカット）。**同じ名前で上書きしない**（新しい名前で足して `image` を書きかえる）
+- `catwars/expedition/` … **週がわりの遠征**（CW-6a。週の番号だけから 戦場・敵・ルールが決まる。`docs/REBUILD_SPEC.md` §5a・`docs/PORTAL.md`）。自分の星は `store/useExpeditionStore.ts`、サーバは `portal/expeditionSync.ts`
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
 ## 必ず守ること
@@ -51,7 +53,9 @@ npm run test:progress  # 進み方の計算（XP・値段を変えたら流す�
 - **スタミナの数・かけら・モードの開け閉めは サーバと kit が決める。** CAT-WARS で 数を決めない（送った数は サーバが決めなおす。1回の数は kit の `sanmonBattleCost`）。おためし・体験版・デモは 記録もセーブも 送らない（名乗らない）。デモの中身（全章・かけら8・💠・Lv）は デモのセーブにだけ入れる。
 - **モードの鍵は `catwars`（はじめ閉じている）。遊んでいる とちゅうで閉じたら すぐホームにもどす**（`CatWars.tsx` の `playingLock`。SANMON と同じ）。
 - **記録は app_id `catwars`・skill_id は 単元アプリのまま・カタログ `catwars`（kit）に無い項目は送らない・detail を付けない**（単元アプリの app_id で送ると スタミナが たまって「戦闘→スタミナ→戦闘」の輪になる。detail は 本番テストに まちがわれる）。1問ごとに 通信しない（`answerSync.ts`）。
-- **サーバに送るセーブ（`saveBundle.ts`）は めやす 6KB。** 使わない記録をストアに ためない（`progress.mastery` を消した。`npm run test:portal` の [8] で大きさを見る）。
+- **サーバに送るセーブ（`saveBundle.ts`）は めやす 6.5KB**（CW-6a で 遠征ぶん +0.5KB）。使わない記録をストアに ためない（`progress.mastery` を消した。`npm run test:portal` の [8] で大きさを見る）。
+- **週がわりの遠征のルールは 試合の前に 入力（難易度・敵の基地・ネコの性能表）を変えるだけ**（`expedition/rules.ts`）。sim の中で ルールを見ない。ルール・遠征の数を変えたら `npm run test:expedition:balance`（「とかない」0%・「ふつう」85%いじょう）。
+  遠征の星は 名乗っている子の「まちがえずに 1問いじょう といた戦い」だけ サーバへ。**ほかの子の星・順位は 画面に出さない**（サーバも返さない）。週は サーバの時計（日本時間の月曜 0:00）。
 - `window.confirm()` / `alert()` を使わない（iPad で出ないことがある）。
 - 子どもの氏名は扱わない。APIキー・トークン・パスワードはファイルにも知識集にも書かない。
 

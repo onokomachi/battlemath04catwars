@@ -35,6 +35,11 @@ import { settleBattle, newBattleId } from '../utils/settleBattle';
 import { isTrial } from 'learning-app-kit/sync';
 import { TrialLock, useTrialAllows } from 'learning-app-kit/react';
 import { catwarsTrialKeyOf, CATWARS_TRIAL_LABEL, type CatwarsTrialKey } from '../portal/trialFeatures';
+import {
+  currentExpedition, expeditionForWeek, expeditionChapter, expeditionDifficulty, expeditionEnemyBase, expeditionEnemyLevel, tuneExpeditionConfig,
+} from '../expedition/expedition';
+import { ExpeditionCard, ExpeditionScreen, ExpeditionResultNote } from './expedition/ExpeditionParts';
+import { settleExpedition } from '../utils/settleExpedition';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 /** 体験版で 先生が閉じた項目の ボタンの下の文（押すと kit の TrialLock） */
@@ -43,7 +48,8 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 
 // 出撃導線: 範囲えらび → ステージえらび → 出撃メンバー（5枠）→ 陣地づくり（施設の買う・レベル上げも ここ）→ 戦闘
 // 陣地はステージごとに組む（ゾーンの広さが章によって変わるため）。
-type View = 'home' | 'army' | 'collection' | 'range' | 'stage' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
+// 週がわりの遠征（CW-6a）: ホームのカード → 遠征の説明（expedition）→ 範囲えらび → 出撃メンバー → 陣地づくり → 戦闘（章えらびは無い）
+type View = 'home' | 'army' | 'collection' | 'range' | 'stage' | 'expedition' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
 
 interface Props {
   /** 上の階のメニューがあるときだけ（いまは CAT-WARS だけで動くので無い） */
@@ -100,7 +106,13 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
    * 戦闘の きっぷ。出撃の関門（portal/gate.ts）を通ったときだけ できる。戦闘の画面は これが無いと出さない
    * （関門を通らずに戦闘を始める道を残さない）。戦闘が おわったら 消す。
    */
-  const [battleTicket, setBattleTicket] = useState<{ id: string; chapterId: string; tier: ChapterTier } | null>(null);
+  const [battleTicket, setBattleTicket] = useState<{ id: string; chapterId: string; tier: ChapterTier; expeditionWeek?: number } | null>(null);
+  /** いまの出撃が 週がわりの遠征か（その週の番号。ふだんの章なら null） */
+  const [expeditionWeek, setExpeditionWeek] = useState<number | null>(null);
+  /** いまの週の遠征（ホームに もどるたびに 決めなおす＝月曜 0:00 を またいでも 新しい週になる） */
+  const expedition = useMemo(() => currentExpedition(), [view]);
+  /** 遠征の戦闘の 結果画面に出す（その戦いで まちがえずに といた数） */
+  const [expeditionPerfect, setExpeditionPerfect] = useState(0);
   const [sortieBusy, setSortieBusy] = useState(false);
   const [sortieMsg, setSortieMsg] = useState<string | null>(null);
 
@@ -110,7 +122,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const playLock = playingLock(portalModes);
   useEffect(() => {
     if (!playLock) return;
-    if (!['range', 'stage', 'formation', 'prep', 'battle'].includes(view)) return;
+    if (!['range', 'stage', 'expedition', 'formation', 'prep', 'battle'].includes(view)) return;
     if (view === 'battle') afterBattle();
     setBattleTicket(null);
     setSortieMsg(null);
@@ -126,8 +138,14 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     try {
       const r = await startSortie(formation);
       if (r.ok === false) { setSortieMsg(r.message); return; }
-      campaign.recordAttempt(chapterId, activeTier);
-      setBattleTicket({ id: newBattleId(), chapterId, tier: activeTier });
+      if (expeditionWeek != null) {
+        // 遠征は 章の記録（連敗＝サポートモード）に数えない
+        setExpeditionPerfect(0);
+        setBattleTicket({ id: newBattleId(), chapterId, tier: 'normal', expeditionWeek });
+      } else {
+        campaign.recordAttempt(chapterId, activeTier);
+        setBattleTicket({ id: newBattleId(), chapterId, tier: activeTier });
+      }
       setView('battle');
     } finally {
       setSortieBusy(false);
@@ -138,8 +156,19 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
    * 勝ち負けが決まった瞬間に1回だけ：勝ちの 💠・章の記録（クリア・★・連敗の数）を入れる（utils/settleBattle.ts）。
    * BattleScene の 戦闘終了の useEffect が呼ぶ。結果画面のまま 読みなおしても のこる。入れたら すぐ セーブを送る。
    */
-  const handleSettle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
+  const handleSettle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3, quiz?: { answered: number; perfect: number }) => {
     if (!battleTicket) return;
+    if (battleTicket.expeditionWeek != null) {
+      // 遠征：今週の自分の星（前より良いときだけ）・勝ちの 💠。結果画面のボタン（quiz なし）では 二重に入らない
+      if (!quiz) return;
+      setExpeditionPerfect(quiz.perfect);
+      const done = settleExpedition({
+        battleId: battleTicket.id, weekStart: expeditionForWeek(battleTicket.expeditionWeek).weekStart,
+        win, gold: loot.gold, stars, perfect: quiz.perfect,
+      });
+      if (done) afterBattle();
+      return;
+    }
     const done = settleBattle({ battleId: battleTicket.id, chapterId: battleTicket.chapterId, tier: battleTicket.tier, win, gold: loot.gold, stars });
     if (done) afterBattle();
   };
@@ -148,6 +177,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const handleEndBattle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3) => {
     handleSettle(win, loot, stars);
     setBattleTicket(null);
+    setExpeditionWeek(null);
     setView('home');
     // 解いた問題の記録を まとめて送る・セーブを しまう（名乗っているときだけ。中身が変わっていなければ 送らない）
     afterBattle();
@@ -173,8 +203,17 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   if (view === 'range') {
     return (
       <RangeSelect
-        onBack={() => setView('home')}
-        onConfirm={(subs) => { setQuizSubtopics(subs); setView('stage'); }}
+        onBack={() => setView(expeditionWeek != null ? 'expedition' : 'home')}
+        nextLabel={expeditionWeek != null ? 'この範囲で 遠征の 出撃メンバーへ →' : undefined}
+        onConfirm={(subs) => {
+          setQuizSubtopics(subs);
+          if (expeditionWeek != null) {
+            // 遠征：戦場は 週で決まっている（章えらびは とばす）。難易度は ふつう＋手持ちに合わせた 敵の強さ
+            setActiveChapterId(expeditionForWeek(expeditionWeek).chapter.id);
+            setActiveTier('normal');
+            setView('formation');
+          } else setView('stage');
+        }}
       />
     );
   }
@@ -195,7 +234,25 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     );
   }
 
+  if (view === 'expedition') {
+    return (
+      <ExpeditionScreen expedition={expedition} avgLevel={topAvgLevel} locked={homeLock}
+        onBack={() => { setExpeditionWeek(null); setView('home'); }}
+        onStart={() => {
+          if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); setView('home'); return; }
+          setSortieMsg(null); resetBattleSession(); setExpeditionWeek(expedition.week); setView('range');
+        }} />
+    );
+  }
+
   if (view === 'formation') {
+    if (expeditionWeek != null) {
+      const e = expeditionForWeek(expeditionWeek);
+      return (
+        <FormationScreen chapter={expeditionChapter(e)} tier="normal" difficulty={expeditionDifficulty(e, topAvgLevel)}
+          onBack={() => setView('range')} onProceed={() => setView('prep')} />
+      );
+    }
     const chapter = CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
     return (
       <FormationScreen chapter={chapter} tier={activeTier}
@@ -204,7 +261,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   }
 
   if (view === 'prep') {
-    const chapter = CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
+    const chapter = expeditionWeek != null ? expeditionChapter(expeditionForWeek(expeditionWeek)) : CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
     return (
       <BaseBuilder
         chapter={chapter}
@@ -212,6 +269,38 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         onProceed={() => { void beginBattle(chapter.id); }}
         proceedBusy={sortieBusy}
         proceedSlot={<SortieStamina formation={formation} message={sortieMsg} />}
+      />
+    );
+  }
+
+  if (view === 'battle' && battleTicket && battleTicket.expeditionWeek != null) {
+    // 週がわりの遠征：戦場・敵・ルールは 週で決まる。敵の強さは 手持ちに合わせる（脅威レベルのしくみ・基準 Lv1）。サポートモードは無し
+    const e = expeditionForWeek(battleTicket.expeditionWeek);
+    const { active } = splitActiveLayout(base.getLayout(e.chapter.id), limit);
+    const facilityMults: Partial<Record<BuildingType, number>> = {};
+    for (const t of LEVELED_COMBAT) facilityMults[t] = facilityMult(t, base.levelOf(t));
+    return (
+      <BattleScene
+        attackerState={gameState}
+        defenderBuildings={expeditionEnemyBase(e)}
+        playerDeployments={active}
+        battleMap={e.map}
+        loadout={computeBattleLoadout(owned, active, permanentUnlocks)}
+        formation={formation}
+        facilityMults={facilityMults}
+        creditBonus={creditBonus}
+        chapter={expeditionChapter(e)}
+        difficulty={expeditionDifficulty(e, topAvgLevel)}
+        assistLevel={0}
+        tier="normal"
+        quizSubtopics={quizSubtopics}
+        tuneConfig={(cfg) => tuneExpeditionConfig(e, cfg)}
+        expedition={{
+          enemyLevel: expeditionEnemyLevel(topAvgLevel), ruleIcon: e.rule.icon, ruleName: e.rule.name,
+          resultExtra: <ExpeditionResultNote weekStart={e.weekStart} perfect={expeditionPerfect} />,
+        }}
+        onSettle={handleSettle}
+        onEndBattle={handleEndBattle}
       />
     );
   }
@@ -337,7 +426,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           onClick={() => {
             // 閉じていても 押せる形のまま。押すと わけを出す（SANMON と同じ）
             if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); return; }
-            setSortieMsg(null); resetBattleSession(); setView('range');
+            setSortieMsg(null); resetBattleSession(); setExpeditionWeek(null); setView('range');
           }} big />
         <HubButton icon="🐱" label="ネコ部隊" sub={trialOpen('army') ? 'レベル・進化・スキル' : TRIAL_LOCKED_SUB} color="#a3e635"
           locked={!trialOpen('army')}
@@ -349,6 +438,12 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           locked={!trialOpen('army')}
           onClick={() => setView('buffs')} />
       </div>
+
+      {/* 週がわりの遠征（CW-6a）。鍵は 出撃と同じ catwars・体験版の項目も 出撃と同じ */}
+      {trialOpen('sortie') && (
+        <ExpeditionCard expedition={expedition} locked={homeLock}
+          onOpen={() => { setHomeNotice(null); setView('expedition'); }} />
+      )}
 
       {/* 基地のようす（施設の買う・レベル上げ・配置は 出撃の中の「陣地づくり」で） */}
       <div className="px-4 pt-4">
