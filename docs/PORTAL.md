@@ -137,7 +137,22 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 - おためし・体験版・つないでいないビルド：みほんの 基地 3つ（日ごとに入れかわる）。デモ：みほん（送らない・読まない）。
 - 開発のときだけ：`window.__cwFriendMock({ count, fail, student })` で サーバを差しかえる（送ったものは `window.__cwFriendCalls`。本番のビルドには入らない）。
 
+## 同時対戦（CW-6c・2026-11-17）
+仕様は `docs/REBUILD_SPEC.md` §5c。サーバの SQL は PRISM の `supabase/sql/2026-11-17-catwars-versus.sql`（**まだ流していない**。試験用 `…versus.dryrun.sql`・戻し用 `rollback/2026-11-17-before-catwars-versus.sql`）。
+- 置き場所：`catwars/versus/`（`rules.ts` きまり・おきかたの見なおし・前半/後半の準備と計算・点／`match.ts` ラウンドの状態機械〔画面も通信も知らない。時計と送り先を外から もらう〕／`bot.ts` コンピュータの手・メモリの通り道・れんしゅう試合）、
+  `net/broadcastLink.ts`（Realtime Broadcast。`@supabase/realtime-js` 2.116.0 を足した。SANMON と同じ版。対戦に入るまで読みこまない）、`portal/versusSync.ts`（へやの関数5つ）、`components/versus/VersusParts.tsx`（ホームのカード・へや・とく・おく・みる・結果）、`portal/versusDevMock.ts`（開発のときだけ）。
+  **前の `net/lockstep.ts`・`net/transport.ts`（tick ごとの バケット）は つかわない**：ラウンド制なので 交換するのは ラウンドごとの「おきかた」と「結果の要約」だけ。2つの端末が 同じ入力から 同じ計算を する（ロックステップの考え方）。
+- 鍵・関門・スタミナ・体験版は **出撃と同じ**（別の鍵を足さない。`catwarsTrialKeyOf('versus')` は `sortie`。遊んでいる とちゅうで閉じたら ホームにもどす の対象にも入れた）。
+  へやに入る → 「たたかう」で `startSortie`（スタミナ）→ サーバの `catwars_versus_ready`（**へやに入った後の 出撃の記録が ある子だけ**）→ 合図で はじまる。同じへやで やりなおしても スタミナは 二重に 引かない（`spentRef`）。
+  はじまったあと あいてが いなくなっても スタミナは もどらない（SANMON と同じ）。
+- 名乗っているときだけ サーバに つなぐ（へや・入室・準備・でる）。おためし・体験版・デモ・つないでいないビルドは **サーバを 1回も よばない**（コンピュータが あいての れんしゅう試合）。
+- **子どもの安全**：あいては「あいて」（`となりの 子`）。番号・名前・student_id は 画面・合図・サーバの返り値の どこにも 無い。勝ち負け・点・星・順位は サーバの表に 列が 無く、端末にも のこさない（対戦の結果の ストアは 作っていない）。
+  ごほうびは 勝ち負けで 動かない（まちがえずに といた 問題の ぶんだけ。既存の `grantStudyReward`）。まけたときの 文は 責めない。
+- 通信が つながらない（学校のネットなど）：ロビーに「つうしんが つながらないよ」と出す。れんしゅう試合へ 案内。
+- 開発のときだけ：`window.__cwVersusMock({ student })`（サーバの関数は `window.__vsRpc`・合図は `window.__vsSend`／`__vsDeliver`。Playwright の `exposeFunction` で 2つの ページを つなぐ。本番のサーバ・Realtime には つながない）。`window.__cwVersusMatch`＝いまの 状態機械。
+
 ## まだ していないこと
+- 同時対戦のサーバの SQL（PRISM `supabase/sql/2026-11-17-catwars-versus*.sql`。前提は 流しずみの `…catwars-mode.sql`。試験用 → 本番 の順）。
 - 週がわりの遠征のサーバの SQL（PRISM `supabase/sql/2026-11-17-catwars-expedition*.sql`。試験用 → 本番 の順）。
 - なかまの 基地に いく のサーバの SQL（PRISM `supabase/sql/2026-11-17-catwars-base*.sql`。**遠征の SQL の あと**。試験用 → 本番 の順）。
 - （2026-11-16 に済んだ）サーバの SQL（`docs/CW5B_SERVER_PLAN.md` §5）。先生が SANMON タブで CAT-WARS を開ける → 名乗った子が出撃できる・たまっていた記録が送られる。
