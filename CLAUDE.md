@@ -11,10 +11,11 @@ Vite 6 + React 19 + TypeScript + Tailwind 3 + Zustand 5。Next.js ではない�
 
 ```bash
 npm run dev
-npm run check   # 型・学年パックの検査・戦闘の試験・収集・ポータル・遠征の試験・ビルド（終わる前に必ず）
+npm run check   # 型・学年パックの検査・戦闘の試験・収集・ポータル・遠征・なかま・対戦の試験・ビルド（終わる前に必ず）
 npm run test:balance   # 全章の勝率（数値を変えたら流す）
 npm run test:progress  # 進み方の計算（XP・値段を変えたら流す。数秒）
 npm run test:expedition:balance  # 週がわりの遠征の 全部の戦場×ルール×レベル（遠征・sim の数値を変えたら流す。約30分）
+npm run test:versus:balance  # 同時対戦：コンピュータ4段の総あたり（対戦の数を変えたら流す。約70秒）
 ```
 
 ## 構成
@@ -34,6 +35,7 @@ npm run test:expedition:balance  # 週がわりの遠征の 全部の戦場×ル
 - `public/assets/stickers|badges|flags/` … シール・バッジ（絵柄と メダルの台）・基地のはた の SVG（手書き）。**きまりは `docs/ART_STYLE.md`**（線・パレット・ダイカット）。**同じ名前で上書きしない**（新しい名前で足して `image` を書きかえる）
 - `catwars/expedition/` … **週がわりの遠征**（CW-6a。週の番号だけから 戦場・敵・ルールが決まる。`docs/REBUILD_SPEC.md` §5a・`docs/PORTAL.md`）。自分の星は `store/useExpeditionStore.ts`、サーバは `portal/expeditionSync.ts`
 - `catwars/friend/` … **なかまの 基地に いく**（CW-6b。同じ学級の なかまの 基地の 配置に CPU が守る形で 攻める。相手は番号も名前も出さず「なかまの 基地 A・B・C」。`docs/REBUILD_SPEC.md` §5b・`docs/PORTAL.md`）。自分の きょうの星は `store/useFriendStore.ts`、サーバは `portal/friendSync.ts`
+- `catwars/versus/` … **同時対戦**（CW-6c。同じ学級の2人が その場で。**ラウンド制**＝とく → おく → みる〔左右を入れかえて2回〕×3。あいては「あいて」・勝ち負けは どこにも 残さない。名乗っていない子は コンピュータが あいて。`docs/REBUILD_SPEC.md` §5c・`docs/PORTAL.md`）。サーバは `portal/versusSync.ts`、合図は `net/broadcastLink.ts`
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
 ## 必ず守ること
@@ -58,6 +60,7 @@ npm run test:expedition:balance  # 週がわりの遠征の 全部の戦場×ル
 - **週がわりの遠征のルールは 試合の前に 入力（難易度・敵の基地・ネコの性能表）を変えるだけ**（`expedition/rules.ts`）。sim の中で ルールを見ない。ルール・遠征の数を変えたら `npm run test:expedition:balance`（「とかない」0%・「ふつう」85%いじょう）。
   遠征の星は 名乗っている子の「まちがえずに 1問いじょう といた戦い」だけ サーバへ。**ほかの子の星・順位は 画面に出さない**（サーバも返さない）。週は サーバの時計（日本時間の月曜 0:00）。
 - **なかまの 基地では 子どもの 番号・名前を 出さない・送らない・読まない。攻めた記録・勝ち負けの数を サーバに 残さない・相手に 見せない**（`friend/`・`portal/friendSync.ts`。名乗っていない子は 送らず みほんの基地）。相手の 強さは 手持ちに 合わせ 上限・下限を つける（`friend/friendAttack.ts`）。数を変えたら `npm run test:friend:balance`。
+- **同時対戦では 勝ち負けで 💠・XP・コイン・星を 動かさない・勝ち負けの数／順位／あいての番号・名前を サーバにも 端末にも 残さない・出さない**（ごほうびは まちがえずに とけた 問題の `grantStudyReward` だけ。`versus/`・`portal/versusSync.ts`）。2人の計算は 同じ入力（おきかた）から 同じ結果にし（`sim/` は さわらない）、数を変えたら `npm run test:versus` と `test:versus:balance`。
 - `window.confirm()` / `alert()` を使わない（iPad で出ないことがある）。
 - 子どもの氏名は扱わない。APIキー・トークン・パスワードはファイルにも知識集にも書かない。
 

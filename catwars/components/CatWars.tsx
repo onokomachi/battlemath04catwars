@@ -41,6 +41,7 @@ import {
 import { ExpeditionCard, ExpeditionScreen, ExpeditionResultNote } from './expedition/ExpeditionParts';
 import { settleExpedition } from '../utils/settleExpedition';
 import { FriendCard, FriendScreen, FriendResultNote } from './friend/FriendParts';
+import { VersusCard, VersusScreen } from './versus/VersusParts';
 import { friendSetup, type FriendTarget } from '../friend/friendAttack';
 import { noteLayoutEdited, flushShare } from '../portal/friendSync';
 import { settleFriend, friendBonusFor } from '../utils/settleFriend';
@@ -53,8 +54,9 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 // 出撃導線: 範囲えらび → ステージえらび → 出撃メンバー（5枠）→ 陣地づくり（施設の買う・レベル上げも ここ）→ 戦闘
 // 陣地はステージごとに組む（ゾーンの広さが章によって変わるため）。
 // 週がわりの遠征（CW-6a）: ホームのカード → 遠征の説明（expedition）→ 範囲えらび → 出撃メンバー → 陣地づくり → 戦闘（章えらびは無い）
+// 同時対戦（CW-6c）: ホームのカード → 対戦の画面（versus。へや／れんしゅう → 出題範囲 → とく・おく・みる ×3。戦闘の画面・陣地づくりは 通らない。関門は 画面の中で 通す）
 // なかまの 基地に いく（CW-6b）: ホームのカード → 相手をえらぶ（friend）→ 範囲えらび → 出撃メンバー → 陣地づくり → 戦闘（戦場・敵の基地は 相手に あわせて きまる）
-type View = 'home' | 'army' | 'collection' | 'range' | 'stage' | 'expedition' | 'friend' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
+type View = 'home' | 'army' | 'collection' | 'range' | 'stage' | 'expedition' | 'friend' | 'versus' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
 
 interface Props {
   /** 上の階のメニューがあるときだけ（いまは CAT-WARS だけで動くので無い） */
@@ -133,7 +135,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const playLock = playingLock(portalModes);
   useEffect(() => {
     if (!playLock) return;
-    if (!['range', 'stage', 'expedition', 'friend', 'formation', 'prep', 'battle'].includes(view)) return;
+    if (!['range', 'stage', 'expedition', 'friend', 'versus', 'formation', 'prep', 'battle'].includes(view)) return;
     if (view === 'battle') afterBattle();
     setBattleTicket(null);
     setFriendPick(null);
@@ -287,6 +289,11 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           setSortieMsg(null); resetBattleSession(); setExpeditionWeek(null); setFriendPick({ t, day }); setView('range');
         }} />
     );
+  }
+
+  if (view === 'versus') {
+    // 同時対戦：出撃の関門（スタミナ）は 画面の中で「たたかう」を おしたとき 通す（portal/usePortal.ts の startSortie）。ネコの レベルは みんな同じ
+    return <VersusScreen formation={formation} unlocked={unlocked} locked={homeLock} onBack={() => setView('home')} />;
   }
 
   if (view === 'formation') {
@@ -537,6 +544,11 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       {/* なかまの 基地に いく（CW-6b）。鍵・体験版の項目は 出撃と同じ */}
       {trialOpen('sortie') && (
         <FriendCard locked={homeLock} onOpen={() => { setHomeNotice(null); setView('friend'); }} />
+      )}
+
+      {/* 同時対戦（CW-6c）。鍵・体験版の項目は 出撃と同じ（コンピュータとの れんしゅうは 名乗らなくても あそべる） */}
+      {trialOpen('sortie') && (
+        <VersusCard locked={homeLock} onOpen={() => { setHomeNotice(null); setView('versus'); }} />
       )}
 
       {/* 基地のようす（施設の買う・レベル上げ・配置は 出撃の中の「陣地づくり」で） */}
