@@ -35,9 +35,10 @@ export interface ClassExpedition {
   sample?: boolean;
 }
 
-type Rpc = <T>(fn: string, body: unknown) => Promise<{ ok: true; data: T } | { ok: false; message: string }>;
+export type Rpc = <T>(fn: string, body: unknown) => Promise<{ ok: true; data: T } | { ok: false; message: string }>;
 
-const realRpc: Rpc = async <T,>(fn: string, body: unknown) => {
+/** kit の rpc と同じ形の fetch（なかまの基地 CW-6b＝portal/friendSync.ts も 使う） */
+export const realRpc: Rpc = async <T,>(fn: string, body: unknown) => {
   if (!PORTAL.supabaseUrl || !PORTAL.supabaseKey) return { ok: false as const, message: 'つながっていません' };
   try {
     const res = await fetch(`${PORTAL.supabaseUrl}/rest/v1/rpc/${fn}`, {

@@ -18,6 +18,8 @@ export const SAVE_KEYS = {
   collection: 'catwars-collection-v1',
   /** 週がわりの遠征の 自分の星・ごほうびを もらった週（CW-6a。store/useExpeditionStore.ts） */
   expedition: 'catwars-expedition-v1',
+  /** なかまの 基地を 攻めた 自分の記録（きょうの星・💠を もらった日。CW-6b。store/useFriendStore.ts）。サーバのセーブに入る */
+  friend: 'catwars-friend-v1',
   /** 学級ポータルへ まだ送れていない 1問の記録（直近500件。portal/outbox.ts）。ストアではない・サーバのセーブには入れない */
   outbox: 'catwars-portal-outbox',
   /**

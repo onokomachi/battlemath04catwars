@@ -45,6 +45,7 @@ import { CAPSULE_RULES, EXCHANGE_COST, RARITY_ORDER, STICKERS, ownedKinds, pullC
 import { ENEMY_DEX, CAT_DEX_KEYS, foundCatKeys, unitDexKey, bossDexKey } from '../catwars/collection/dex';
 import { applyAnswer, applyBattle, applyBadges, emptySave, localDay, type CollectionSave } from '../catwars/store/useCollectionStore';
 import { BARRACKS_UNLOCKS } from '../catwars/data/facilities';
+import { FRIEND_ATTACK_CREDITS } from '../catwars/friend/friendAttack';
 
 const VERBOSE = process.env.VERBOSE === '1';
 
@@ -284,6 +285,8 @@ function run(p: Profile): Result {
         if (!replay) cleared[fr.tier] = Math.max(cleared[fr.tier], fr.no);
       }
     }
+    // なかまの 基地に いく（CW-6b）：その日 1回目の 勝ちで 💠（毎日 1回 勝つ とみる。いちばん多く 見つもった形）
+    credits += FRIEND_ATTACK_CREDITS; earned += FRIEND_ATTACK_CREDITS;
     // 💠 を使う：いちばん安い「買う／上げる」から
     for (;;) {
       let best: { cost: number; act: () => void } | null = null;

@@ -46,6 +46,10 @@ interface Props {
   proceedSlot?: React.ReactNode;
   /** 出撃の関門に聞いているあいだ（ボタンを止める） */
   proceedBusy?: boolean;
+  /** 敵の基地の 見せかた（うっすら出る 敵の施設）。なかまの基地を 攻めるとき（CW-6b）は その配置を 出す。無ければ 戦場の 敵の基地 */
+  enemyBase?: BattleMap['enemyBase'];
+  /** 配置を かえたとき（なかまに 見せる基地の 送りだしに 使う。CW-6b） */
+  onLayoutEdited?: (chapterId: string) => void;
 }
 
 /**
@@ -55,7 +59,7 @@ interface Props {
  * ・その日に戦闘で動かせるのは「2 + きょう まちがえずに解いた数 ÷ 5」個まで（コアは いつも）。先に置いた順
  * ・置ける範囲（自陣ゾーン）はステージごとに違う
  */
-export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proceedSlot, proceedBusy }) => {
+export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proceedSlot, proceedBusy, enemyBase, onLayoutEdited }) => {
   const map: BattleMap = BATTLE_MAP_BY_ID[chapter.mapId];
   const base = useBaseStore();
   const credits = Math.floor(usePlayerStore(s => s.resources.gold));
@@ -91,6 +95,7 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
   const save = (next: DeployedBuilding[]) => {
     setLayoutLocal(next);
     base.setLayout(chapter.id, next);
+    onLayoutEdited?.(chapter.id);
   };
 
   const used = useMemo(() => {
@@ -126,7 +131,7 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
     });
 
   const enemyAt = (x: number, y: number) =>
-    map.enemyBase.find(e => {
+    (enemyBase ?? map.enemyBase).find(e => {
       const s = BUILDING_STATS[e.type];
       return x >= e.x && x < e.x + s.width && y >= e.y && y < e.y + s.height;
     });

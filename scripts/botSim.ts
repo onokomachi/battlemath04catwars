@@ -374,3 +374,39 @@ export function playExpedition(week: number, level: number, seed: number, opts: 
     peakEntities: peak, problems: bot.problems, corrects: bot.corrects, checksum,
   };
 }
+
+// ── なかまの 基地を 攻める（CW-6b・2026-11-17）──────────────────────────────
+// 画面（CatWars.tsx → BattleScene）と同じ組み立て：friendSetup（敵の基地＝なかまの配置を反転・難易度＝手持ちに合わせる）。
+import { friendSetup, type FriendTarget } from '../catwars/friend/friendAttack';
+
+/** なかまの 基地を 1試合（同じ target・level・seed なら必ず同じ結果） */
+export function playFriend(target: FriendTarget, level: number, seed: number, opts: ExpeditionPlayOptions = {}): PlayResult & { checksum: string } {
+  const su = friendSetup(target, level);
+  const kit = opts.loadout ?? loadoutForLevel(level, chapterNoForLevel(level), 'normal');
+  const cfg = buildSimConfig({
+    mode: 'PVE', seed, chapter: su.chapter, difficulty: su.difficulty, battleMap: su.map,
+    p1: { levels: kit.levels, buffs: kit.buffs, formation: kit.formation, skills: kit.skills },
+  });
+  const runner = new SimRunner(cfg, {
+    defenderBuildings: su.enemyBase,
+    playerBuildings: kit.buildings,
+    spellCharges: { P1: { HEAL: 2, RAGE: 2 }, P2: { HEAL: 0, RAGE: 0 } },
+  });
+  const special = su.difficulty.unitPool.some(k => k === 'flyer' || k === 'guard' || k === 'medic' || k === 'kamikaze');
+  const bot = new BotPlayer(runner, opts.skill ?? NORMAL_SKILL, seed ^ 0x5bf03635, special, null);
+  const maxTicks = (opts.maxSeconds ?? 300) * TICKS_PER_SEC;
+  let peak = 0;
+  for (let i = 0; i < maxTicks; i++) {
+    bot.think();
+    runner.advance(TICK_MS, bot);
+    if (i % 20 === 0 && runner.state.entities.length > peak) peak = runner.state.entities.length;
+    if (runner.state.result) break;
+  }
+  const s = runner.state;
+  const checksum = `${s.tick}|${s.result}|${s.ai.spawnCount}|${s.entities.length}|${s.rngState}|${Math.round(s.players.P1.energy)}|`
+    + s.entities.map(x => `${x.id}:${Math.round(x.hp)}:${x.x.toFixed(2)},${x.y.toFixed(2)}`).join(';');
+  return {
+    win: s.result === 'P1', seconds: runner.tick / TICKS_PER_SEC, enemySpawned: s.ai.spawnCount,
+    peakEntities: peak, problems: bot.problems, corrects: bot.corrects, checksum,
+  };
+}
