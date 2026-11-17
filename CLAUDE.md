@@ -33,6 +33,7 @@ npm run test:expedition:balance  # 週がわりの遠征の 全部の戦場×ル
 - `catwars/collection/`・`store/useCollectionStore.ts` … 収集（図鑑・バッジ34・シール60のカプセル・称号・はた）。保存は `catwars-collection-v1` の1つ（`exportSave`/`importSave`）。画面は `components/collection/`。くわしくは 仕様 §3d、絵の表は `docs/ART_LIST.md`
 - `public/assets/stickers|badges|flags/` … シール・バッジ（絵柄と メダルの台）・基地のはた の SVG（手書き）。**きまりは `docs/ART_STYLE.md`**（線・パレット・ダイカット）。**同じ名前で上書きしない**（新しい名前で足して `image` を書きかえる）
 - `catwars/expedition/` … **週がわりの遠征**（CW-6a。週の番号だけから 戦場・敵・ルールが決まる。`docs/REBUILD_SPEC.md` §5a・`docs/PORTAL.md`）。自分の星は `store/useExpeditionStore.ts`、サーバは `portal/expeditionSync.ts`
+- `catwars/friend/` … **なかまの 基地に いく**（CW-6b。同じ学級の なかまの 基地の 配置に CPU が守る形で 攻める。相手は番号も名前も出さず「なかまの 基地 A・B・C」。`docs/REBUILD_SPEC.md` §5b・`docs/PORTAL.md`）。自分の きょうの星は `store/useFriendStore.ts`、サーバは `portal/friendSync.ts`
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
 ## 必ず守ること
@@ -56,6 +57,7 @@ npm run test:expedition:balance  # 週がわりの遠征の 全部の戦場×ル
 - **サーバに送るセーブ（`saveBundle.ts`）は めやす 6.5KB**（CW-6a で 遠征ぶん +0.5KB）。使わない記録をストアに ためない（`progress.mastery` を消した。`npm run test:portal` の [8] で大きさを見る）。
 - **週がわりの遠征のルールは 試合の前に 入力（難易度・敵の基地・ネコの性能表）を変えるだけ**（`expedition/rules.ts`）。sim の中で ルールを見ない。ルール・遠征の数を変えたら `npm run test:expedition:balance`（「とかない」0%・「ふつう」85%いじょう）。
   遠征の星は 名乗っている子の「まちがえずに 1問いじょう といた戦い」だけ サーバへ。**ほかの子の星・順位は 画面に出さない**（サーバも返さない）。週は サーバの時計（日本時間の月曜 0:00）。
+- **なかまの 基地では 子どもの 番号・名前を 出さない・送らない・読まない。攻めた記録・勝ち負けの数を サーバに 残さない・相手に 見せない**（`friend/`・`portal/friendSync.ts`。名乗っていない子は 送らず みほんの基地）。相手の 強さは 手持ちに 合わせ 上限・下限を つける（`friend/friendAttack.ts`）。数を変えたら `npm run test:friend:balance`。
 - `window.confirm()` / `alert()` を使わない（iPad で出ないことがある）。
 - 子どもの氏名は扱わない。APIキー・トークン・パスワードはファイルにも知識集にも書かない。
 

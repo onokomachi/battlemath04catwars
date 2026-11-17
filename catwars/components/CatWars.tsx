@@ -40,6 +40,10 @@ import {
 } from '../expedition/expedition';
 import { ExpeditionCard, ExpeditionScreen, ExpeditionResultNote } from './expedition/ExpeditionParts';
 import { settleExpedition } from '../utils/settleExpedition';
+import { FriendCard, FriendScreen, FriendResultNote } from './friend/FriendParts';
+import { friendSetup, type FriendTarget } from '../friend/friendAttack';
+import { noteLayoutEdited, flushShare } from '../portal/friendSync';
+import { settleFriend, friendBonusFor } from '../utils/settleFriend';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 /** 体験版で 先生が閉じた項目の ボタンの下の文（押すと kit の TrialLock） */
@@ -49,7 +53,8 @@ const fontMono = { fontFamily: 'Orbitron, monospace' };
 // 出撃導線: 範囲えらび → ステージえらび → 出撃メンバー（5枠）→ 陣地づくり（施設の買う・レベル上げも ここ）→ 戦闘
 // 陣地はステージごとに組む（ゾーンの広さが章によって変わるため）。
 // 週がわりの遠征（CW-6a）: ホームのカード → 遠征の説明（expedition）→ 範囲えらび → 出撃メンバー → 陣地づくり → 戦闘（章えらびは無い）
-type View = 'home' | 'army' | 'collection' | 'range' | 'stage' | 'expedition' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
+// なかまの 基地に いく（CW-6b）: ホームのカード → 相手をえらぶ（friend）→ 範囲えらび → 出撃メンバー → 陣地づくり → 戦闘（戦場・敵の基地は 相手に あわせて きまる）
+type View = 'home' | 'army' | 'collection' | 'range' | 'stage' | 'expedition' | 'friend' | 'formation' | 'prep' | 'battle' | 'buffs' | 'mercs';
 
 interface Props {
   /** 上の階のメニューがあるときだけ（いまは CAT-WARS だけで動くので無い） */
@@ -106,13 +111,19 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
    * 戦闘の きっぷ。出撃の関門（portal/gate.ts）を通ったときだけ できる。戦闘の画面は これが無いと出さない
    * （関門を通らずに戦闘を始める道を残さない）。戦闘が おわったら 消す。
    */
-  const [battleTicket, setBattleTicket] = useState<{ id: string; chapterId: string; tier: ChapterTier; expeditionWeek?: number } | null>(null);
+  const [battleTicket, setBattleTicket] = useState<{
+    id: string; chapterId: string; tier: ChapterTier; expeditionWeek?: number; friend?: { t: FriendTarget; day: string };
+  } | null>(null);
+  /** いまの出撃が なかまの 基地を 攻めるものか（えらんだ 相手と その日の日づけ。ふだんの章・遠征なら null） */
+  const [friendPick, setFriendPick] = useState<{ t: FriendTarget; day: string } | null>(null);
   /** いまの出撃が 週がわりの遠征か（その週の番号。ふだんの章なら null） */
   const [expeditionWeek, setExpeditionWeek] = useState<number | null>(null);
   /** いまの週の遠征（ホームに もどるたびに 決めなおす＝月曜 0:00 を またいでも 新しい週になる） */
   const expedition = useMemo(() => currentExpedition(), [view]);
   /** 遠征の戦闘の 結果画面に出す（その戦いで まちがえずに といた数） */
   const [expeditionPerfect, setExpeditionPerfect] = useState(0);
+  /** なかまの 基地の 戦闘の 結果画面に出す（その戦いで まちがえずに といた数） */
+  const [friendPerfect, setFriendPerfect] = useState(0);
   const [sortieBusy, setSortieBusy] = useState(false);
   const [sortieMsg, setSortieMsg] = useState<string | null>(null);
 
@@ -122,9 +133,10 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const playLock = playingLock(portalModes);
   useEffect(() => {
     if (!playLock) return;
-    if (!['range', 'stage', 'expedition', 'formation', 'prep', 'battle'].includes(view)) return;
+    if (!['range', 'stage', 'expedition', 'friend', 'formation', 'prep', 'battle'].includes(view)) return;
     if (view === 'battle') afterBattle();
     setBattleTicket(null);
+    setFriendPick(null);
     setSortieMsg(null);
     setHomeNotice(playLock);
     setView('home');
@@ -138,7 +150,11 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     try {
       const r = await startSortie(formation);
       if (r.ok === false) { setSortieMsg(r.message); return; }
-      if (expeditionWeek != null) {
+      if (friendPick) {
+        // なかまの 基地は 章の記録（連敗＝サポートモード）にも 遠征にも 数えない
+        setFriendPerfect(0);
+        setBattleTicket({ id: newBattleId(), chapterId, tier: 'normal', friend: friendPick });
+      } else if (expeditionWeek != null) {
         // 遠征は 章の記録（連敗＝サポートモード）に数えない
         setExpeditionPerfect(0);
         setBattleTicket({ id: newBattleId(), chapterId, tier: 'normal', expeditionWeek });
@@ -158,6 +174,17 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
    */
   const handleSettle = (win: boolean, loot: { gold: number }, stars?: 1 | 2 | 3, quiz?: { answered: number; perfect: number }) => {
     if (!battleTicket) return;
+    if (battleTicket.friend) {
+      // なかまの 基地：きょうの その枠の 自分の星（前より良いときだけ）・その日 1回目の 勝ちの 💠。サーバには 何も 送らない
+      if (!quiz) return;
+      setFriendPerfect(quiz.perfect);
+      const done = settleFriend({
+        battleId: battleTicket.id, day: battleTicket.friend.day, slot: battleTicket.friend.t.slot,
+        win, stars, perfect: quiz.perfect,
+      });
+      if (done) afterBattle();
+      return;
+    }
     if (battleTicket.expeditionWeek != null) {
       // 遠征：今週の自分の星（前より良いときだけ）・勝ちの 💠。結果画面のボタン（quiz なし）では 二重に入らない
       if (!quiz) return;
@@ -178,6 +205,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
     handleSettle(win, loot, stars);
     setBattleTicket(null);
     setExpeditionWeek(null);
+    setFriendPick(null);
     setView('home');
     // 解いた問題の記録を まとめて送る・セーブを しまう（名乗っているときだけ。中身が変わっていなければ 送らない）
     afterBattle();
@@ -203,11 +231,16 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   if (view === 'range') {
     return (
       <RangeSelect
-        onBack={() => setView(expeditionWeek != null ? 'expedition' : 'home')}
-        nextLabel={expeditionWeek != null ? 'この範囲で 遠征の 出撃メンバーへ →' : undefined}
+        onBack={() => setView(friendPick ? 'friend' : expeditionWeek != null ? 'expedition' : 'home')}
+        nextLabel={friendPick ? 'この範囲で なかまの 基地へ →' : expeditionWeek != null ? 'この範囲で 遠征の 出撃メンバーへ →' : undefined}
         onConfirm={(subs) => {
           setQuizSubtopics(subs);
-          if (expeditionWeek != null) {
+          if (friendPick) {
+            // なかまの 基地：戦場は 相手に あわせて きまっている（章えらびは とばす）。難易度は ふつう＋手持ちに合わせた 敵の強さ
+            setActiveChapterId(CAMPAIGN.find((c) => c.no === friendPick.t.chapterNo)?.id ?? CAMPAIGN[1].id);
+            setActiveTier('normal');
+            setView('formation');
+          } else if (expeditionWeek != null) {
             // 遠征：戦場は 週で決まっている（章えらびは とばす）。難易度は ふつう＋手持ちに合わせた 敵の強さ
             setActiveChapterId(expeditionForWeek(expeditionWeek).chapter.id);
             setActiveTier('normal');
@@ -240,12 +273,30 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         onBack={() => { setExpeditionWeek(null); setView('home'); }}
         onStart={() => {
           if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); setView('home'); return; }
-          setSortieMsg(null); resetBattleSession(); setExpeditionWeek(expedition.week); setView('range');
+          setSortieMsg(null); resetBattleSession(); setFriendPick(null); setExpeditionWeek(expedition.week); setView('range');
+        }} />
+    );
+  }
+
+  if (view === 'friend') {
+    return (
+      <FriendScreen avgLevel={topAvgLevel} locked={homeLock}
+        onBack={() => { setFriendPick(null); setView('home'); }}
+        onPick={(t, day) => {
+          if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); setView('home'); return; }
+          setSortieMsg(null); resetBattleSession(); setExpeditionWeek(null); setFriendPick({ t, day }); setView('range');
         }} />
     );
   }
 
   if (view === 'formation') {
+    if (friendPick) {
+      const su = friendSetup(friendPick.t, topAvgLevel);
+      return (
+        <FormationScreen chapter={su.chapter} tier="normal" difficulty={su.difficulty}
+          onBack={() => setView('range')} onProceed={() => setView('prep')} />
+      );
+    }
     if (expeditionWeek != null) {
       const e = expeditionForWeek(expeditionWeek);
       return (
@@ -261,14 +312,52 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   }
 
   if (view === 'prep') {
-    const chapter = expeditionWeek != null ? expeditionChapter(expeditionForWeek(expeditionWeek)) : CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
+    const fsu = friendPick ? friendSetup(friendPick.t, topAvgLevel) : null;
+    const chapter = fsu ? fsu.chapter : expeditionWeek != null ? expeditionChapter(expeditionForWeek(expeditionWeek)) : CHAPTER_BY_ID[activeChapterId] ?? CAMPAIGN[0];
     return (
       <BaseBuilder
         chapter={chapter}
-        onBack={() => { setSortieMsg(null); setView('formation'); }}
-        onProceed={() => { void beginBattle(chapter.id); }}
+        enemyBase={fsu ? fsu.enemyBase : undefined}
+        onLayoutEdited={noteLayoutEdited}
+        onBack={() => { setSortieMsg(null); void flushShare(); setView('formation'); }}
+        onProceed={() => { void flushShare(); void beginBattle(chapter.id); }}
         proceedBusy={sortieBusy}
         proceedSlot={<SortieStamina formation={formation} message={sortieMsg} />}
+      />
+    );
+  }
+
+  if (view === 'battle' && battleTicket && battleTicket.friend) {
+    // なかまの 基地：戦場・敵の基地は 相手の 配置に あわせて きまる。敵の強さは 手持ちに 合わせる（遠征と同じしくみ・基準 Lv1）。サポートモードは無し
+    const f = battleTicket.friend;
+    const su = friendSetup(f.t, topAvgLevel);
+    const { active } = splitActiveLayout(base.getLayout(su.chapter.id), limit);
+    const facilityMults: Partial<Record<BuildingType, number>> = {};
+    for (const t of LEVELED_COMBAT) facilityMults[t] = facilityMult(t, base.levelOf(t));
+    return (
+      <BattleScene
+        attackerState={gameState}
+        defenderBuildings={su.enemyBase}
+        playerDeployments={active}
+        battleMap={su.map}
+        loadout={computeBattleLoadout(owned, active, permanentUnlocks)}
+        formation={formation}
+        facilityMults={facilityMults}
+        creditBonus={0}
+        chapter={su.chapter}
+        difficulty={su.difficulty}
+        assistLevel={0}
+        tier="normal"
+        quizSubtopics={quizSubtopics}
+        expedition={{
+          enemyLevel: su.enemyLevel, ruleIcon: '🏠', ruleName: 'なかまの 基地',
+          label: 'なかまの 基地', kicker: 'FRIEND BASE', winLabel: 'なかまの 基地を せめおとした！', hideBoss: true,
+          loseNote: 'まけても ネコたちの けいけんちは 手に入るよ。なかまの 基地は なんかいでも ちょうせん できる。あいてには 何も 伝わらないよ！',
+          loot: (win, q) => friendBonusFor(f.day, win, q.perfect),
+          resultExtra: <FriendResultNote day={f.day} slot={f.t.slot} label={f.t.label} perfect={friendPerfect} />,
+        }}
+        onSettle={handleSettle}
+        onEndBattle={handleEndBattle}
       />
     );
   }
@@ -426,7 +515,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
           onClick={() => {
             // 閉じていても 押せる形のまま。押すと わけを出す（SANMON と同じ）
             if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); return; }
-            setSortieMsg(null); resetBattleSession(); setExpeditionWeek(null); setView('range');
+            setSortieMsg(null); resetBattleSession(); setExpeditionWeek(null); setFriendPick(null); setView('range');
           }} big />
         <HubButton icon="🐱" label="ネコ部隊" sub={trialOpen('army') ? 'レベル・進化・スキル' : TRIAL_LOCKED_SUB} color="#a3e635"
           locked={!trialOpen('army')}
@@ -443,6 +532,11 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
       {trialOpen('sortie') && (
         <ExpeditionCard expedition={expedition} locked={homeLock}
           onOpen={() => { setHomeNotice(null); setView('expedition'); }} />
+      )}
+
+      {/* なかまの 基地に いく（CW-6b）。鍵・体験版の項目は 出撃と同じ */}
+      {trialOpen('sortie') && (
+        <FriendCard locked={homeLock} onOpen={() => { setHomeNotice(null); setView('friend'); }} />
       )}
 
       {/* 基地のようす（施設の買う・レベル上げ・配置は 出撃の中の「陣地づくり」で） */}

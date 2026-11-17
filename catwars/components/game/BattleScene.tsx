@@ -253,7 +253,16 @@ interface Props {
    * 週がわりの遠征（CW-6a）：上の帯・はじめの説明・結果画面を 遠征の文にする。章の星・ボスの印には 数えない（収集の expedition）。
    * enemyLevel＝「てきの つよさ Lv.n」。resultExtra＝結果画面に足すもの（今週の自分の星・学級の合計）。
    */
-  expedition?: { enemyLevel: number; ruleIcon: string; ruleName: string; resultExtra?: React.ReactNode };
+  expedition?: {
+    enemyLevel: number; ruleIcon: string; ruleName: string; resultExtra?: React.ReactNode;
+    /**
+     * なかまの 基地を 攻める（CW-6b）：同じ「特別な戦い」の 枠を 文だけ かえて つかう。
+     * label＝上の帯の 名前（既定「遠征」）・kicker＝はじめの説明の 小さな字・winLabel＝勝ったときの 小さな字・loseNote＝負けたときの 1行・
+     * hideBoss＝章のボスの 絵を 出さない・loot＝勝ちの 💠（章の ごほうびの かわり。その日 1回目だけ など）
+     */
+    label?: string; kicker?: string; winLabel?: string; loseNote?: string; hideBoss?: boolean;
+    loot?: (win: boolean, quiz: { answered: number; perfect: number }) => number;
+  };
   /** 試合の前に SimConfig を書きかえる（遠征のルール。sim の外で1回だけ。決定的な関数を わたす） */
   tuneConfig?: (cfg: SimConfig) => SimConfig;
   /** 結果画面のボタン・退却（画面を閉じる）。stars＝勝ったときの星（1〜3。まちがえずに解けた割合で決まる） */
@@ -562,6 +571,7 @@ export const BattleScene: React.FC<Props> = ({
   /** 勝ったときの 💠（章・段・きょうの「💠 2ばい」・発電所） */
   const lootFor = (win: boolean): number => {
     if (!win) return 0;
+    if (expedition?.loot) return Math.max(0, Math.round(expedition.loot(win, quizStatsRef.current)));
     const lootMult = hasBuff('DOUBLE_LOOT') ? 1 + buffVal('DOUBLE_LOOT') / 100 : 1;
     return Math.round(chapter.rewardCredits * TIER_INFO[tier].rewardMult * lootMult * (1 + creditBonus));
   };
@@ -840,7 +850,7 @@ export const BattleScene: React.FC<Props> = ({
        <div className="h-16 bg-black/75 flex justify-between items-center px-4 text-white z-50 relative border-b border-white/5">
           <div className="font-bold text-sm tracking-tight flex items-center gap-2 min-w-0">
             <Swords className="text-red-500 animate-pulse flex-shrink-0" size={18} />
-            <span className="text-red-400 font-extrabold text-base whitespace-nowrap">{expedition ? `${expedition.ruleIcon} 遠征` : `第${chapter.no}章`}</span>
+            <span className="text-red-400 font-extrabold text-base whitespace-nowrap">{expedition ? `${expedition.ruleIcon} ${expedition.label ?? '遠征'}` : `第${chapter.no}章`}</span>
             <span className="text-white/60 text-xs truncate hidden sm:inline" style={{ fontFamily: '"M PLUS Rounded 1c", sans-serif' }}>
               {chapter.title}
             </span>
@@ -1561,11 +1571,11 @@ export const BattleScene: React.FC<Props> = ({
                <div className="text-center p-6 bg-slate-900/70 border border-yellow-500/30 rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto backdrop-blur-md shadow-2xl">
                  <Trophy className="w-16 h-16 text-yellow-400 mx-auto mb-3 animate-bounce" />
                  <div className="text-[10px] tracking-[0.25em] text-yellow-400/70 mb-1" style={{ fontFamily: 'Orbitron, monospace' }}>
-                   {expedition ? '遠征 せいこう！' : `だい${chapter.no}しょう クリア！`}
+                   {expedition ? (expedition.winLabel ?? '遠征 せいこう！') : `だい${chapter.no}しょう クリア！`}
                  </div>
                  <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
                  <div className="flex items-center gap-2 mb-4 text-left">
-                   {!isPvp && bossSprite(chapter.id) && (
+                   {!isPvp && !expedition?.hideBoss && bossSprite(chapter.id) && (
                      <img src={bossSprite(chapter.id)} alt={chapter.enemyName} draggable={false} data-testid="result-boss"
                        style={{ width: 52, height: 52, objectFit: 'contain', flexShrink: 0, opacity: 0.85 }} />
                    )}
@@ -1577,7 +1587,8 @@ export const BattleScene: React.FC<Props> = ({
                  <NewSkillNotice />
                  <LevelUpSummary events={levelUps} />
                  <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, winStars)}>
-                   {settled ? `基地へ もどる（💠${loot.gold} ゲット！${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}）` : `ごほうびを もらって かえる（💠${loot.gold}）${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}`}
+                   {loot.gold <= 0 ? '基地へ もどる'
+                     : settled ? `基地へ もどる（💠${loot.gold} ゲット！${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}）` : `ごほうびを もらって かえる（💠${loot.gold}）${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}`}
                  </Button>
                </div>
             ) : (
@@ -1591,7 +1602,7 @@ export const BattleScene: React.FC<Props> = ({
                  {/* 連敗時は次回サポートが入ることを先に伝える（隠れた調整はしない） */}
                  <div className="text-[11px] text-[#a3e635] mb-3 leading-relaxed">
                    {expedition
-                     ? 'まけても ネコたちの けいけんちは 手に入るよ。遠征は 今週 なんかいでも ちょうせん できる。いちばん よい 星が のこるよ！'
+                     ? (expedition.loseNote ?? 'まけても ネコたちの けいけんちは 手に入るよ。遠征は 今週 なんかいでも ちょうせん できる。いちばん よい 星が のこるよ！')
                      : 'まけても ネコたちの けいけんちは 手に入るよ。何回か まけると「サポートモード」で やさしく なるので、あきらめずに もう一回！'}
                  </div>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
@@ -1790,16 +1801,16 @@ export const BattleScene: React.FC<Props> = ({
                fontFamily: '"M PLUS Rounded 1c", sans-serif',
              }}>
              <div className="text-[10px] tracking-[0.3em] text-[#38bdf8]/80" style={{ fontFamily: 'Orbitron, monospace' }}>
-               {expedition ? 'WEEKLY EXPEDITION' : `CHAPTER ${chapter.no}`}
+               {expedition ? (expedition.kicker ?? 'WEEKLY EXPEDITION') : `CHAPTER ${chapter.no}`}
              </div>
              <h2 className="text-white font-black text-xl mt-1 mb-3 leading-tight">{chapter.title}</h2>
 
              <div className="flex items-start gap-3 p-3 rounded-xl mb-3"
                style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.28)' }}>
-               {bossSprite(chapter.id)
+               {bossSprite(chapter.id) && !expedition?.hideBoss
                  ? <img src={bossSprite(chapter.id)} alt="" draggable={false} data-testid="briefing-boss"
                      style={{ width: 64, height: 64, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(239,68,68,0.6))' }} />
-                 : <span className="text-2xl leading-none">😼</span>}
+                 : <span className="text-4xl leading-none">{expedition?.hideBoss ? expedition.ruleIcon : '😼'}</span>}
                <div className="min-w-0">
                  <div className="text-[#f87171] font-bold text-sm">{chapter.enemyName}</div>
                  <div className="text-white/45 text-[10px] mb-1">{chapter.enemyTitle}</div>

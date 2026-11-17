@@ -20,6 +20,7 @@ import { useReviewStore } from '../store/useReviewStore';
 import { useSkillStore } from '../store/useSkillStore';
 import { useCollectionStore } from '../store/useCollectionStore';
 import { useExpeditionStore } from '../store/useExpeditionStore';
+import { useFriendStore } from '../store/useFriendStore';
 
 export const SAVE_BUNDLE_VERSION = 1;
 /**
@@ -45,6 +46,7 @@ export const STORES: Record<SaveStoreId, PersistedStore> = {
   skillsSeen: useSkillStore as unknown as PersistedStore,
   collection: useCollectionStore as unknown as PersistedStore,
   expedition: useExpeditionStore as unknown as PersistedStore,
+  friend: useFriendStore as unknown as PersistedStore,
 };
 
 export interface SaveBundle {

@@ -17,8 +17,8 @@ export type CatwarsTrialKey = (typeof CATWARS_TRIAL_KEYS)[keyof typeof CATWARS_T
 /** 画面（CatWars.tsx の view）→ 項目のキー。ホームなど 項目に入らない画面は null */
 export function catwarsTrialKeyOf(view: string): CatwarsTrialKey | null {
   switch (view) {
-    // 週がわりの遠征（CW-6a）も 出撃と同じ あつかい
-    case 'range': case 'stage': case 'expedition': case 'formation': case 'prep': case 'battle': return 'sortie';
+    // 週がわりの遠征（CW-6a）・なかまの基地に いく（CW-6b）も 出撃と同じ あつかい
+    case 'range': case 'stage': case 'expedition': case 'friend': case 'formation': case 'prep': case 'battle': return 'sortie';
     case 'army': case 'buffs': case 'mercs': return 'army';
     case 'collection': return 'collection';
     default: return null;

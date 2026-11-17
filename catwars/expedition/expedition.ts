@@ -119,7 +119,11 @@ export function expeditionDifficulty(e: Expedition, avgLevel: number): ChapterDi
 export const BEHIND_SPAWN_CUT = 0.3;
 export const BEHIND_DEFENSE_CUT = 0.25;
 export function behindRatio(e: Expedition, avgLevel: number): number {
-  const base = chapterBaseLevel(e.chapter, 'normal');
+  return behindRatioOf(e.chapter, avgLevel);
+}
+/** 章だけから（なかまの基地を攻める CW-6b も 同じ式を使う） */
+export function behindRatioOf(chapter: CampaignChapter, avgLevel: number): number {
+  const base = chapterBaseLevel(chapter, 'normal');
   if (base <= EXPEDITION_BASE_LEVEL) return 0;
   return Math.max(0, Math.min(1, (base - avgLevel) / (base - EXPEDITION_BASE_LEVEL)));
 }

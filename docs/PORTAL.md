@@ -119,13 +119,32 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 - SQL を流す前：サーバに ことわられる → 遊びは止めない・学級の合計は「よみこみ中」のまま・星は 端末に のこる（同じ週のうちに SQL を流せば 送られる）。
 - 開発のときだけ：`window.__cwExpeditionMock({ total, size, me, lastAchieved, trial })` で 学級の合計を差しかえる（本番のビルドには入らない）。
 
+## なかまの 基地に いく（CW-6b・2026-11-17）
+仕様は `docs/REBUILD_SPEC.md` §5b。サーバの SQL は PRISM の `supabase/sql/2026-11-17-catwars-base.sql`（**まだ流していない**。先に 6a の `2026-11-17-catwars-expedition.sql`。試験用 `…base.dryrun.sql`・戻し用 `rollback/2026-11-17-before-catwars-base.sql`）。
+- 置き場所：`catwars/friend/`（`baseShape.ts` 基地の形・見なおし・反転・下限／`samples.ts` みほん6つ／`friendAttack.ts` その日の3つ・戦場・敵の強さの合わせかた）、`store/useFriendStore.ts`（自分の きょうの星・💠の日。鍵 `SAVE_KEYS.friend`＝`catwars-friend-v1`・サーバのセーブに入る・約60バイト）、
+  `portal/friendSync.ts`（サーバ）、`utils/settleFriend.ts`（結果を入れる）、`components/friend/FriendParts.tsx`（ホームのカード・相手をえらぶ画面・結果の欄）。
+- 鍵・関門・スタミナ・体験版は **出撃と同じ**（別の鍵を足さない。`catwarsTrialKeyOf('friend')` は `sortie`。遊んでいる とちゅうで閉じたら ホームにもどす の対象にも入れた）。
+- 自分の基地を しまう：`catwars_base_put(p_student_id, p_data)`。**名乗っているときだけ**（おためし・体験版・デモ・つないでいないビルドは 送らない）。`BaseBuilder` の `onLayoutEdited`（配置を かえたとき）から `noteLayoutEdited`。
+  送るのは **かえたときだけ**：20秒あと（かえつづけているあいだは のばす）・前に送ってから 30秒いじょう・中身が 前と同じなら 送らない・陣地づくりを出る／出撃のとき・タブを かくしたとき。コアのほかに 1つも 置いていない配置は 見せない。
+  **名乗ったとき・アプリを開いたときには 送らない**（同じ端末で 番号を かえたとき、前の子の配置を 新しい子の行に 書かないため。送るのは この端末の 陣地づくりで 配置を かえたときだけ）。送れなかったら のこして 次の機会（遊びは止めない）。
+  形（`FriendBaseWire`）：`{ v:1, b:[["T",x,y],["C",x,y],…], lv:[コア,砲台,電撃,壁] }`（T コア・C 砲台・H 電撃トラップ・W 壁・A キャンプ。x 0〜9・y 0〜15）。いちばん大きい基地で 約250バイト・サーバの上限 2KB。
+- なかまの基地を 読む：`catwars_base_offers(p_student_id)`＝**同じ学級の なかまの 配置を 3つまで**＋日づけ（サーバの時計・日本時間）。**student_id・番号・名前・更新時刻は 返さない**。端末は ぜんぶ `sanitizeFriendBase` で 見なおす（こわれたものは とばして 次を見る）。
+  ホームの「なかまの 基地に いく」を 開いたときに 1回 読む（数百バイト）。つながらない・SQL を流す前：みほんで あそべる（「よみこめなかったよ」と出す）。
+- **攻めたことは サーバに 残さない**（読むだけ。「攻めた」を 伝える関数・表は 無い。試験 [5]・[9] が 見ている）。星は 自分の端末（とセーブ）の きょうの分だけ。
+- 星・💠：`settleFriend`（勝ち負けが 決まった瞬間に1回。battleId で二重を止める）。**その戦いで まちがえずに 1問いじょう といたときだけ**。きょうの 枠（A・B・C）ごとの いちばん良い星・その日 1回目の 勝ちの 💠100。日づけは 名乗っている子は サーバの日づけ（端末の時計を かえても 日が かわらない）。
+  結果画面の 💠 は `BattleScene` の `expedition.loot`（その日 もらえるか）。もらえないときは「基地へ もどる」だけ（「💠0 ゲット」とは 出さない）。
+- `BattleScene` の `expedition` の枠を 文だけ かえて 使う（`label`・`kicker`・`winLabel`・`loseNote`・`hideBoss`・`loot`）。`BaseBuilder` は `enemyBase`（相手の配置をうっすら出す）を 受けとる。
+- おためし・体験版・つないでいないビルド：みほんの 基地 3つ（日ごとに入れかわる）。デモ：みほん（送らない・読まない）。
+- 開発のときだけ：`window.__cwFriendMock({ count, fail, student })` で サーバを差しかえる（送ったものは `window.__cwFriendCalls`。本番のビルドには入らない）。
+
 ## まだ していないこと
 - 週がわりの遠征のサーバの SQL（PRISM `supabase/sql/2026-11-17-catwars-expedition*.sql`。試験用 → 本番 の順）。
+- なかまの 基地に いく のサーバの SQL（PRISM `supabase/sql/2026-11-17-catwars-base*.sql`。**遠征の SQL の あと**。試験用 → 本番 の順）。
 - （2026-11-16 に済んだ）サーバの SQL（`docs/CW5B_SERVER_PLAN.md` §5）。先生が SANMON タブで CAT-WARS を開ける → 名乗った子が出撃できる・たまっていた記録が送られる。
 - Vercel の本番の環境変数（上の「本番の Vercel に入れる手順」）。
 - 1問の最初のまちがいの型：いまの `apps/` の `onMiss` は 何も わたさないので 入れていない。
 
 ## saveBundle の大きさ（`npm run test:portal` の [8]）
-4週間ぶん（まちがえずに 約1500問・59項目・全章3段・遠征4週）で **6,279 バイト**（めやす 6.5KB 以下。CW-6a で 遠征 約0.2KB を足して 6KB → 6.5KB。サーバは 64KB まで）。CW-5b のときは 6,061 バイト：study 1.6KB・player 1.4KB（`troops` 1KB）・campaign 1.2KB・collection 0.7KB・army 0.5KB・progress 0.35KB。
+4週間ぶん（まちがえずに 約1500問・59項目・全章3段・遠征4週・なかまの基地の きょうの星）で **6,351 バイト**（めやす 6.5KB 以下。CW-6a で 遠征 約0.2KB を足して 6KB → 6.5KB。CW-6b の なかまの基地の記録は 約60バイト。サーバは 64KB まで）。CW-5b のときは 6,061 バイト：study 1.6KB・player 1.4KB（`troops` 1KB）・campaign 1.2KB・collection 0.7KB・army 0.5KB・progress 0.35KB。
 CW-5a のときは 15.3KB（`progress.mastery` が 9.2KB。どこからも読まれていなかったので CW-5b で消した）。
 `study`（項目ごとの まちがえずに解いた回数）は 項目の数だけ ふえる（全314項目で 約8KB の見こみ）。ぜんぶ あそびきっても 15KB くらい。
