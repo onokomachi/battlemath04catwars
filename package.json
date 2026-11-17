@@ -13,9 +13,11 @@
     "test:pack": "tsx scripts/verifyPack.ts",
     "test:progress": "tsx scripts/progressionSim.ts",
     "lint": "tsc --noEmit",
-    "check": "npm run lint && npm run test:pack && npm run test:sim && npm run test:collection && npm run test:portal && npm run build",
+    "check": "npm run lint && npm run test:pack && npm run test:sim && npm run test:collection && npm run test:portal && npm run test:expedition && npm run build",
     "test:collection": "tsx scripts/collectionTest.ts",
-    "test:portal": "tsx scripts/portalTest.ts && tsx scripts/portalTrialTest.ts"
+    "test:portal": "tsx scripts/portalTest.ts && tsx scripts/portalTrialTest.ts",
+    "test:expedition": "tsx scripts/expeditionTest.ts",
+    "test:expedition:balance": "BALANCE=1 tsx scripts/expeditionTest.ts"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

@@ -5,7 +5,7 @@
  * - まとめるのは portal/saveKeys.ts の ストア ぜんぶ（鍵と同じ名前。ストアを足したら STORES にも足す＝型で止まる）。
  * - 中身は 各ストアの persist が localStorage に書くものと同じ（partialize のあと・関数はぬく）。収集は exportSave／importSave。
  * - もどすときは 各ストアの merge（こわれた値を すてる）を通す。収集は sanitizeSave。
- * 大きさの めやすは 6KB 以下（4週間ぶん。サーバは 64KB まで）。CW-5b で progress.mastery（使っていない）を消して 15.3KB → 約6KB。
+ * 大きさの めやすは 6.5KB 以下（4週間ぶん。サーバは 64KB まで）。CW-5b で progress.mastery（使っていない）を消して 15.3KB → 約6KB。
  * 送れていない記録（SAVE_KEYS.outbox）は入れない（STORE_IDS だけ）。
  */
 import type { StoreApi } from 'zustand';
@@ -19,10 +19,14 @@ import { useStudyStore } from '../store/useStudyStore';
 import { useReviewStore } from '../store/useReviewStore';
 import { useSkillStore } from '../store/useSkillStore';
 import { useCollectionStore } from '../store/useCollectionStore';
+import { useExpeditionStore } from '../store/useExpeditionStore';
 
 export const SAVE_BUNDLE_VERSION = 1;
-/** めやす（これを こえたら 何が大きいかを見る） */
-export const SAVE_BUNDLE_TARGET_BYTES = 6 * 1024;
+/**
+ * めやす（これを こえたら 何が大きいかを見る）。CW-5b で 6KB。CW-6a で 週がわりの遠征（4週で 約0.2KB）を足して 6.5KB
+ *（遠征は 直近8週だけ のこすので これより ふえない）。
+ */
+export const SAVE_BUNDLE_TARGET_BYTES = 6.5 * 1024;
 
 interface PersistApi {
   getOptions: () => { name?: string; partialize?: (s: unknown) => unknown; merge?: (p: unknown, c: unknown) => unknown };
@@ -40,6 +44,7 @@ export const STORES: Record<SaveStoreId, PersistedStore> = {
   review: useReviewStore as unknown as PersistedStore,
   skillsSeen: useSkillStore as unknown as PersistedStore,
   collection: useCollectionStore as unknown as PersistedStore,
+  expedition: useExpeditionStore as unknown as PersistedStore,
 };
 
 export interface SaveBundle {

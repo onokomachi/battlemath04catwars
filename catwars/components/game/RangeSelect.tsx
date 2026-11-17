@@ -9,6 +9,8 @@ interface Props {
   onBack: () => void;
   /** えらんだ単元の鍵 */
   onConfirm: (unitKeys: string[]) => void;
+  /** つぎへ の ボタンの文（週がわりの遠征では 出撃メンバーへ） */
+  nextLabel?: string;
 }
 
 /**
@@ -16,7 +18,7 @@ interface Props {
  * ここで選んだ単元の問題が、戦闘中にランダム出題され、正解すると ⚡エナジー を稼げる。
  * 既定は解放ずみ全単元。単元(ワールド)単位でオン/オフを切り替える簡潔なUI。
  */
-export const RangeSelect: React.FC<Props> = ({ lockedUnits, onBack, onConfirm }) => {
+export const RangeSelect: React.FC<Props> = ({ lockedUnits, onBack, onConfirm, nextLabel }) => {
   // 単元アプリのある単元（SOL の単元アプリと同じ問題を出す）。閉じている単元は出さない
   const openCategories = useMemo(
     () => PACK_UNITS.filter(c => !lockedUnits?.has(c.key)),
@@ -84,7 +86,7 @@ export const RangeSelect: React.FC<Props> = ({ lockedUnits, onBack, onConfirm })
             background: 'rgba(239,68,68,0.18)', border: '2px solid #ef4444', color: '#f87171',
             boxShadow: '0 0 14px rgba(239,68,68,0.5)',
           }}>
-          この範囲で ステージえらびへ →
+          {nextLabel ?? 'この範囲で ステージえらびへ →'}
         </button>
       </div>
     </div>

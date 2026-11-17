@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CHARACTERS, CHARACTER_BY_ID, getCharacterSprite, stageForLevel } from '../../data/characters';
 import {
-  CampaignChapter, ChapterTier, ENEMY_TRAIT_NOTE, ENEMY_UNIT_STATS, TIER_INFO, tierDifficulty, type EnemyUnitKind,
+  CampaignChapter, ChapterTier, ChapterDifficulty, ENEMY_TRAIT_NOTE, ENEMY_UNIT_STATS, TIER_INFO, tierDifficulty, type EnemyUnitKind,
 } from '../../data/campaign';
 import { ENEMY_UNIT_SPRITE } from '../../data/enemySprites';
 import { useArmyStore, effectiveFormation, FORMATION_SIZE } from '../../store/useArmyStore';
@@ -23,6 +23,8 @@ interface Props {
   tier: ChapterTier;
   onBack: () => void;
   onProceed: () => void;
+  /** 敵の顔ぶれを 差しかえる（週がわりの遠征。無ければ その章・段の きまり） */
+  difficulty?: ChapterDifficulty;
 }
 
 /** 空をとぶ敵に とどくか（射程2以上・飛行） */
@@ -42,7 +44,7 @@ export function formationWarnings(formation: string[], pool: EnemyUnitKind[]): s
  * 出撃メンバーをえらぶ（5枠。ステージえらび → ここ → 陣地づくり → 戦闘）。
  * その章・その段に出てくる敵と たおし方を 同じ画面に出し、「この敵には この系統」が見て分かるようにする。
  */
-export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProceed }) => {
+export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProceed, difficulty }) => {
   const army = useArmyStore(s => s.army);
   const saved = useArmyStore(s => s.formation);
   const setFormation = useArmyStore(s => s.setFormation);
@@ -57,7 +59,7 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
 
   const unlocked = useMemo(() => unlockedFamilies(owned, permanentUnlocks), [owned, permanentUnlocks]);
   const formation = useMemo(() => effectiveFormation(saved, unlocked), [saved, unlocked]);
-  const td = tierDifficulty(chapter, tier);
+  const td = difficulty ?? tierDifficulty(chapter, tier);
   const warnings = formationWarnings(formation, td.unitPool);
   const tierInfo = TIER_INFO[tier];
 

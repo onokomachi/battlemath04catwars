@@ -105,12 +105,27 @@ CAT-WARS は 学級ポータル（Supabase `gakkyu-portal`）につないだ。
 - 名乗っているとき：サーバの記録（kit の `sanmonShards`＝本番テスト8割の日・実力の階段の段。SANMON と同じ かけら）。`usePortal.ts` が `setServerShards` で わたす。
 - おためし・つないでいないビルド・まだ読めていない：端末の数え方（まちがえずに3回 解けた項目の割合）。
 
+## 週がわりの遠征（CW-6a・2026-11-17）
+仕様は `docs/REBUILD_SPEC.md` §5a。サーバの SQL は PRISM の `supabase/sql/2026-11-17-catwars-expedition.sql`（**まだ流していない**。試験用 `…dryrun.sql`・戻し用 `rollback/2026-11-17-before-catwars-expedition.sql`）。
+- 置き場所：`catwars/expedition/`（`week.ts` 週の きまり・`rules.ts` ルール・`expedition.ts` 週 → 遠征・難易度）、`store/useExpeditionStore.ts`（自分の星。鍵 `SAVE_KEYS.expedition`＝`catwars-expedition-v1`・サーバのセーブに入る）、
+  `portal/expeditionSync.ts`（サーバ）、`utils/settleExpedition.ts`（結果を入れる）、`components/expedition/ExpeditionParts.tsx`（ホームのカード・説明・結果画面の欄）。
+- 鍵・関門・スタミナ・体験版は **出撃と同じ**（別の鍵を足さない。`catwarsTrialKeyOf('expedition')` は `sortie`。遊んでいる とちゅうで閉じたら ホームにもどす の対象にも入れた）。
+- 星を送る：`catwars_expedition_put(p_student_id, p_stars)`。**名乗っているときだけ**・**その戦いで 1問いじょう まちがえずに といたときだけ**（負けて 星0 でも「ちょうせん」として送る）・前より良い星のときだけ（端末でも くらべる）。
+  週は **サーバの時計**（日本時間の月曜 0:00）。サーバは「鍵 catwars が開いている」「直近90分に CAT-WARS の出撃（`sanmon_spend` の reason `catwars@…`）がある」子だけ うけつける。
+  送れなかった星は `pending` に1つ のこし、ホームの遠征のカードを出したとき・次の戦いのあとに 送りなおす（**週が かわったら すてる**＝前の週には書けない）。kit は使わず（版を上げずに すむように）kit の rpc と同じ形の fetch。
+- 学級の合計：`catwars_expedition_class(p_student_id)`＝自分の学級の 今週と先週の「星の合計・目標（人数×1.5）・達成・自分の星」と 人数だけ。**ほかの子の星・順位は サーバが返さない**。ホームのカード・説明を開いたときに読む（1回 数百バイト）。
+- ごほうび：目標を こえた週は、その週に ちょうせんした子（自分の星が サーバにある子）に シールコイン 🪙4（`EXPEDITION_GOAL_COINS`）。学級の合計を読んだときに 端末で入れる。もらった週は `claimed` に のこす（セーブに入るので 別の端末でも 2回目は無い）。
+- おためし・体験版・つないでいないビルド：遠征は遊べる・自分の星は 端末に のこる・送らない・学級の合計は出さない（「おためしでは 学級の ほしには 入らないよ」）。デモ：学級の合計は 見本（30人・★38〜）、送らない・ごほうび無し。
+- SQL を流す前：サーバに ことわられる → 遊びは止めない・学級の合計は「よみこみ中」のまま・星は 端末に のこる（同じ週のうちに SQL を流せば 送られる）。
+- 開発のときだけ：`window.__cwExpeditionMock({ total, size, me, lastAchieved, trial })` で 学級の合計を差しかえる（本番のビルドには入らない）。
+
 ## まだ していないこと
+- 週がわりの遠征のサーバの SQL（PRISM `supabase/sql/2026-11-17-catwars-expedition*.sql`。試験用 → 本番 の順）。
 - （2026-11-16 に済んだ）サーバの SQL（`docs/CW5B_SERVER_PLAN.md` §5）。先生が SANMON タブで CAT-WARS を開ける → 名乗った子が出撃できる・たまっていた記録が送られる。
 - Vercel の本番の環境変数（上の「本番の Vercel に入れる手順」）。
 - 1問の最初のまちがいの型：いまの `apps/` の `onMiss` は 何も わたさないので 入れていない。
 
 ## saveBundle の大きさ（`npm run test:portal` の [8]）
-4週間ぶん（まちがえずに 約1500問・59項目・全章3段）で **6,061 バイト**（めやす 6KB 以下。サーバは 64KB まで）：study 1.6KB・player 1.4KB（`troops` 1KB）・campaign 1.2KB・collection 0.7KB・army 0.5KB・progress 0.35KB。
+4週間ぶん（まちがえずに 約1500問・59項目・全章3段・遠征4週）で **6,279 バイト**（めやす 6.5KB 以下。CW-6a で 遠征 約0.2KB を足して 6KB → 6.5KB。サーバは 64KB まで）。CW-5b のときは 6,061 バイト：study 1.6KB・player 1.4KB（`troops` 1KB）・campaign 1.2KB・collection 0.7KB・army 0.5KB・progress 0.35KB。
 CW-5a のときは 15.3KB（`progress.mastery` が 9.2KB。どこからも読まれていなかったので CW-5b で消した）。
 `study`（項目ごとの まちがえずに解いた回数）は 項目の数だけ ふえる（全314項目で 約8KB の見こみ）。ぜんぶ あそびきっても 15KB くらい。

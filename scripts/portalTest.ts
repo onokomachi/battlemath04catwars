@@ -46,6 +46,7 @@ import { useProgressStore } from '../catwars/store/useProgressStore';
 import { PACK_UNITS, unitSkillIds } from '../catwars/learn/gradePack';
 import { useCampaignStore } from '../catwars/store/useCampaignStore';
 import { useCollectionStore } from '../catwars/store/useCollectionStore';
+import { useExpeditionStore } from '../catwars/store/useExpeditionStore';
 import { useBaseStore } from '../catwars/store/useBaseStore';
 import { useStudyStore } from '../catwars/store/useStudyStore';
 import { CAMPAIGN, assistLevelForLosses } from '../catwars/data/campaign';
@@ -255,6 +256,12 @@ console.log('[8] saveBundle');
     useCampaignStore.getState().recordResult(ch.id, true, 3, tier);
   }
   for (let i = 0; i < 30; i++) useCollectionStore.getState().pull(() => (i * 0.37) % 1);
+  // 週がわりの遠征（CW-6a）：4週ぶんの いちばん良い星・ごほうびを もらった週
+  for (let w = 0; w < 4; w++) {
+    const ws = `2026-11-${String(2 + w * 7).padStart(2, '0')}`;
+    useExpeditionStore.getState().settle({ battleId: `exp-${w}`, weekStart: ws, stars: 3, perfect: 9, send: false });
+    useExpeditionStore.getState().claim(ws);
+  }
   for (const t of [BuildingType.CANNON, BuildingType.WALL, BuildingType.GOLD_MINE]) {
     try { (useBaseStore.getState() as unknown as { buy?: (t: BuildingType) => void }).buy?.(t); } catch { /* noop */ }
   }
@@ -480,7 +487,7 @@ console.log('[14] セーブを サーバに');
   check(await A.pullSaveIfNewer() === false, '知らない版は 取りこまない');
   remote = null;
   check(await B.pullSaveIfNewer() === false, 'サーバに まだ無い（はじめて）なら 何もしない');
-  check(bundleBytes > 0 && bundleBytes <= 6 * 1024, `大きさ：4週間で ${bundleBytes} バイト（めやす 6KB 以下・サーバは 64KB まで）`);
+  check(bundleBytes > 0 && bundleBytes <= SAVE_BUNDLE_TARGET_BYTES, `大きさ：4週間で ${bundleBytes} バイト（めやす ${SAVE_BUNDLE_TARGET_BYTES} バイト以下＝遠征こみ 6.5KB・サーバは 64KB まで）`);
 
   // 送りなおしを へらす（2026-11-16）：最後に送った／取りこんだ中身の目印を 端末に のこす
   const kvC = new MemStorage();
