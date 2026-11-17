@@ -21,6 +21,7 @@ import { useCollectionStore } from '../../store/useCollectionStore';
 import { useCampaignStore } from '../../store/useCampaignStore';
 import { refreshCollection } from '../../collection/record';
 import { unitDexKey, bossDexKey } from '../../collection/dex';
+import { bossSprite, enemyUnitSprite } from '../../data/enemySprites';
 import { GainsSummary, type Gains } from '../collection/CollectionParts';
 import { sfx } from '../../utils/audioEngine';
 import { useProgressStore, BUFF_LEVEL_INFO } from '../../store/useProgressStore';
@@ -1387,7 +1388,24 @@ export const BattleScene: React.FC<Props> = ({
                                   </div>
                                 );
                               }
-                              // 攻撃側は自軍の進化段階、敵側は段階1で描画
+                              // 章の敵の兵は 種類ごとの絵（`data/enemySprites.ts`。もとから左むき）
+                              const enemyImg = e.team === 'DEFENDER' ? enemyUnitSprite(e.kind) : undefined;
+                              if (enemyImg) {
+                                return (
+                                  <img
+                                    src={enemyImg}
+                                    alt={e.kind}
+                                    data-enemy-kind={e.kind}
+                                    style={{
+                                      width: '100%', height: '100%',
+                                      objectFit: 'contain',
+                                      filter: 'drop-shadow(0 0 3px rgba(239,68,68,0.8))',
+                                    }}
+                                    draggable={false}
+                                  />
+                                );
+                              }
+                              // 攻撃側は自軍の進化段階、敵側（対戦の相手のネコ）は段階1で描画
                               const st = e.team === 'ATTACKER' ? getStage(e.subType) : 1;
                               const url = troopSpriteUrl(e.subType, st);
                               return url ? (
@@ -1528,7 +1546,13 @@ export const BattleScene: React.FC<Props> = ({
                    だい{chapter.no}しょう クリア！
                  </div>
                  <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
-                 <p className="text-sm text-gray-200 mb-4 leading-relaxed">{chapter.victoryLine}</p>
+                 <div className="flex items-center gap-2 mb-4 text-left">
+                   {!isPvp && bossSprite(chapter.id) && (
+                     <img src={bossSprite(chapter.id)} alt={chapter.enemyName} draggable={false} data-testid="result-boss"
+                       style={{ width: 52, height: 52, objectFit: 'contain', flexShrink: 0, opacity: 0.85 }} />
+                   )}
+                   <p className="text-sm text-gray-200 leading-relaxed">{chapter.victoryLine}</p>
+                 </div>
                  <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} win />
                  <GainsSummary gains={gains} />
                  <NewSkillNotice />
@@ -1750,7 +1774,10 @@ export const BattleScene: React.FC<Props> = ({
 
              <div className="flex items-start gap-3 p-3 rounded-xl mb-3"
                style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.28)' }}>
-               <span className="text-2xl leading-none">😼</span>
+               {bossSprite(chapter.id)
+                 ? <img src={bossSprite(chapter.id)} alt="" draggable={false} data-testid="briefing-boss"
+                     style={{ width: 64, height: 64, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(239,68,68,0.6))' }} />
+                 : <span className="text-2xl leading-none">😼</span>}
                <div className="min-w-0">
                  <div className="text-[#f87171] font-bold text-sm">{chapter.enemyName}</div>
                  <div className="text-white/45 text-[10px] mb-1">{chapter.enemyTitle}</div>

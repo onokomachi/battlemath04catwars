@@ -3,6 +3,7 @@ import { CHARACTERS, CHARACTER_BY_ID, getCharacterSprite, stageForLevel } from '
 import {
   CampaignChapter, ChapterTier, ENEMY_TRAIT_NOTE, ENEMY_UNIT_STATS, TIER_INFO, tierDifficulty, type EnemyUnitKind,
 } from '../../data/campaign';
+import { ENEMY_UNIT_SPRITE } from '../../data/enemySprites';
 import { useArmyStore, effectiveFormation, FORMATION_SIZE } from '../../store/useArmyStore';
 import { useBaseStore } from '../../store/useBaseStore';
 import { useProgressStore } from '../../store/useProgressStore';
@@ -101,13 +102,15 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
               const note = ENEMY_TRAIT_NOTE[k];
               return (
                 <li key={k} className="text-[11px] leading-snug text-white/85">
-                  <span className="font-bold">{note ? `${note.icon} ` : '・'}{ENEMY_UNIT_STATS[k].label}</span>
+                  <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
+                  <span className="font-bold">{note ? `${note.icon} ` : ''}{ENEMY_UNIT_STATS[k].label}</span>
                   {note && <span className="text-white/65">　{note.counter}</span>}
                 </li>
               );
             })}
             {td.bossAtSpawnCount != null && (
               <li className="text-[11px] leading-snug text-[#fde68a]">
+                <img src={ENEMY_UNIT_SPRITE.boss} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
                 <span className="font-bold">👑 ボス（{ENEMY_UNIT_STATS.boss.label}）</span>
                 {(td.bossShield ?? 0) > 0 && <span className="text-white/70">　シールドは ふくしゅうカードで わる</span>}
               </li>

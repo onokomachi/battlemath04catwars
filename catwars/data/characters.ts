@@ -137,7 +137,7 @@ export const CHARACTERS: CharacterFamily[] = [
     isStarter: true,
     accent: '#f4814e',
     forms: [
-      { stage: 1, name: 'にゃばりあん',   minLevel: 1,  flavor: '剣を ふりまわす 元気な ネコ。まずは この子から！' },
+      { stage: 1, name: 'けんしにゃん',   minLevel: 1,  flavor: '剣を ふりまわす 元気な ネコ。まずは この子から！' },
       { stage: 2, name: 'にゃーさーかー', minLevel: 10, flavor: 'ひかる 剣が 大きくなった、たのもしい ベテラン。' },
       { stage: 3, name: 'でもにゃろーど', minLevel: 30, flavor: '王冠と 大きな 剣を もつ 近接系の 王さま。' },
     ],
@@ -223,7 +223,7 @@ export const CHARACTERS: CharacterFamily[] = [
     id: 'healer', spriteFamily: 'healer', displayName: '回復系', role: 'なかまを ささえて まもる',
     accent: '#ff8fb3',
     forms: [
-      { stage: 1, name: 'にゃーす',     minLevel: 1,  flavor: 'ナースキャップの やさしい ネコ。' },
+      { stage: 1, name: 'なーすにゃん',   minLevel: 1,  flavor: 'ナースキャップの やさしい ネコ。' },
       { stage: 2, name: 'ぷりーにゃ',   minLevel: 10, flavor: 'ひかる つえを もつ いのりの ネコ。' },
       { stage: 3, name: 'せいにゃんと', minLevel: 30, flavor: 'ひかりの わを もつ せいじょネコ。' },
     ],
@@ -278,12 +278,12 @@ export const CHARACTERS: CharacterFamily[] = [
     bodySize: 86, bodyType: '巨大な機械の体。肩の砲塔で上半身が異様に大きい', defenseResist: 0.25,
   },
   {
-    id: 'boss_overlord', spriteFamily: 'boss-overlord', displayName: 'クロマント', role: 'やみの 王。おそいけれど 一撃が とても つよい',
+    id: 'boss_overlord', spriteFamily: 'boss-overlord', displayName: 'にゃーすべいだー', role: 'やみの 王。おそいけれど 一撃が とても つよい',
     accent: '#dc2626',
     forms: [
       { stage: 1, name: 'だーすにゃん',     minLevel: 1,  flavor: '黒い マントを なびかせ、やみの 光の 剣を あやつる 宇宙ネコ。' },
       { stage: 2, name: 'だーすにゃんII',   minLevel: 10, flavor: 'むねの 赤い コアが はげしく 光る。その 一撃は とても つよい。' },
-      { stage: 3, name: 'クロマント', minLevel: 30, flavor: '銀河の 皇帝。黒い マントの かげが 戦場に のびる、さいごの ボス。' },
+      { stage: 3, name: 'にゃーすべいだー', minLevel: 30, flavor: '銀河の 皇帝。黒い マントの かげが 戦場に のびる、さいごの ボス。' },
     ],
     base: { hp: 1100, damage: 150, moveSpeed: 0.9, target: 'ANY', attackRange: 1.8, attackSpeed: 2600 },
     cost: { gold: 750, count: 1 },

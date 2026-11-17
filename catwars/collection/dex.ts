@@ -10,6 +10,7 @@
 import { CHARACTERS, type CharacterFamily } from '../data/characters';
 import { BARRACKS_UNLOCKS } from '../data/facilities';
 import { CAMPAIGN, ENEMY_TRAIT_NOTE, ENEMY_UNIT_STATS, type EnemyUnitKind } from '../data/campaign';
+import { ENEMY_UNIT_SPRITE, bossSprite } from '../data/enemySprites';
 
 // ── ネコ ──
 /** 図鑑の鍵：「系統:段階」 */
@@ -50,7 +51,9 @@ export interface EnemyDexEntry {
   /** 章（boss のとき） */
   chapterId?: string;
   chapterNo?: number;
-  /** 絵（兵は ネコの絵を敵の色で。ボスは まだ絵が無いので 絵文字） */
+  /** 絵（兵・章のボス。`data/enemySprites.ts`）。無いときは 絵文字 */
+  image?: string;
+  /** sim の描画の系統（兵のとき） */
   subType?: string;
   emoji: string;
   /** 説明（見つけたあとに出す） */
@@ -98,12 +101,12 @@ function unitWhere(kind: EnemyUnitKind): string {
 export const ENEMY_DEX: EnemyDexEntry[] = [
   ...UNIT_ORDER.map((k): EnemyDexEntry => ({
     key: `unit:${k}`, kind: 'unit', unitKind: k,
-    name: ENEMY_UNIT_STATS[k].label, subType: ENEMY_UNIT_STATS[k].subType, emoji: UNIT_EMOJI[k],
+    name: ENEMY_UNIT_STATS[k].label, subType: ENEMY_UNIT_STATS[k].subType, image: ENEMY_UNIT_SPRITE[k], emoji: UNIT_EMOJI[k],
     note: UNIT_NOTE[k], hint: ENEMY_TRAIT_NOTE[k]?.counter ?? UNIT_HINT[k], where: unitWhere(k),
   })),
   ...CAMPAIGN.map((c): EnemyDexEntry => ({
     key: `boss:${c.id}`, kind: 'boss', chapterId: c.id, chapterNo: c.no,
-    name: c.enemyName, emoji: '👑', note: `${c.enemyTitle}。${c.background}`, hint: c.hint,
+    name: c.enemyName, image: bossSprite(c.id), emoji: '👑', note: `${c.enemyTitle}。${c.background}`, hint: c.hint,
     where: `第${c.no}章「${c.title}」で たたかう`,
   })),
 ];

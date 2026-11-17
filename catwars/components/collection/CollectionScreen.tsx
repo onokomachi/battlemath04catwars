@@ -9,7 +9,7 @@ import { BADGES, BADGE_TIER_TOTAL, badgeTierCount, tierColor, tierLabel, TIER_NA
 import { BADGE_COINS, COIN_RULES } from '../../collection/coins';
 import { CAT_DEX_KEYS, ENEMY_DEX, catDexKey, catHowToMeet, markKey, type EnemyDexEntry } from '../../collection/dex';
 import { DECORS, TITLES, isOpen } from '../../collection/titles';
-import { CHARACTERS, getCharacterSprite, spriteFamilyForSubType } from '../../data/characters';
+import { CHARACTERS, getCharacterSprite } from '../../data/characters';
 import { TIER_INFO, TIER_ORDER } from '../../data/campaign';
 import { refreshCollection, buildBadgeInput } from '../../collection/record';
 import { ArtImg, BadgeMedal, DecorFlag, StickerView } from './CollectionParts';
@@ -135,12 +135,12 @@ const CatDex: React.FC<{ found: string[] }> = ({ found }) => (
 );
 
 const EnemyPic: React.FC<{ e: EnemyDexEntry; ok: boolean; size?: number }> = ({ e, ok, size = 52 }) => {
-  const fam = e.subType ? spriteFamilyForSubType(e.subType) : null;
-  if (fam) {
+  if (e.image) {
+    // 見つけるまでは かげ（形だけ）
     return (
-      <img src={getCharacterSprite(fam, 1)} alt="" draggable={false}
-        style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0, transform: 'scaleX(-1)',
-          filter: ok ? 'hue-rotate(150deg) brightness(0.85) drop-shadow(0 0 3px rgba(239,68,68,0.8))' : 'brightness(0) opacity(0.55)' }} />
+      <img src={e.image} alt="" draggable={false} data-testid="enemy-pic"
+        style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0,
+          filter: ok ? 'drop-shadow(0 0 3px rgba(239,68,68,0.7))' : 'brightness(0) opacity(0.55)' }} />
     );
   }
   return (

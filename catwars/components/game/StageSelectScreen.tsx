@@ -3,6 +3,7 @@ import {
   CAMPAIGN, ASSIST_LEVELS, CampaignChapter, ChapterTier, TIER_ORDER, TIER_INFO, ENEMY_UNIT_STATS, ENEMY_TRAIT_NOTE,
   tierDifficulty, threatLevel, threatMultFor, chapterBaseLevel, cardLimitFor,
 } from '../../data/campaign';
+import { ENEMY_UNIT_SPRITE, bossSprite } from '../../data/enemySprites';
 import { BATTLE_MAP_BY_ID, tierEnemyBase } from '../../data/battleMaps';
 import { BUILDING_STATS } from '../../constants';
 import { BattleLoadout, BuildingType, GRID_W, GRID_H } from '../../types';
@@ -104,7 +105,11 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, avgLevel, onBack, 
               }}
             >
               <span className="text-[10px] text-white/50" style={fontMono}>第{ch.no}章</span>
-              <span className="text-xl leading-none mt-0.5">{!open ? '🔒' : done ? '👑' : '⚔️'}</span>
+              {open && bossSprite(ch.id)
+                // その章のボスの顔（クリアしたら 星が出る）
+                ? <img src={bossSprite(ch.id)} alt={ch.enemyName} draggable={false} data-testid="stage-boss"
+                    className="w-8 h-8 object-contain mt-0.5" style={{ filter: done ? undefined : 'drop-shadow(0 0 3px rgba(239,68,68,0.6))' }} />
+                : <span className="text-xl leading-none mt-0.5">{!open ? '🔒' : done ? '👑' : '⚔️'}</span>}
               {done ? (
                 // とった星（3段ぶん。最大9つ。まちがえずに解けた割合で決まる）
                 <span className="text-[11px] mt-1 leading-none text-[#facc15]" style={fontMono} aria-label={`星 ${chapterStars(ch.id)}つ`}>
@@ -170,13 +175,15 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, avgLevel, onBack, 
                 const note = ENEMY_TRAIT_NOTE[k];
                 return (
                   <li key={k} className="text-[11px] leading-snug text-white/85">
-                    <span className="font-bold">{note ? `${note.icon} ` : '・'}{ENEMY_UNIT_STATS[k].label}</span>
+                    <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
+                    <span className="font-bold">{note ? `${note.icon} ` : ''}{ENEMY_UNIT_STATS[k].label}</span>
                     {note && <span className="text-white/65">　{note.counter}</span>}
                   </li>
                 );
               })}
               {td.bossAtSpawnCount != null && (
                 <li className="text-[11px] leading-snug text-[#fde68a]">
+                  <img src={ENEMY_UNIT_SPRITE.boss} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
                   <span className="font-bold">👑 ボス（{ENEMY_UNIT_STATS.boss.label}）</span>
                   {(td.bossShield ?? 0) > 0 && (
                     <span className="text-white/70">　シールド {td.bossShield}まい：ふくしゅうカードを といて わる</span>
@@ -218,7 +225,10 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, avgLevel, onBack, 
           {/* 敵の紹介 */}
           <div className="mt-3 flex items-start gap-3 p-3 rounded-xl"
             style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.28)' }}>
-            <span className="text-2xl leading-none">😼</span>
+            {bossSprite(selected.id)
+              ? <img src={bossSprite(selected.id)} alt="" draggable={false} data-testid="intro-boss"
+                  style={{ width: 72, height: 72, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(239,68,68,0.6))' }} />
+              : <span className="text-2xl leading-none">😼</span>}
             <div className="min-w-0">
               <div className="text-[#f87171] font-bold text-sm">{selected.enemyName}</div>
               <div className="text-white/45 text-[10px] mb-1.5">{selected.enemyTitle}</div>
