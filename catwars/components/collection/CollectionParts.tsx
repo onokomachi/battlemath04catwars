@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { RARITY_INFO, type StickerDef } from '../../collection/stickers';
 import { BADGE_BY_ID, badgeFrame, tierColor, tierLabel } from '../../collection/badges';
 import { ENEMY_DEX_BY_KEY } from '../../collection/dex';
-import { CHARACTER_BY_ID, getCharacterSprite, spriteFamilyForSubType } from '../../data/characters';
+import { CHARACTER_BY_ID, getCharacterSprite } from '../../data/characters';
 import { DECOR_BY_ID, TITLE_BY_ID } from '../../collection/titles';
 import { useCollectionStore } from '../../store/useCollectionStore';
 import { CAPSULE_RULES } from '../../collection/stickers';
@@ -75,11 +75,10 @@ export const BadgeMedal: React.FC<{ id: string; tier: number; size?: number; loc
 };
 
 /** 図鑑の鍵 → 名前と絵（結果画面で使う） */
-export function dexLabel(key: string): { name: string; img?: string; emoji?: string; tint?: boolean } {
+export function dexLabel(key: string): { name: string; img?: string; emoji?: string } {
   const e = ENEMY_DEX_BY_KEY[key];
   if (e) {
-    const fam = e.subType ? spriteFamilyForSubType(e.subType) : null;
-    return { name: e.name, img: fam ? getCharacterSprite(fam, 1) : undefined, emoji: e.emoji, tint: true };
+    return { name: e.name, img: e.image, emoji: e.emoji };
   }
   const [famId, st] = key.split(':');
   const fam = CHARACTER_BY_ID[famId];
@@ -126,7 +125,7 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
             return (
               <span key={k} className="flex items-center gap-1 text-[11px] text-white bg-white/10 rounded-full pl-0.5 pr-2 py-0.5">
                 {d.img
-                  ? <img src={d.img} alt="" style={{ width: 18, height: 18, objectFit: 'contain', filter: d.tint ? 'hue-rotate(150deg) brightness(0.85)' : undefined }} />
+                  ? <img src={d.img} alt="" style={{ width: 18, height: 18, objectFit: 'contain' }} />
                   : <span>{d.emoji}</span>}
                 {d.name}
               </span>

@@ -274,7 +274,7 @@ export const CAMPAIGN: CampaignChapter[] = [
   {
     id: 'ch2', no: 2,
     title: 'クレーターの たにの ふたご',
-    enemyName: 'ミギー＆ヒダリー',
+    enemyName: 'ウエニャン＆シタニャン',
     enemyTitle: 'ふたごの 見はりばん',
     background: 'いつも ケンカばかり している ふたごの 見はりネコ。ふたりで たにの 上の道と 下の道を 1本ずつ まもっている。',
     briefing: '道が 2本 ある。砲台が まちかまえている 道と、あいている 道を 見きわめよう。',

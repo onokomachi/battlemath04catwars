@@ -107,13 +107,13 @@ export const STICKERS: StickerDef[] = [
   n('st-sun', 'たいよう', '☀️', '#fb923c', 'ぽかぽか。ひなたぼっこの ばしょ。'),
   n('st-snow', 'ゆきの けっしょう', '❄️', '#bae6fd', 'よく 見ると きれいな かたち。'),
   // ── レア（14）──
-  r('st-cat-melee', 'にゃばりあん', '🐱', '#f4814e', '近接系の はじまりの すがた。', `${CH}/melee-1.png`),
+  r('st-cat-melee', 'けんしにゃん', '🐱', '#f4814e', '近接系の はじまりの すがた。', `${CH}/melee-1.png`),
   r('st-cat-ranged', 'にゃーちゃー', '🐱', '#facc15', '遠距離系の はじまりの すがた。', `${CH}/ranged-1.png`),
   r('st-cat-tank', 'にゃいあんと', '🐱', '#94a3b8', 'タンク系の はじまりの すがた。', `${CH}/tank-1.png`),
   r('st-cat-magic', 'みにゃじょ', '🐱', '#a78bfa', '魔法系の はじまりの すがた。', `${CH}/magic-1.png`),
   r('st-cat-speed', 'にゃぶりん', '🐱', '#4ade80', '高速系の はじまりの すがた。', `${CH}/speed-1.png`),
   r('st-cat-flying', 'こにゃうもり', '🐱', '#38bdf8', '飛行系の はじまりの すがた。', `${CH}/flying-1.png`),
-  r('st-cat-healer', 'にゃーす', '🐱', '#f9a8d4', '回復系の はじまりの すがた。', `${CH}/healer-1.png`),
+  r('st-cat-healer', 'なーすにゃん', '🐱', '#f9a8d4', '回復系の はじまりの すがた。', `${CH}/healer-1.png`),
   r('st-cat-bomber', 'ぼむにゃー', '🐱', '#fb923c', '爆発系の はじまりの すがた。', `${CH}/bomber-1.png`),
   r('st-alien', 'なぞの うちゅうせいぶつ', '👾', '#c084fc', 'ときどき 戦場に まよいこむ。', `${CH}/alien-1.png`),
   r('st-core', 'ネコ軍団の コア', '🏰', '#22d3ee', 'これが こわれると まけ。', `${SP}/town-hall.png`),
@@ -133,7 +133,7 @@ export const STICKERS: StickerDef[] = [
   s('st-kaiser', 'めかかいざー', '⚙️', '#64748b', 'たてものを 一撃で こわす きかいの 王。', `${CH}/boss-artillery-3.png`),
   s('st-darkmage', 'にゃーくめいじ', '📖', '#a78bfa', 'まほうの 本を あやつる 大まほうつかい。', `${CH}/magic-3.png`),
   // ── でんせつ（2）──
-  l('st-emperor', 'クロマント', '🌑', '#facc15', '銀河の 皇帝。マントの かげが 戦場に のびる。', `${CH}/boss-overlord-3.png`),
+  l('st-emperor', 'にゃーすべいだー', '🌑', '#facc15', '銀河の 皇帝。マントの かげが 戦場に のびる。', `${CH}/boss-overlord-3.png`),
   l('st-cosmic', 'こずみっくはいどら', '🌟', '#facc15', '宇宙に ひろがる でんせつの かいじゅう。', `${CH}/boss-titan-3.png`),
 ];
 
