@@ -10,10 +10,10 @@ import { BattleLoadout, BuildingType, GRID_W, GRID_H } from '../../types';
 import { useCampaignStore } from '../../store/useCampaignStore';
 import { useBaseStore } from '../../store/useBaseStore';
 import { DailyBuffsPanel } from '../learn/DailyBuffsPanel';
+import {
+  Button, Chip, Disclosure, FacilityImg, Icon, Panel, ScreenBackdrop, Segmented, TitleBar, type IconName, type SegOption, type Tone,
+} from '../ui';
 import { sfx } from '../../utils/audioEngine';
-
-const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
-const fontMono = { fontFamily: 'Orbitron, monospace' };
 
 interface Props {
   loadout: BattleLoadout;
@@ -74,252 +74,189 @@ export const StageSelectScreen: React.FC<Props> = ({ loadout, avgLevel, onBack, 
   const zoneW = map ? map.playerDeployZone.xMax - map.playerDeployZone.xMin + 1 : 0;
   const zoneH = map ? map.playerDeployZone.yMax - map.playerDeployZone.yMin + 1 : 0;
 
+  const tierTone = (t: ChapterTier): Tone => (t === 'normal' ? 'action' : t === 'hard' ? 'rare' : 'danger');
+  const tierOptions: SegOption<ChapterTier>[] = TIER_ORDER.map(t => {
+    const open = isTierUnlocked(selected.id, t);
+    const st = starsFor(selected.id, t);
+    return {
+      value: t, label: TIER_INFO[t].label, tone: tierTone(t), locked: !open, attrs: { 'data-tier': t },
+      sub: open
+        ? <span className="flex gap-0.5">{[1, 2, 3].map(n => <Icon key={n} name="star" size={16} style={n <= st ? undefined : { filter: 'grayscale(1) brightness(0.55)', opacity: 0.7 }} />)}</span>
+        : <span className="flex items-center gap-1"><Icon name="lock" size={14} />{TIER_LOCK_NOTE[t]}</span>,
+    };
+  });
+  const countOf = (type: BuildingType) => deployments.filter(d => d.type === type).length;
+
   return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden" style={font}>
-      {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-white/10 flex-shrink-0"
-        style={{ background: 'rgba(6,10,24,0.82)', backdropFilter: 'blur(12px)' }}>
-        <button onClick={onBack} className="text-white/60 hover:text-white text-sm">← もどる</button>
-        <h2 className="text-[#38bdf8] font-bold text-base" style={fontMono}>ステージをえらぶ</h2>
-        <span className="ml-auto text-[11px] text-white/50" style={fontMono}>
-          {progress}/{CAMPAIGN.length} 章クリア
-        </span>
-      </div>
+    <div className="cw-screen h-[100dvh] flex flex-col overflow-hidden" data-testid="stage-screen">
+      <ScreenBackdrop name="stage" />
+      <TitleBar title="ステージをえらぶ" onBack={onBack}
+        right={<Chip tone="growth">{progress}/{CAMPAIGN.length} 章クリア</Chip>} />
 
-      {/* Chapter rail */}
-      <div className="flex gap-2 px-4 py-3 overflow-x-auto flex-shrink-0">
-        {CAMPAIGN.map(ch => {
-          const open = isUnlocked(ch.id);
-          const done = clearedChapters.includes(ch.id);
-          const active = ch.id === selectedId;
-          return (
-            <button
-              key={ch.id}
-              onClick={() => { sfx.select(); setSelectedId(ch.id); setTier('normal'); }}
-              className="flex-shrink-0 flex flex-col items-center justify-center w-[72px] h-[72px] rounded-2xl border-2 transition-all active:scale-95"
-              style={{
-                borderColor: active ? '#ef4444' : done ? '#a3e635' : open ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
-                background: active ? 'rgba(239,68,68,0.16)' : done ? 'rgba(163,230,53,0.10)' : 'rgba(255,255,255,0.04)',
-                opacity: open ? 1 : 0.45,
-                boxShadow: active ? '0 0 16px rgba(239,68,68,0.45)' : undefined,
-              }}
-            >
-              <span className="text-[10px] text-white/50" style={fontMono}>第{ch.no}章</span>
-              {open && bossSprite(ch.id)
-                // その章のボスの顔（クリアしたら 星が出る）
-                ? <img src={bossSprite(ch.id)} alt={ch.enemyName} draggable={false} data-testid="stage-boss"
-                    className="w-8 h-8 object-contain mt-0.5" style={{ filter: done ? undefined : 'drop-shadow(0 0 3px rgba(239,68,68,0.6))' }} />
-                : <span className="text-xl leading-none mt-0.5">{!open ? '🔒' : done ? '👑' : '⚔️'}</span>}
-              {done ? (
-                // とった星（3段ぶん。最大9つ。まちがえずに解けた割合で決まる）
-                <span className="text-[11px] mt-1 leading-none text-[#facc15]" style={fontMono} aria-label={`星 ${chapterStars(ch.id)}つ`}>
-                  ★{chapterStars(ch.id)}<span className="text-white/35">/9</span>
-                </span>
-              ) : (
-                <span className="text-[9px] mt-1" style={{ color: '#f87171' }}>
-                  {'◆'.repeat(toughnessStars(ch))}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Selected chapter detail */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="rounded-2xl border p-4"
-          style={{
-            borderColor: 'rgba(239,68,68,0.35)',
-            background: 'linear-gradient(160deg, rgba(37,99,235,0.14), rgba(239,68,68,0.12)), rgba(6,10,24,0.72)',
-          }}>
-          <div className="text-[11px] tracking-[0.25em] text-[#38bdf8]/80" style={fontMono}>
-            CHAPTER {selected.no}
-          </div>
-          <h3 className="text-white font-black text-xl mt-1 leading-tight">{selected.title}</h3>
-
-          {/* 難易度の段（ふつう → むずかしい → げきむず。前の段をクリアで開く）。星は段ごと */}
-          <div className="mt-3 grid grid-cols-3 gap-2" role="radiogroup" aria-label="むずかしさ">
-            {TIER_ORDER.map(t => {
-              const info = TIER_INFO[t];
-              const open = isTierUnlocked(selected.id, t);
-              const on = t === tier;
-              const st = starsFor(selected.id, t);
-              return (
-                <button key={t} role="radio" aria-checked={on} data-tier={t}
-                  onClick={() => { sfx.select(); setTier(t); }}
-                  className="rounded-xl border-2 px-1 py-2 flex flex-col items-center gap-0.5 transition-all active:scale-95"
-                  style={{
-                    borderColor: on ? info.color : `${info.color}55`,
-                    background: on ? `${info.color}2e` : 'rgba(255,255,255,0.03)',
-                    boxShadow: on ? `0 0 14px ${info.color}88` : undefined,
-                    opacity: open ? 1 : 0.6,
-                  }}>
-                  <span className="text-[12px] font-black" style={{ color: info.color }}>{open ? '' : '🔒 '}{info.label}</span>
-                  <span className="text-[11px] leading-none">
-                    {[1, 2, 3].map(n => (
-                      <span key={n} style={{ color: n <= st ? '#facc15' : 'rgba(255,255,255,0.2)' }}>★</span>
-                    ))}
+      {/* 星の地図：8つの章の札（ボスの顔・とった星・手ごわさ） */}
+      <div className="flex-shrink-0 overflow-x-auto cw-scroll px-4 pt-3 pb-2">
+        <div className="relative flex gap-2 mx-auto w-fit">
+          <span aria-hidden className="absolute left-4 right-4 top-1/2 border-t-2 border-dashed" style={{ borderColor: 'var(--cw-line-strong)' }} />
+          {CAMPAIGN.map(ch => {
+            const open = isUnlocked(ch.id);
+            const done = clearedChapters.includes(ch.id);
+            const active = ch.id === selectedId;
+            const boss = bossSprite(ch.id);
+            return (
+              <button key={ch.id} type="button" data-chapter={ch.id} aria-pressed={active}
+                aria-label={`第${ch.no}章 ${ch.title}${open ? '' : '（まだ ひらいていない）'}`}
+                onClick={() => { sfx.select(); setSelectedId(ch.id); setTier('normal'); }}
+                className={`cw-card cw-press cw-tone-${done ? 'growth' : 'action'} relative flex-shrink-0 w-[80px] h-[108px] flex flex-col items-center justify-center gap-0.5 px-1 ${active ? 'cw-card-on' : ''}`}
+                >
+                <span className="text-cw-12 font-bold" style={{ color: active ? 'var(--cw-fg)' : 'var(--cw-fg-2)' }}>第{ch.no}章</span>
+                {open && boss
+                  // その章のボスの顔
+                  ? <img src={boss} alt={ch.enemyName} draggable={false} data-testid="stage-boss" className="w-11 h-11 object-contain" />
+                  : <span className="w-11 h-11 flex items-center justify-center"><Icon name={!open ? 'lock' : done ? 'crown' : 'enemy'} size={34} /></span>}
+                {done ? (
+                  // とった星（3段ぶん。最大9つ。まちがえずに解けた割合で決まる）
+                  <span className="flex items-center gap-0.5 text-cw-12 font-bold" style={{ color: 'var(--cw-reward)' }} aria-label={`星 ${chapterStars(ch.id)}つ`}>
+                    <Icon name="star" size={14} />{chapterStars(ch.id)}<span style={{ color: 'var(--cw-fg-3)' }}>/9</span>
                   </span>
-                  {!open && <span className="text-[9px] text-white/60 leading-tight text-center">{TIER_LOCK_NOTE[t]}</span>}
-                </button>
-              );
-            })}
-          </div>
+                ) : (
+                  <span className="text-cw-12" style={{ color: 'var(--cw-danger)' }}>{'◆'.repeat(toughnessStars(ch))}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-          {/* この段に出てくる敵（とくべつな敵は アイコンと たおし方） */}
-          <div className="mt-3 p-3 rounded-xl" data-testid="enemy-list"
-            style={{ background: `${tierInfo.color}12`, border: `1px solid ${tierInfo.color}55` }}>
-            <div className="font-bold text-[11px] mb-1.5" style={{ color: tierInfo.color, ...fontMono }}>▸ 出てくる 敵</div>
-            <ul className="space-y-1">
-              {td.unitPool.map(k => {
-                const note = ENEMY_TRAIT_NOTE[k];
-                return (
-                  <li key={k} className="text-[11px] leading-snug text-white/85">
-                    <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
-                    <span className="font-bold">{note ? `${note.icon} ` : ''}{ENEMY_UNIT_STATS[k].label}</span>
-                    {note && <span className="text-white/65">　{note.counter}</span>}
+      {/* えらんだ章 */}
+      <div className="flex-1 overflow-y-auto cw-scroll px-4 pb-4 cw-enter">
+        <div className="mx-auto max-w-[980px] grid gap-3 min-[900px]:grid-cols-2 items-start">
+          {/* 左：ボスが主役の 1枚 */}
+          <Panel strong className="flex flex-col gap-3">
+            <div>
+              <div className="text-cw-12 tracking-[0.2em] font-cw-num" style={{ color: 'var(--cw-action)' }}>CHAPTER {selected.no}</div>
+              <h3 className="text-cw-20 font-black leading-tight">{selected.title}</h3>
+            </div>
+
+            {/* 難易度の段（ふつう → むずかしい → げきむず。前の段をクリアで開く）。星は段ごと */}
+            <Segmented<ChapterTier> value={tier} onChange={setTier} options={tierOptions} label="むずかしさ" />
+
+            {/* ボス */}
+            <div className="flex items-start gap-3 p-3 rounded-cw-md cw-tone-danger" style={{ background: 'var(--tone-bg)', boxShadow: 'inset 0 0 0 1px var(--cw-line)' }}>
+              {bossSprite(selected.id)
+                ? <img src={bossSprite(selected.id)} alt="" draggable={false} data-testid="intro-boss" className="w-[96px] h-[96px] object-contain flex-shrink-0" style={{ filter: 'drop-shadow(0 4px 8px rgba(6,10,28,.5))' }} />
+                : <Icon name="enemy" size={72} />}
+              <div className="min-w-0">
+                <div className="text-cw-16 font-extrabold" style={{ color: 'var(--cw-danger)' }}>{selected.enemyName}</div>
+                <div className="text-cw-12 mb-1" style={{ color: 'var(--cw-fg-3)' }}>{selected.enemyTitle}</div>
+                <p className="text-cw-14 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>{selected.background}</p>
+              </div>
+            </div>
+
+            {/* 戦場情報 */}
+            <div className="flex flex-wrap gap-2">
+              <Chip>{map?.name ?? '???'}</Chip>
+              <Chip tone="danger">手ごわさ {'◆'.repeat(toughnessStars(selected, tier))}</Chip>
+              <Chip tone="action"><Icon name="credit" size={16} />勝利報酬 {Math.round(selected.rewardCredits * tierInfo.rewardMult)}</Chip>
+            </div>
+          </Panel>
+
+          {/* 右：しらべる（はじめは「出てくる敵」だけ ひらく） */}
+          <div className="flex flex-col gap-3">
+            {/* げきむず：カードの まいすう（正確に解くほど 多く出撃できる） */}
+            {cardLimitFor(selected, tier, assist) != null && (
+              <Notice tone="danger" icon="warn" title={`カードは ${cardLimitFor(selected, tier, assist)} まいまで。まちがえずに とくほど 有利`} data-testid="card-limit">
+                まちがえずに とけた カードは ⚡ に なる。ていねいに とくほど たくさん 出撃できるよ。
+                {assist > 0 && `（サポートモードで +${cardLimitFor(selected, tier, assist)! - cardLimitFor(selected, tier, 0)!} まい）`}
+              </Notice>
+            )}
+            {/* 脅威レベル（隠れた調整はしない。強くなっているときは はっきり出す） */}
+            {threat >= 1 && (
+              <Notice tone="rare" icon="rage" title={`脅威 Lv.${threat}`} data-testid="threat">
+                手持ちが育っているぶん、敵も強くなっているよ（+{threatPct}%）。
+              </Notice>
+            )}
+            {assist > 0 && (
+              <Notice tone="growth" icon="heal" title={`${ASSIST_LEVELS[assist].label} ON`}>
+                {ASSIST_LEVELS[assist].description}
+              </Notice>
+            )}
+
+            {/* この段に出てくる敵（とくべつな敵は アイコンと たおし方） */}
+            <Disclosure title="出てくる 敵" icon="enemy" defaultOpen data-testid="enemy-list" right={`${td.unitPool.length + (td.bossAtSpawnCount != null ? 1 : 0)}しゅるい`}>
+              <ul className="flex flex-col gap-2">
+                {td.unitPool.map(k => {
+                  const note = ENEMY_TRAIT_NOTE[k];
+                  return (
+                    <li key={k} className="flex items-center gap-2 text-cw-14">
+                      <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="w-8 h-8 object-contain flex-shrink-0" />
+                      <span><span className="font-bold">{note ? `${note.icon} ` : ''}{ENEMY_UNIT_STATS[k].label}</span>
+                        {note && <span className="text-cw-12 block" style={{ color: 'var(--cw-fg-3)' }}>{note.counter}</span>}</span>
+                    </li>
+                  );
+                })}
+                {td.bossAtSpawnCount != null && (
+                  <li className="flex items-center gap-2 text-cw-14">
+                    <img src={ENEMY_UNIT_SPRITE.boss} alt="" draggable={false} className="w-8 h-8 object-contain flex-shrink-0" />
+                    <span><span className="font-bold" style={{ color: 'var(--cw-reward)' }}>ボス（{ENEMY_UNIT_STATS.boss.label}）</span>
+                      {(td.bossShield ?? 0) > 0 && <span className="text-cw-12 block" style={{ color: 'var(--cw-fg-3)' }}>シールド {td.bossShield}まい：ふくしゅうカードを といて わる</span>}</span>
                   </li>
-                );
-              })}
-              {td.bossAtSpawnCount != null && (
-                <li className="text-[11px] leading-snug text-[#fde68a]">
-                  <img src={ENEMY_UNIT_SPRITE.boss} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
-                  <span className="font-bold">👑 ボス（{ENEMY_UNIT_STATS.boss.label}）</span>
-                  {(td.bossShield ?? 0) > 0 && (
-                    <span className="text-white/70">　シールド {td.bossShield}まい：ふくしゅうカードを といて わる</span>
-                  )}
-                </li>
-              )}
-            </ul>
-          </div>
+                )}
+              </ul>
+            </Disclosure>
 
-          {/* げきむず：カードの まいすう（正確に解くほど 多く出撃できる） */}
-          {cardLimitFor(selected, tier, assist) != null && (
-            <div className="mt-3 p-3 rounded-xl flex items-start gap-2" data-testid="card-limit"
-              style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.4)' }}>
-              <span className="text-lg leading-none">🃏</span>
-              <div>
-                <div className="text-[#fca5a5] font-bold text-xs">カードは {cardLimitFor(selected, tier, assist)} まいまで。まちがえずに とくほど 有利</div>
-                <p className="text-white/70 text-[11px] leading-relaxed mt-0.5">
-                  まちがえずに とけた カードは ⚡ に なる。ていねいに とくほど たくさん 出撃できるよ。
-                  {assist > 0 && `（サポートモードで +${cardLimitFor(selected, tier, assist)! - cardLimitFor(selected, tier, 0)!} まい）`}
-                </p>
+            {/* 作戦ブリーフィング */}
+            <Disclosure title="さくせん" icon="bulb">
+              <p className="text-cw-14 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>{selected.briefing}</p>
+              <p className="text-cw-14 leading-relaxed mt-2 flex gap-2" style={{ color: 'var(--cw-reward)' }}><Icon name="bulb" size={20} className="mt-0.5" />{selected.hint}</p>
+            </Disclosure>
+
+            {/* この章の戦場と、いま組んである陣地のプレビュー */}
+            <Disclosure title="この章の戦場" icon="target" right={`自陣 ${zoneW}×${zoneH}マス${zoneW >= 9 ? '（ひろい）' : zoneW <= 5 ? '（せまい）' : ''}`}>
+              {map && <DeploymentPreview map={map} enemyBase={enemyBase} deployments={deployments} />}
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Chip><FacilityImg type={BuildingType.TOWN_HALL} size={20} />コア×1</Chip>
+                <Chip><FacilityImg type={BuildingType.WALL} size={20} />壁×{countOf(BuildingType.WALL)}/{loadout.maxWallSlots}</Chip>
+                <Chip><FacilityImg type={BuildingType.CANNON} size={20} />砲台×{countOf(BuildingType.CANNON)}</Chip>
+                <Chip><FacilityImg type={BuildingType.HIDDEN_TESLA} size={20} />電撃トラップ×{countOf(BuildingType.HIDDEN_TESLA)}</Chip>
+                <Chip><FacilityImg type={BuildingType.ARMY_CAMP} size={20} />キャンプ×{countOf(BuildingType.ARMY_CAMP)}</Chip>
               </div>
-            </div>
-          )}
+            </Disclosure>
 
-          {/* 脅威レベル（隠れた調整はしない。強くなっているときは はっきり出す） */}
-          {threat >= 1 && (
-            <div className="mt-3 p-3 rounded-xl flex items-start gap-2" data-testid="threat"
-              style={{ background: 'rgba(244,114,182,0.10)', border: '1px solid rgba(244,114,182,0.4)' }}>
-              <span className="text-lg leading-none">⚠️</span>
-              <div>
-                <div className="text-[#f472b6] font-bold text-xs" style={fontMono}>脅威 Lv.{threat}</div>
-                <p className="text-white/75 text-[11px] leading-relaxed mt-0.5">
-                  手持ちが育っているぶん、敵も強くなっているよ（+{threatPct}%）。
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* 敵の紹介 */}
-          <div className="mt-3 flex items-start gap-3 p-3 rounded-xl"
-            style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.28)' }}>
-            {bossSprite(selected.id)
-              ? <img src={bossSprite(selected.id)} alt="" draggable={false} data-testid="intro-boss"
-                  style={{ width: 72, height: 72, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(239,68,68,0.6))' }} />
-              : <span className="text-2xl leading-none">😼</span>}
-            <div className="min-w-0">
-              <div className="text-[#f87171] font-bold text-sm">{selected.enemyName}</div>
-              <div className="text-white/45 text-[10px] mb-1.5">{selected.enemyTitle}</div>
-              <p className="text-white/75 text-[11px] leading-relaxed">{selected.background}</p>
-            </div>
+            {/* 出撃バフ（旧・作戦立案画面から移設） */}
+            <Disclosure title="出撃バフ" icon="buff">
+              <DailyBuffsPanel compact />
+            </Disclosure>
           </div>
-
-          {/* 作戦ブリーフィング */}
-          <div className="mt-3 p-3 rounded-xl"
-            style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.25)' }}>
-            <div className="text-[#38bdf8] font-bold text-[11px] mb-1" style={fontMono}>▸ さくせん</div>
-            <p className="text-white/80 text-xs leading-relaxed">{selected.briefing}</p>
-            <p className="text-[#facc15]/90 text-[11px] leading-relaxed mt-1.5">💡 {selected.hint}</p>
-          </div>
-
-          {/* 戦場情報 */}
-          <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-            <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/12 text-white/70">
-              🗺 {map?.name ?? '???'}
-            </span>
-            <span className="px-2.5 py-1 rounded-full border text-[#f87171]"
-              style={{ background: 'rgba(239,68,68,0.10)', borderColor: 'rgba(239,68,68,0.3)' }}>
-              手ごわさ {'◆'.repeat(toughnessStars(selected, tier))}
-            </span>
-            <span className="px-2.5 py-1 rounded-full border text-[#38bdf8]"
-              style={{ background: 'rgba(56,189,248,0.10)', borderColor: 'rgba(56,189,248,0.3)' }}>
-              勝利報酬 💠{Math.round(selected.rewardCredits * tierInfo.rewardMult)}
-            </span>
-          </div>
-
-          {/* サポートモードの明示（隠れた調整はしない設計） */}
-          {assist > 0 && (
-            <div className="mt-3 p-3 rounded-xl flex items-start gap-2"
-              style={{ background: 'rgba(163,230,53,0.10)', border: '1px solid rgba(163,230,53,0.35)' }}>
-              <span className="text-lg leading-none">🛟</span>
-              <div>
-                <div className="text-[#a3e635] font-bold text-xs">{ASSIST_LEVELS[assist].label} ON</div>
-                <p className="text-white/70 text-[11px] leading-relaxed mt-0.5">
-                  {ASSIST_LEVELS[assist].description}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* この章の戦場と、いま組んである陣地のプレビュー */}
-        <div className="mt-3 rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-white/70 text-xs font-bold" style={fontMono}>この章の戦場</span>
-            <span className="text-[#a3e635] text-[10px]">
-              自陣 {zoneW}×{zoneH}マス{zoneW >= 9 ? '（ひろい）' : zoneW <= 5 ? '（せまい）' : ''}
-            </span>
-          </div>
-          {map && <DeploymentPreview map={map} enemyBase={enemyBase} deployments={deployments} />}
-          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[10px] text-white/55">
-            <span>🏰 コア×1</span>
-            <span>🧱 壁×{deployments.filter(d => d.type === BuildingType.WALL).length}/{loadout.maxWallSlots}</span>
-            <span>💣 砲台×{deployments.filter(d => d.type === BuildingType.CANNON).length}</span>
-            <span>⚡ 電撃トラップ×{deployments.filter(d => d.type === BuildingType.HIDDEN_TESLA).length}</span>
-            <span>⛺ キャンプ×{deployments.filter(d => d.type === BuildingType.ARMY_CAMP).length}</span>
-          </div>
-        </div>
-
-        {/* 出撃バフ（旧・作戦立案画面から移設） */}
-        <div className="mt-3 rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }}>
-          <DailyBuffsPanel compact />
         </div>
       </div>
 
       {/* Launch */}
-      <div className="border-t border-white/10 px-4 pt-3 flex-shrink-0"
-        style={{ background: 'rgba(6,10,24,0.92)', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
-        <button
-          onClick={() => { if (unlocked) { sfx.select(); onStart(selected.id, tier); } }}
-          disabled={!unlocked}
-          className="w-full py-4 rounded-xl font-bold text-lg transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{
-            ...fontMono,
-            background: unlocked ? `${tierInfo.color}2e` : 'transparent',
-            border: `2px solid ${unlocked ? tierInfo.color : '#6b7280'}`,
-            color: unlocked ? '#fff' : '#9ca3af',
-            boxShadow: unlocked ? `0 0 16px ${tierInfo.color}88` : 'none',
-          }}>
-          {unlocked
-            ? `🐱 第${selected.no}章${tier === 'normal' ? '' : `（${tierInfo.label}）`}の 出撃メンバーを えらぶ →`
-            : `🔒 ${TIER_LOCK_NOTE[tier]}`}
-        </button>
+      <div className="flex-shrink-0 px-4 pt-3 relative z-10"
+        style={{ background: 'var(--cw-surface-strong)', boxShadow: 'inset 0 1px 0 var(--cw-line)', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
+        <div className="mx-auto max-w-[980px]">
+          <Button variant="primary" size="xl" fullWidth data-testid="stage-launch"
+            lockReason={unlocked ? undefined : TIER_LOCK_NOTE[tier]} locked={!unlocked}
+            onClick={() => { if (unlocked) { sfx.select(); onStart(selected.id, tier); } }}>
+            {unlocked
+              ? <><Icon name="cats" size={30} />第{selected.no}章{tier === 'normal' ? '' : `（${tierInfo.label}）`}の 出撃メンバーを えらぶ<span aria-hidden>→</span></>
+              : `第${selected.no}章${tier === 'normal' ? '' : `（${tierInfo.label}）`}`}
+          </Button>
+        </div>
       </div>
     </div>
   );
 };
+
+/** 注意・お知らせの 1枚（アイコン＋題＋本文）。色は 役目の色 */
+const Notice: React.FC<{ tone: Tone; icon: IconName; title: React.ReactNode; children: React.ReactNode; 'data-testid'?: string }> = ({ tone, icon, title, children, ...rest }) => (
+  <div className={`cw-panel cw-tone-${tone} p-3 flex items-start gap-3`} style={{ boxShadow: 'var(--cw-shadow-panel), var(--tone-lit)' }} {...rest}>
+    <Icon name={icon} size={30} />
+    <div className="min-w-0">
+      <div className="text-cw-14 font-extrabold" style={{ color: 'var(--tone)' }}>{title}</div>
+      <p className="text-cw-12 mt-0.5 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>{children}</p>
+    </div>
+  </div>
+);
 
 /** 自陣ゾーンへの自動転写を、そのまま縮小表示するミニマップ */
 const DeploymentPreview: React.FC<{
@@ -340,7 +277,7 @@ const DeploymentPreview: React.FC<{
     });
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto cw-scroll">
       <div style={{ position: 'relative', width: GRID_W * CELL, height: GRID_H * CELL, margin: '0 auto' }}>
         {Array.from({ length: GRID_H }, (_, y) =>
           Array.from({ length: GRID_W }, (_, x) => {
@@ -348,27 +285,29 @@ const DeploymentPreview: React.FC<{
             const inZone = x >= zone.xMin && x <= zone.xMax && y >= zone.yMin && y <= zone.yMax;
             const d = deployAt(x, y);
             const e = !d && enemyAt(x, y);
-            const isTopLeft = d && d.x === x && d.y === y;
             return (
               <div key={`${x}-${y}`}
                 style={{
                   position: 'absolute', left: x * CELL, top: y * CELL, width: CELL, height: CELL,
-                  background: t === 'WATER' ? '#1d4ed8'
+                  background: d ? 'var(--cw-action)'
+                    : e ? 'var(--cw-danger)'
+                    : t === 'WATER' ? '#1d4ed8'
                     : t === 'ROCK' ? '#374151'
                     : t === 'SWAMP' ? 'rgba(20,83,45,0.85)'
                     : t === 'LAVA' ? '#b91c1c'
                     : t === 'BRIDGE' ? '#92400e'
-                    : inZone ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.04)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 8, lineHeight: 1,
-                }}>
-                {isTopLeft && <span style={{ filter: 'drop-shadow(0 0 3px #22d3ee)' }}>{BUILDING_STATS[d!.type].icon || '🧱'}</span>}
-                {e && <span style={{ opacity: 0.55 }}>{BUILDING_STATS[e.type].icon || '🧱'}</span>}
-              </div>
+                    : inZone ? 'rgba(56,189,248,0.14)' : 'rgba(255,255,255,0.04)',
+                  opacity: d || e ? 0.9 : 1,
+                  borderRadius: d || e ? 3 : 0,
+                  border: '1px solid rgba(255,255,255,0.05)',
+                }} />
             );
           })
         )}
+      </div>
+      <div className="flex gap-4 justify-center mt-2 text-cw-12" style={{ color: 'var(--cw-fg-2)' }}>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: 'var(--cw-action)' }} />じぶんの 施設</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: 'var(--cw-danger)' }} />敵の 基地</span>
       </div>
     </div>
   );

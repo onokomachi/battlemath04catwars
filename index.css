@@ -2,6 +2,171 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────
+   ムーンベース・ポップ：画面の見た目の きまり（トークン）。docs/UI_STYLE.md
+   色・字・角・影・動きは ここの変数だけを使う（Tailwind からも cw-* の名前で使える＝tailwind.config.js）。
+   ───────────────────────────────────────────────────────────── */
+:root {
+  /* 地：深い紺の宇宙 */
+  --cw-bg-0: #060a1c;
+  --cw-bg-1: #0b1230;
+  --cw-bg-2: #141c44;
+  /* 面：すりガラス */
+  --cw-surface: rgba(20, 30, 70, 0.62);
+  --cw-surface-strong: rgba(24, 36, 84, 0.86);
+  --cw-line: rgba(148, 170, 255, 0.18);
+  --cw-line-strong: rgba(148, 170, 255, 0.34);
+  --cw-top-light: rgba(255, 255, 255, 0.1);
+  /* 文字は 3段だけ（面の上で 4.5:1 いじょう） */
+  --cw-fg: #eef2ff;
+  --cw-fg-2: #c3cbe6;
+  --cw-fg-3: #93a0c8;
+  /* 色の役目（画面ごとに変えない） */
+  --cw-action: #38bdf8;   /* 行動：いま押す・出撃・すすむ */
+  --cw-reward: #facc15;   /* ごほうび・星・コイン */
+  --cw-growth: #6ee7b7;   /* 成長・学習・正解 */
+  --cw-rare: #a78bfa;     /* めずらしい・スキル */
+  --cw-danger: #f87171;   /* 注意・危険・敵 */
+  --cw-cat: #fb923c;      /* ネコの側 */
+  --cw-on-color: #0b1230; /* 役目の色の上に のせる字 */
+  /* 字 */
+  --cw-font: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif;
+  --cw-font-num: Orbitron, "M PLUS Rounded 1c", system-ui, sans-serif;
+  /* 角は 4だん */
+  --cw-r-sm: 8px;
+  --cw-r-md: 14px;
+  --cw-r-lg: 22px;
+  --cw-r-pill: 999px;
+  /* 影・光（光は 役目の色でだけ。線 1px ＋ にじみ の 1種類） */
+  --cw-shadow-panel: 0 10px 30px -12px rgba(0, 0, 0, 0.6), inset 0 0 0 1px var(--cw-line);
+  --cw-lit-action: 0 0 0 1px var(--cw-action), 0 0 24px -8px var(--cw-action);
+  --cw-lit-reward: 0 0 0 1px var(--cw-reward), 0 0 24px -8px var(--cw-reward);
+  --cw-lit-growth: 0 0 0 1px var(--cw-growth), 0 0 24px -8px var(--cw-growth);
+  --cw-lit-rare: 0 0 0 1px var(--cw-rare), 0 0 24px -8px var(--cw-rare);
+  --cw-lit-danger: 0 0 0 1px var(--cw-danger), 0 0 24px -8px var(--cw-danger);
+  --cw-lit-cat: 0 0 0 1px var(--cw-cat), 0 0 24px -8px var(--cw-cat);
+  /* 動き */
+  --cw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html, body { background: var(--cw-bg-0); }
+body {
+  font-family: var(--cw-font);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--cw-fg);
+  font-variant-numeric: tabular-nums;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 画面の地：紺 → 藍の縦グラデ ＋ CSS の星（絵が無くても これだけで 宇宙に見える） */
+body::before, body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+body::before {
+  background:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27560%27%20height%3D%27560%27%3E%3Ccircle%20cx%3D%27134%27%20cy%3D%27512%27%20r%3D%270.9%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.67%27%2F%3E%3Ccircle%20cx%3D%27479%27%20cy%3D%27202%27%20r%3D%270.5%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.28%27%2F%3E%3Ccircle%20cx%3D%27545%27%20cy%3D%27298%27%20r%3D%270.8%27%20fill%3D%27%23c7d2fe%27%20fill-opacity%3D%270.50%27%2F%3E%3Ccircle%20cx%3D%27435%27%20cy%3D%27437%27%20r%3D%270.8%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.46%27%2F%3E%3Ccircle%20cx%3D%27203%27%20cy%3D%27270%27%20r%3D%270.6%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.59%27%2F%3E%3Ccircle%20cx%3D%27201%27%20cy%3D%27100%27%20r%3D%271.2%27%20fill%3D%27%23c7d2fe%27%20fill-opacity%3D%270.30%27%2F%3E%3Ccircle%20cx%3D%27256%27%20cy%3D%2760%27%20r%3D%270.6%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.53%27%2F%3E%3Ccircle%20cx%3D%2747%27%20cy%3D%27339%27%20r%3D%271.1%27%20fill%3D%27%23c7d2fe%27%20fill-opacity%3D%270.37%27%2F%3E%3Ccircle%20cx%3D%27198%27%20cy%3D%27175%27%20r%3D%270.9%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.57%27%2F%3E%3Ccircle%20cx%3D%2789%27%20cy%3D%27490%27%20r%3D%270.9%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.42%27%2F%3E%3Ccircle%20cx%3D%27271%27%20cy%3D%27100%27%20r%3D%270.7%27%20fill%3D%27%23c7d2fe%27%20fill-opacity%3D%270.66%27%2F%3E%3Ccircle%20cx%3D%27276%27%20cy%3D%2798%27%20r%3D%270.8%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.33%27%2F%3E%3Ccircle%20cx%3D%27387%27%20cy%3D%27426%27%20r%3D%270.6%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.49%27%2F%3E%3Ccircle%20cx%3D%27494%27%20cy%3D%27208%27%20r%3D%270.8%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.54%27%2F%3E%3Ccircle%20cx%3D%27282%27%20cy%3D%27270%27%20r%3D%271.0%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.68%27%2F%3E%3Ccircle%20cx%3D%27496%27%20cy%3D%27116%27%20r%3D%270.7%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.68%27%2F%3E%3Ccircle%20cx%3D%27117%27%20cy%3D%2729%27%20r%3D%270.7%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.62%27%2F%3E%3Ccircle%20cx%3D%27118%27%20cy%3D%27285%27%20r%3D%271.0%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.44%27%2F%3E%3Ccircle%20cx%3D%27197%27%20cy%3D%27115%27%20r%3D%271.1%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.34%27%2F%3E%3Ccircle%20cx%3D%27392%27%20cy%3D%27247%27%20r%3D%270.7%27%20fill%3D%27%23c7d2fe%27%20fill-opacity%3D%270.49%27%2F%3E%3Ccircle%20cx%3D%2756%27%20cy%3D%27216%27%20r%3D%270.8%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.59%27%2F%3E%3Ccircle%20cx%3D%27433%27%20cy%3D%27130%27%20r%3D%271.0%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.51%27%2F%3E%3Ccircle%20cx%3D%27416%27%20cy%3D%27461%27%20r%3D%270.9%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.63%27%2F%3E%3Ccircle%20cx%3D%27418%27%20cy%3D%27244%27%20r%3D%271.2%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.66%27%2F%3E%3Ccircle%20cx%3D%27158%27%20cy%3D%27475%27%20r%3D%271.1%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.69%27%2F%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%27495%27%20r%3D%270.7%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.69%27%2F%3E%3Ccircle%20cx%3D%27518%27%20cy%3D%27467%27%20r%3D%271.0%27%20fill%3D%27%23c7d2fe%27%20fill-opacity%3D%270.50%27%2F%3E%3Ccircle%20cx%3D%27104%27%20cy%3D%2715%27%20r%3D%270.5%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.31%27%2F%3E%3Ccircle%20cx%3D%2749%27%20cy%3D%27205%27%20r%3D%270.8%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.70%27%2F%3E%3Ccircle%20cx%3D%27310%27%20cy%3D%27284%27%20r%3D%270.8%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.49%27%2F%3E%3Ccircle%20cx%3D%27379%27%20cy%3D%27131%27%20r%3D%270.8%27%20fill%3D%27%23bae6fd%27%20fill-opacity%3D%270.33%27%2F%3E%3Ccircle%20cx%3D%27419%27%20cy%3D%27242%27%20r%3D%270.6%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.66%27%2F%3E%3Ccircle%20cx%3D%27329%27%20cy%3D%2785%27%20r%3D%271.1%27%20fill%3D%27%23c7d2fe%27%20fill-opacity%3D%270.42%27%2F%3E%3Ccircle%20cx%3D%27259%27%20cy%3D%27151%27%20r%3D%270.7%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.56%27%2F%3E%3C%2Fsvg%3E") 0 0 / 560px 560px,
+    linear-gradient(180deg, var(--cw-bg-0) 0%, var(--cw-bg-1) 55%, var(--cw-bg-2) 100%);
+}
+body::after {
+  background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27640%27%20height%3D%27640%27%3E%3Ccircle%20cx%3D%279%27%20cy%3D%27504%27%20r%3D%271.4%27%20fill%3D%27%23fde68a%27%20fill-opacity%3D%270.77%27%2F%3E%3Ccircle%20cx%3D%27341%27%20cy%3D%27184%27%20r%3D%271.2%27%20fill%3D%27%23fde68a%27%20fill-opacity%3D%270.93%27%2F%3E%3Ccircle%20cx%3D%2718%27%20cy%3D%27208%27%20r%3D%271.4%27%20fill%3D%27%23e0e7ff%27%20fill-opacity%3D%270.53%27%2F%3E%3Ccircle%20cx%3D%27582%27%20cy%3D%27273%27%20r%3D%271.7%27%20fill%3D%27%23fde68a%27%20fill-opacity%3D%270.50%27%2F%3E%3Ccircle%20cx%3D%27157%27%20cy%3D%27276%27%20r%3D%271.7%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.61%27%2F%3E%3Ccircle%20cx%3D%27605%27%20cy%3D%2788%27%20r%3D%271.3%27%20fill%3D%27%23e0e7ff%27%20fill-opacity%3D%270.51%27%2F%3E%3Ccircle%20cx%3D%27115%27%20cy%3D%27436%27%20r%3D%271.7%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.70%27%2F%3E%3Ccircle%20cx%3D%27557%27%20cy%3D%27290%27%20r%3D%271.0%27%20fill%3D%27%23fde68a%27%20fill-opacity%3D%270.73%27%2F%3E%3Ccircle%20cx%3D%27185%27%20cy%3D%27253%27%20r%3D%271.5%27%20fill%3D%27%23fde68a%27%20fill-opacity%3D%270.89%27%2F%3E%3Ccircle%20cx%3D%27398%27%20cy%3D%2769%27%20r%3D%271.0%27%20fill%3D%27%23fde68a%27%20fill-opacity%3D%270.59%27%2F%3E%3Ccircle%20cx%3D%27373%27%20cy%3D%27518%27%20r%3D%271.6%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.83%27%2F%3E%3Ccircle%20cx%3D%27421%27%20cy%3D%27144%27%20r%3D%271.0%27%20fill%3D%27%23e0e7ff%27%20fill-opacity%3D%270.91%27%2F%3E%3Ccircle%20cx%3D%27235%27%20cy%3D%27556%27%20r%3D%271.7%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.75%27%2F%3E%3Ccircle%20cx%3D%27262%27%20cy%3D%27532%27%20r%3D%271.7%27%20fill%3D%27%23ffffff%27%20fill-opacity%3D%270.85%27%2F%3E%3C%2Fsvg%3E") 40px 90px / 640px 640px;
+  animation: cw-twinkle 7s ease-in-out infinite alternate;
+}
+@keyframes cw-twinkle { from { opacity: 0.35; } to { opacity: 1; } }
+
+/* ── 部品の きまり（catwars/components/ui/ が使う） ── */
+.cw-panel {
+  background: var(--cw-surface);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-radius: var(--cw-r-lg);
+  box-shadow: var(--cw-shadow-panel), inset 0 1px 0 var(--cw-top-light);
+}
+.cw-panel-strong { background: var(--cw-surface-strong); }
+.cw-press { transition: transform 0.12s var(--cw-ease), box-shadow 0.2s var(--cw-ease), background-color 0.2s var(--cw-ease); }
+.cw-press:active:not([aria-disabled="true"]):not(:disabled) { transform: scale(0.97); }
+.cw-enter { animation: cw-enter 0.22s var(--cw-ease) both; }
+@keyframes cw-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* ごほうび：ゴールドの光が ふくらむ */
+.cw-reward-pop { animation: cw-reward-pop 0.5s var(--cw-ease) both; }
+@keyframes cw-reward-pop {
+  0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.55); }
+  100% { box-shadow: 0 0 0 18px rgba(250, 204, 21, 0); }
+}
+.cw-logo {
+  font-family: var(--cw-font-num);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  background: linear-gradient(100deg, #fde68a 0%, #fb923c 38%, #f9a8d4 64%, #7dd3fc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(6, 10, 28, 0.9));
+}
+.cw-scroll { scrollbar-width: thin; scrollbar-color: var(--cw-line-strong) transparent; }
+/* 色の役目 → 部品の 色（--tone 色・--tone-bg うすい面・--tone-lit 光） */
+.cw-tone-action { --tone: var(--cw-action); --tone-bg: rgba(56, 189, 248, 0.14); --tone-lit: var(--cw-lit-action); }
+.cw-tone-reward { --tone: var(--cw-reward); --tone-bg: rgba(250, 204, 21, 0.14); --tone-lit: var(--cw-lit-reward); }
+.cw-tone-growth { --tone: var(--cw-growth); --tone-bg: rgba(110, 231, 183, 0.14); --tone-lit: var(--cw-lit-growth); }
+.cw-tone-rare { --tone: var(--cw-rare); --tone-bg: rgba(167, 139, 250, 0.16); --tone-lit: var(--cw-lit-rare); }
+.cw-tone-danger { --tone: var(--cw-danger); --tone-bg: rgba(248, 113, 113, 0.14); --tone-lit: var(--cw-lit-danger); }
+.cw-tone-cat { --tone: var(--cw-cat); --tone-bg: rgba(251, 146, 60, 0.14); --tone-lit: var(--cw-lit-cat); }
+.cw-tone-neutral { --tone: var(--cw-fg-2); --tone-bg: rgba(148, 170, 255, 0.1); --tone-lit: 0 0 0 1px var(--cw-line-strong); }
+
+/* カード（押せる札）：面は パネルと 同じ・角は 14 */
+.cw-card {
+  background: var(--cw-surface);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-radius: var(--cw-r-md);
+  box-shadow: var(--cw-shadow-panel), inset 0 1px 0 var(--cw-top-light);
+  text-align: left;
+  color: var(--cw-fg);
+}
+button.cw-card:hover:not([aria-disabled="true"]) { box-shadow: var(--cw-shadow-panel), inset 0 1px 0 var(--cw-top-light), 0 0 0 1px var(--cw-line-strong); }
+.cw-card[aria-disabled="true"] { background: var(--cw-surface-strong); color: var(--cw-fg-3); }
+.cw-card[aria-disabled="true"] .cw-card-icon { filter: grayscale(0.85) brightness(0.8); }
+.cw-card-icon { display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: var(--cw-r-md); background: var(--tone-bg); flex-shrink: 0; }
+.cw-card-on { box-shadow: var(--cw-shadow-panel), var(--tone-lit); }
+
+/* ボタン */
+.cw-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: var(--cw-r-md); border: 0; cursor: pointer; font-family: var(--cw-font); font-weight: 800; line-height: 1.2;
+  padding: 0 20px; text-align: center; max-width: 100%; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.cw-btn-primary { background: linear-gradient(180deg, #7dd3fc 0%, #38bdf8 100%); color: var(--cw-on-color); box-shadow: 0 0 0 1px #7dd3fc, 0 8px 22px -8px rgba(56, 189, 248, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.55); }
+.cw-btn-reward { background: linear-gradient(180deg, #fde68a 0%, #facc15 100%); color: var(--cw-on-color); box-shadow: 0 0 0 1px #fde68a, 0 8px 22px -8px rgba(250, 204, 21, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+.cw-btn-success { background: linear-gradient(180deg, #a7f3d0 0%, #6ee7b7 100%); color: var(--cw-on-color); box-shadow: 0 0 0 1px #a7f3d0, 0 8px 22px -8px rgba(110, 231, 183, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.55); }
+.cw-btn-danger { background: linear-gradient(180deg, #fca5a5 0%, #f87171 100%); color: var(--cw-on-color); box-shadow: 0 0 0 1px #fca5a5, 0 8px 22px -8px rgba(248, 113, 113, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+.cw-btn-secondary { background: var(--cw-surface); color: var(--cw-fg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: inset 0 0 0 1px var(--cw-line-strong), inset 0 1px 0 var(--cw-top-light); }
+.cw-btn-ghost { background: transparent; color: var(--cw-fg-2); box-shadow: none; }
+.cw-btn[disabled], .cw-btn[aria-disabled="true"] { background: var(--cw-surface-strong); color: var(--cw-fg-3); box-shadow: inset 0 0 0 1px var(--cw-line); cursor: not-allowed; }
+.cw-btn:focus-visible, .cw-card:focus-visible, .cw-seg:focus-visible { outline: 2px solid var(--cw-fg); outline-offset: 2px; }
+
+/* ぶんかつの ボタン（Segmented）・タブ・チップ */
+.cw-seg {
+  border: 0; cursor: pointer; border-radius: var(--cw-r-md); background: var(--cw-surface); color: var(--cw-fg-2);
+  box-shadow: inset 0 0 0 1px var(--cw-line); font-family: var(--cw-font);
+}
+.cw-seg[aria-checked="true"], .cw-seg[aria-selected="true"], .cw-seg.is-on { background: var(--tone-bg); color: var(--cw-fg); box-shadow: var(--tone-lit); }
+.cw-seg[aria-disabled="true"], .cw-seg:disabled { background: var(--cw-surface-strong); color: var(--cw-fg-3); cursor: not-allowed; }
+.cw-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--cw-r-sm); font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--tone); background: var(--tone-bg); box-shadow: inset 0 0 0 1px var(--cw-line); }
+.cw-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 4px 8px; border-radius: var(--cw-r-pill); background: var(--cw-surface-strong); box-shadow: inset 0 0 0 1px var(--cw-line-strong); min-height: 36px; }
+
+/* 画面の中身は 地（ScreenBackdrop）の上に出す */
+.cw-screen { position: relative; font-family: var(--cw-font); color: var(--cw-fg); }
+.cw-backdrop { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  body::after { animation: none; opacity: 0.7; }
+  .cw-press { transition: none; }
+  .cw-press:active:not([aria-disabled="true"]):not(:disabled) { transform: none; }
+  .cw-enter { animation: cw-fade 0.2s linear both; }
+  .cw-reward-pop { animation: none; }
+}
+@keyframes cw-fade { from { opacity: 0; } to { opacity: 1; } }
+
+
 /* Ensure inline SVGs scale properly within their containers */
 .svg-container svg {
   width: 100%;

@@ -17,6 +17,7 @@ import { useFriendStore } from '../../store/useFriendStore';
 import { usePortal } from '../../portal/usePortal';
 import { isDemo } from '../../portal/demoMode';
 import { StarRow } from '../expedition/ExpeditionParts';
+import { Card, ScreenBackdrop, TitleBar } from '../ui';
 
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
@@ -50,21 +51,9 @@ function useCounts(): 'class' | 'sample' {
 
 /** ホームの カード */
 export const FriendCard: React.FC<{ locked?: string | null; onOpen: () => void }> = ({ locked, onOpen }) => (
-  <div className="px-4 pt-3">
-    <button onClick={onOpen} data-testid="friend-card" aria-disabled={locked ? true : undefined}
-      className={`w-full text-left rounded-2xl border-2 p-3.5 transition-all active:scale-[0.99] ${locked ? 'opacity-70' : ''}`}
-      style={{ borderColor: ACCENT, background: 'linear-gradient(135deg, rgba(56,189,248,0.16), rgba(15,23,42,0.6))', boxShadow: `0 0 14px ${ACCENT}44`, ...font }}>
-      <div className="flex items-center gap-3">
-        <span className="text-3xl leading-none">🏠</span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] tracking-[0.2em]" style={{ color: ACCENT, ...fontMono }}>FRIEND BASE</div>
-          <div className="text-white font-black text-base leading-tight">なかまの 基地に いく</div>
-          <div className="text-white/55 text-[11px]">同じ学級の なかまの 基地の 配置に せめこもう（なかまは その場に いなくていい）</div>
-        </div>
-      </div>
-      {locked && <p className="mt-1.5 text-[11px] text-[#fca5a5]">🔒 {locked}</p>}
-    </button>
-  </div>
+  <Card icon="friend" title="なかまの 基地に いく" data-testid="friend-card"
+    sub="同じ学級の なかまの 基地の 配置に せめこもう"
+    lockReason={locked ?? undefined} locked={!!locked} onClick={onOpen} />
 );
 
 /** 相手を えらぶ（3つ）。avgLevel＝手持ちの平均レベル（敵の強さ「てき Lv」を 出す） */
@@ -86,14 +75,9 @@ export const FriendScreen: React.FC<{
   const bonusLeft = saved.bonusDay !== day;
   const loading = counts === 'class' && st === 'loading';
   return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col" style={font} data-testid="friend-screen">
-      <div className="flex items-center gap-3 p-4 border-b border-white/10">
-        <button onClick={onBack} className="text-white/60 hover:text-white text-sm">← もどる</button>
-        <div className="min-w-0">
-          <h2 className="font-bold text-sm leading-tight" style={{ color: ACCENT, ...fontMono }}>なかまの 基地に いく</h2>
-          <p className="text-white/45 text-[10px]">{day} の 3つ（日づけが かわると 入れかわる）</p>
-        </div>
-      </div>
+    <div className="cw-screen min-h-[100dvh] h-[100dvh] flex flex-col" style={font} data-testid="friend-screen">
+      <ScreenBackdrop name="friend" />
+      <TitleBar title="なかまの 基地に いく" onBack={onBack} subtitle={<>{day} の 3つ（日づけが かわると 入れかわる）</>} />
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-w-3xl w-full mx-auto">
         {counts === 'sample' && (
           <p className="text-white/60 text-[11px] leading-relaxed rounded-xl border border-white/10 p-2.5" data-testid="friend-sample-note" style={{ background: 'rgba(6,10,24,0.55)' }}>

@@ -14,25 +14,31 @@ import { TIER_INFO, TIER_ORDER } from '../../data/campaign';
 import { refreshCollection, buildBadgeInput } from '../../collection/record';
 import { ArtImg, BadgeMedal, DecorFlag, StickerView } from './CollectionParts';
 import { sfx } from '../../utils/audioEngine';
+import { Button, Icon, Panel, ScreenBackdrop, SectionTitle, TitleBar, useOptionalImage, type IconName } from '../ui';
 
 /**
  * あつめる（2026-11-16 CW-4c）：図鑑（ネコ・敵）・バッジ・カプセル・アルバム・称号とかざり。docs/REBUILD_SPEC.md §3d。
  * どれも 強さには ひびかない（ネコの育ち方は「ネコ部隊」）。
  */
 
-const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
-const fontMono = { fontFamily: 'Orbitron, monospace' };
-
 export type CollectionTab = 'dex' | 'badges' | 'capsule' | 'album' | 'title';
-const TABS: { id: CollectionTab; label: string; icon: string }[] = [
-  { id: 'dex', label: 'ずかん', icon: '📖' },
-  { id: 'badges', label: 'バッジ', icon: '🏅' },
-  { id: 'capsule', label: 'カプセル', icon: '🎰' },
-  { id: 'album', label: 'アルバム', icon: '📒' },
-  { id: 'title', label: 'しょうごう', icon: '🎖️' },
+const TABS: { id: CollectionTab; label: string; icon: IconName }[] = [
+  { id: 'dex', label: 'ずかん', icon: 'dex' },
+  { id: 'badges', label: 'バッジ', icon: 'medal' },
+  { id: 'capsule', label: 'カプセル', icon: 'capsule' },
+  { id: 'album', label: 'アルバム', icon: 'album' },
+  { id: 'title', label: 'しょうごう', icon: 'ribbon' },
 ];
 
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+
+/** 下地つきの 小さな 数の札（図鑑・バッジ・アルバムの 進み） */
+const Count: React.FC<{ icon: IconName; have: number; total: number; label: string }> = ({ icon, have, total, label }) => (
+  <span className="cw-pill" title={`${label} ${pct(have, total)}%`} aria-label={`${label} ${have}/${total}（${pct(have, total)}%）`}>
+    <Icon name={icon} size={22} />
+    <span className="font-cw-num font-bold text-cw-14">{have}<span style={{ color: 'var(--cw-fg-3)' }}>/{total}</span></span>
+  </span>
+);
 
 export const CollectionScreen: React.FC<{ onBack: () => void; initialTab?: CollectionTab }> = ({ onBack, initialTab = 'dex' }) => {
   const [tab, setTab] = useState<CollectionTab>(initialTab);
@@ -46,36 +52,35 @@ export const CollectionScreen: React.FC<{ onBack: () => void; initialTab?: Colle
   const badgeTiers = badgeTierCount(col.badges);
 
   return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col bg-[#0a0e1a] overflow-hidden" style={font}>
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10" style={{ background: 'rgba(10,14,26,0.95)' }}>
-        <button onClick={onBack} className="text-white/60 hover:text-white text-sm shrink-0">← もどる</button>
-        <h2 className="text-[#7dd3fc] font-bold text-base shrink-0" style={fontMono}>あつめる</h2>
-        <div className="ml-auto flex flex-wrap justify-end gap-x-3 gap-y-0.5 text-[11px] text-white/70" data-testid="collection-progress">
-          <span>📖 {dexHave}/{dexTotal}（{pct(dexHave, dexTotal)}%）</span>
-          <span>🏅 {badgeTiers}/{BADGE_TIER_TOTAL}（{pct(badgeTiers, BADGE_TIER_TOTAL)}%）</span>
-          <span>📒 {stickers}/{STICKERS.length}（{pct(stickers, STICKERS.length)}%）</span>
-          <span className="text-[#fde68a] font-bold">🪙 {col.coins}</span>
+    <div className="cw-screen h-[100dvh] flex flex-col overflow-hidden" data-testid="collection-screen">
+      <ScreenBackdrop name="collection" />
+      <TitleBar title="あつめる" onBack={onBack}
+        right={
+          <div className="flex items-center gap-2 flex-wrap justify-end" data-testid="collection-progress">
+            <Count icon="dex" have={dexHave} total={dexTotal} label="ずかん" />
+            <Count icon="medal" have={badgeTiers} total={BADGE_TIER_TOTAL} label="バッジ" />
+            <Count icon="album" have={stickers} total={STICKERS.length} label="アルバム" />
+            <span className="cw-pill" aria-label={`シールコイン ${col.coins}`}><Icon name="coin" size={22} /><span className="font-cw-num font-bold text-cw-14">{col.coins}</span></span>
+          </div>
+        } />
+      <div className="flex-shrink-0 px-4 pt-3 pb-2 overflow-x-auto cw-scroll">
+        <div className="mx-auto max-w-[980px] grid grid-cols-5 gap-2 min-w-[560px]" role="tablist" aria-label="あつめる">
+          {TABS.map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} data-tab={t.id} onClick={() => { sfx.select(); setTab(t.id); }}
+              className="cw-seg cw-press cw-tone-action min-h-[48px] px-2 flex items-center justify-center gap-1.5 text-cw-14 font-extrabold whitespace-nowrap">
+              <Icon name={t.icon} size={24} />{t.label}
+            </button>
+          ))}
         </div>
       </div>
-      <div className="flex gap-1.5 px-3 py-2 border-b border-white/10 overflow-x-auto">
-        {TABS.map((t) => (
-          <button key={t.id} data-tab={t.id} onClick={() => { sfx.select(); setTab(t.id); }}
-            className="px-3 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-all"
-            style={{
-              background: tab === t.id ? 'rgba(125,211,252,0.2)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${tab === t.id ? '#7dd3fc' : 'rgba(255,255,255,0.12)'}`,
-              color: tab === t.id ? '#fff' : 'rgba(255,255,255,0.65)',
-            }}>
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
-      <div className="flex-1 overflow-y-auto p-3">
-        {tab === 'dex' && <DexTab />}
-        {tab === 'badges' && <BadgesTab />}
-        {tab === 'capsule' && <CapsuleTab onAlbum={() => setTab('album')} />}
-        {tab === 'album' && <AlbumTab />}
-        {tab === 'title' && <TitleTab />}
+      <div className="flex-1 overflow-y-auto cw-scroll px-4 pt-2 pb-6">
+        <div className="mx-auto max-w-[980px] cw-enter" key={tab}>
+          {tab === 'dex' && <DexTab />}
+          {tab === 'badges' && <BadgesTab />}
+          {tab === 'capsule' && <CapsuleTab onAlbum={() => setTab('album')} />}
+          {tab === 'album' && <AlbumTab />}
+          {tab === 'title' && <TitleTab />}
+        </div>
       </div>
     </div>
   );
@@ -90,14 +95,12 @@ const DexTab: React.FC = () => {
   const enemyHave = seen.filter((k) => ENEMY_DEX.some((e) => e.key === k)).length;
   return (
     <div>
-      <div className="flex gap-2 mb-3">
-        {([['cats', `🐱 ネコ ${catHave}/${CAT_DEX_KEYS.length}`], ['enemies', `👾 てき ${enemyHave}/${ENEMY_DEX.length}`]] as const).map(([id, label]) => (
-          <button key={id} data-sub={id} onClick={() => setSub(id)}
-            className="flex-1 py-2 rounded-xl text-sm font-bold"
-            style={{
-              background: sub === id ? 'rgba(163,230,53,0.16)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${sub === id ? '#a3e635' : 'rgba(255,255,255,0.12)'}`, color: sub === id ? '#fff' : 'rgba(255,255,255,0.6)',
-            }}>{label}</button>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {([['cats', 'cats', `ネコ ${catHave}/${CAT_DEX_KEYS.length}`, 'growth'], ['enemies', 'enemy', `てき ${enemyHave}/${ENEMY_DEX.length}`, 'danger']] as const).map(([id, icon, label, tone]) => (
+          <button key={id} type="button" data-sub={id} aria-selected={sub === id} onClick={() => setSub(id)}
+            className={`cw-seg cw-press cw-tone-${tone} min-h-[48px] flex items-center justify-center gap-2 text-cw-14 font-extrabold`}>
+            <Icon name={icon} size={24} />{label}
+          </button>
         ))}
       </div>
       {sub === 'cats' ? <CatDex found={cats} /> : <EnemyDex />}
@@ -106,22 +109,24 @@ const DexTab: React.FC = () => {
 };
 
 const CatDex: React.FC<{ found: string[] }> = ({ found }) => (
-  <div className="flex flex-col gap-2" data-testid="cat-dex">
+  <div className="flex flex-col gap-3" data-testid="cat-dex">
     {CHARACTERS.map((fam) => (
-      <div key={fam.id} className="rounded-2xl border p-2" style={{ borderColor: `${fam.accent}44`, background: `${fam.accent}0a` }}>
-        <div className="text-[12px] font-bold mb-1.5" style={{ color: fam.accent }}>{fam.displayName}</div>
+      <Panel key={fam.id} className="!p-3">
+        <div className="text-cw-14 font-extrabold mb-2 flex items-center gap-2" style={{ color: 'var(--cw-fg)' }}>
+          <span aria-hidden className="inline-block w-1 h-4 rounded-full" style={{ background: fam.accent }} />{fam.displayName}
+        </div>
         <div className="grid grid-cols-3 gap-2">
           {([1, 2, 3] as const).map((st) => {
             const ok = found.includes(catDexKey(fam.id, st));
             const form = fam.forms[st - 1];
             return (
-              <div key={st} className="flex items-center gap-2 p-1.5 rounded-xl min-w-0" data-found={ok ? '1' : '0'}
-                style={{ background: ok ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.25)' }}>
+              <div key={st} className="flex items-center gap-2 p-2 rounded-cw-md min-w-0" data-found={ok ? '1' : '0'}
+                style={{ background: ok ? 'rgba(148,170,255,0.1)' : 'rgba(6,10,28,0.45)' }}>
                 <img src={getCharacterSprite(fam.spriteFamily, st)} alt="" draggable={false}
-                  style={{ width: 48, height: 48, objectFit: 'contain', flexShrink: 0, filter: ok ? undefined : 'brightness(0) opacity(0.55)' }} />
+                  style={{ width: 56, height: 56, objectFit: 'contain', flexShrink: 0, filter: ok ? undefined : 'brightness(0) opacity(0.5)' }} />
                 <div className="min-w-0">
-                  <div className="text-white text-[12px] font-bold leading-tight truncate">{ok ? form.name : '？？？'}</div>
-                  <div className="text-[10px] leading-snug" style={{ color: ok ? 'rgba(255,255,255,0.55)' : '#fde68a' }}>
+                  <div className="text-cw-14 font-bold leading-tight truncate" style={{ color: 'var(--cw-fg)' }}>{ok ? form.name : '？？？'}</div>
+                  <div className="text-cw-12 leading-snug" style={{ color: ok ? 'var(--cw-fg-3)' : 'var(--cw-reward)' }}>
                     {ok ? `しんか${st}` : catHowToMeet(fam, st)}
                   </div>
                 </div>
@@ -129,23 +134,23 @@ const CatDex: React.FC<{ found: string[] }> = ({ found }) => (
             );
           })}
         </div>
-      </div>
+      </Panel>
     ))}
   </div>
 );
 
-const EnemyPic: React.FC<{ e: EnemyDexEntry; ok: boolean; size?: number }> = ({ e, ok, size = 52 }) => {
+const EnemyPic: React.FC<{ e: EnemyDexEntry; ok: boolean; size?: number }> = ({ e, ok, size = 64 }) => {
   if (e.image) {
     // 見つけるまでは かげ（形だけ）
     return (
       <img src={e.image} alt="" draggable={false} data-testid="enemy-pic"
         style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0,
-          filter: ok ? 'drop-shadow(0 0 3px rgba(239,68,68,0.7))' : 'brightness(0) opacity(0.55)' }} />
+          filter: ok ? 'drop-shadow(0 0 3px rgba(248,113,113,0.6))' : 'brightness(0) opacity(0.5)' }} />
     );
   }
   return (
     <div className="flex items-center justify-center rounded-full shrink-0"
-      style={{ width: size, height: size, background: ok ? 'rgba(239,68,68,0.18)' : 'rgba(0,0,0,0.4)', border: '2px solid rgba(239,68,68,0.5)', fontSize: size * 0.5 }}>
+      style={{ width: size, height: size, background: ok ? 'rgba(248,113,113,0.16)' : 'rgba(6,10,28,0.5)', boxShadow: 'inset 0 0 0 2px rgba(248,113,113,0.5)', fontSize: size * 0.5 }}>
       {ok ? e.emoji : '？'}
     </div>
   );
@@ -157,37 +162,37 @@ const EnemyDex: React.FC = () => {
   const marks = useCollectionStore((s) => s.marks);
   return (
     <div data-testid="enemy-dex">
-      <p className="text-[11px] text-white/50 mb-2">戦いで 見ると のる。たおすと 数が ふえる。しるし（●）は ふつう・むずかしい・げきむず で たおした（ボスは 勝った）しるし。</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <p className="text-cw-12 mb-2" style={{ color: 'var(--cw-fg-3)' }}>戦いで 見ると のる。たおすと 数が ふえる。しるし（●）は ふつう・むずかしい・げきむず で たおした（ボスは 勝った）しるし。</p>
+      <div className="grid grid-cols-1 min-[900px]:grid-cols-2 gap-2">
         {ENEMY_DEX.map((e) => {
           const ok = seen.includes(e.key);
           return (
-            <div key={e.key} className="flex gap-2.5 p-2.5 rounded-2xl border" data-found={ok ? '1' : '0'}
-              style={{ borderColor: ok ? 'rgba(239,68,68,0.45)' : 'rgba(255,255,255,0.08)', background: ok ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.02)' }}>
+            <div key={e.key} className="cw-card flex gap-3 p-3" data-found={ok ? '1' : '0'}
+              style={{ boxShadow: ok ? 'var(--cw-shadow-panel), 0 0 0 1px rgba(248,113,113,0.45)' : undefined, background: ok ? undefined : 'rgba(6,10,28,0.45)' }}>
               <EnemyPic e={e} ok={ok} />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-white font-bold text-[13px]">{ok ? e.name : '？？？'}</span>
-                  {e.kind === 'boss' && <span className="text-[9px] px-1.5 rounded-full bg-[#facc15]/20 text-[#facc15]">第{e.chapterNo}章 ボス</span>}
-                  {ok && <span className="text-[10px] text-white/50 ml-auto">たおした {defeated[e.key] ?? 0}</span>}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-cw-14 font-extrabold" style={{ color: 'var(--cw-fg)' }}>{ok ? e.name : '？？？'}</span>
+                  {e.kind === 'boss' && <span className="cw-chip cw-tone-reward">第{e.chapterNo}章 ボス</span>}
+                  {ok && <span className="text-cw-12 ml-auto" style={{ color: 'var(--cw-fg-3)' }}>たおした {defeated[e.key] ?? 0}</span>}
                 </div>
                 {ok ? (
                   <>
-                    <div className="text-[10px] text-white/60 leading-snug mt-0.5">{e.note}</div>
-                    {e.hint && <div className="text-[10px] text-[#7dd3fc] leading-snug mt-0.5">💡 {e.hint}</div>}
-                    <div className="flex gap-2 mt-1" aria-label="段ごとの しるし">
+                    <div className="text-cw-12 leading-snug mt-0.5" style={{ color: 'var(--cw-fg-2)' }}>{e.note}</div>
+                    {e.hint && <div className="text-cw-12 leading-snug mt-0.5 flex gap-1" style={{ color: 'var(--cw-action)' }}><Icon name="bulb" size={16} className="mt-px" />{e.hint}</div>}
+                    <div className="flex gap-3 mt-1" aria-label="段ごとの しるし">
                       {TIER_ORDER.map((t) => {
                         const has = marks.includes(markKey(e.key, t));
                         return (
-                          <span key={t} className="text-[10px] flex items-center gap-0.5" style={{ color: has ? TIER_INFO[t].color : 'rgba(255,255,255,0.25)' }}>
-                            {has ? '●' : '○'} {TIER_INFO[t].label}
+                          <span key={t} className="text-cw-12 flex items-center gap-1" style={{ color: has ? 'var(--cw-fg)' : 'var(--cw-fg-3)' }}>
+                            <span style={{ color: has ? TIER_INFO[t].color : undefined }}>{has ? '●' : '○'}</span>{TIER_INFO[t].label}
                           </span>
                         );
                       })}
                     </div>
                   </>
                 ) : (
-                  <div className="text-[10px] text-[#fde68a] leading-snug mt-0.5">{e.where}</div>
+                  <div className="text-cw-12 leading-snug mt-0.5" style={{ color: 'var(--cw-reward)' }}>{e.where}</div>
                 )}
               </div>
             </div>
@@ -206,41 +211,41 @@ const BadgesTab: React.FC = () => {
   const input = useMemo(() => buildBadgeInput(), [badges]);
   return (
     <div data-testid="badge-list">
-      <p className="text-[11px] text-white/55 mb-2 leading-relaxed">
+      <p className="text-cw-12 mb-3 leading-relaxed" style={{ color: 'var(--cw-fg-3)' }}>
         バッジは 学習の 量と しつ だけで とれる（はやさ・勝った数・あそんだ時間 では とれない）。
-        とると 🪙シールコイン（銅 {BADGE_COINS[1]}・銀 {BADGE_COINS[2]}・金 {BADGE_COINS[3]}）。
+        とると <Icon name="coin" size={16} className="inline-block align-[-3px]" />シールコイン（銅 {BADGE_COINS[1]}・銀 {BADGE_COINS[2]}・金 {BADGE_COINS[3]}）。
       </p>
       {(['study', 'unit', 'battle', 'hidden'] as BadgeGroup[]).map((g) => (
-        <div key={g} className="mb-3">
-          <div className="text-white/70 text-xs font-bold mb-1.5">{GROUP_LABEL[g]}</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div key={g} className="mb-4">
+          <SectionTitle tone="growth" className="mb-2">{GROUP_LABEL[g]}</SectionTitle>
+          <div className="grid grid-cols-1 min-[900px]:grid-cols-2 gap-2">
             {BADGES.filter((b) => b.group === g).map((b) => {
               const tier = Math.min(b.tiers.length, badges[b.id] ?? 0);
               const locked = !!b.hidden && tier === 0;
               const v = b.measure(input);
               const next = b.tiers[tier];
               return (
-                <div key={b.id} className="flex items-center gap-2.5 p-2.5 rounded-2xl border" data-badge={b.id} data-tier={tier}
-                  style={{ borderColor: tier > 0 ? `${tierColor(b, tier)}88` : 'rgba(255,255,255,0.08)', background: tier > 0 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.015)' }}>
-                  <BadgeMedal id={b.id} tier={tier} locked={locked} />
+                <div key={b.id} className="cw-card flex items-center gap-3 p-3" data-badge={b.id} data-tier={tier}
+                  style={{ boxShadow: tier > 0 ? `var(--cw-shadow-panel), 0 0 0 1px ${tierColor(b, tier)}88` : undefined }}>
+                  <BadgeMedal id={b.id} tier={tier} locked={locked} size={56} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-white font-bold text-[13px] truncate">{locked ? '？？？' : b.name}</span>
-                      {tier > 0 && tierLabel(b, tier) && <span className="text-[10px] font-black" style={{ color: tierColor(b, tier) }}>{tierLabel(b, tier)}</span>}
+                    <div className="flex items-center gap-2">
+                      <span className="text-cw-14 font-extrabold truncate" style={{ color: 'var(--cw-fg)' }}>{locked ? '？？？' : b.name}</span>
+                      {tier > 0 && tierLabel(b, tier) && <span className="text-cw-12 font-black" style={{ color: tierColor(b, tier) }}>{tierLabel(b, tier)}</span>}
                     </div>
                     {locked ? (
-                      <div className="text-[10px] text-white/45">とると わかる かくしバッジ</div>
+                      <div className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>とると わかる かくしバッジ</div>
                     ) : next != null ? (
                       <>
-                        <div className="text-[10px] text-[#fde68a] leading-snug">
+                        <div className="text-cw-12 leading-snug" style={{ color: 'var(--cw-reward)' }}>
                           {b.tiers.length > 1 && `つぎの${TIER_NAME[(tier + 1) as 1 | 2 | 3]}：`}{b.cond(next)}
                         </div>
-                        <div className="h-1.5 rounded-full bg-white/10 mt-1 overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (v / next) * 100)}%`, background: '#7dd3fc' }} />
+                        <div className="h-2 rounded-full mt-1.5 overflow-hidden" style={{ background: 'rgba(148,170,255,0.16)' }}>
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (v / next) * 100)}%`, background: 'var(--cw-growth)' }} />
                         </div>
                       </>
                     ) : (
-                      <div className="text-[10px] text-white/55 leading-snug">{b.cond(b.tiers[b.tiers.length - 1])}・とった！</div>
+                      <div className="text-cw-12 leading-snug" style={{ color: 'var(--cw-fg-2)' }}>{b.cond(b.tiers[b.tiers.length - 1])}・とった！</div>
                     )}
                   </div>
                 </div>
@@ -262,6 +267,8 @@ const CapsuleTab: React.FC<{ onAlbum: () => void }> = ({ onAlbum }) => {
   const [last, setLast] = useState<PullResult | null>(null);
   const [opening, setOpening] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // カプセルの機械の絵（あれば）。無ければ アイコンの カプセル
+  const machine = useOptionalImage(['/assets/capsule/capsule-machine.webp', '/assets/capsule/capsule-machine.png']);
   const left = CAPSULE_RULES.pity - cap.sinceUp;
   const can = coins >= CAPSULE_RULES.cost && !opening;
   const unowned = STICKERS.filter((s) => !(cap.stickers[s.id] > 0));
@@ -275,104 +282,107 @@ const CapsuleTab: React.FC<{ onAlbum: () => void }> = ({ onAlbum }) => {
     window.setTimeout(() => { setLast(r); setOpening(false); }, 700);
   };
 
+  const capsulePic = (
+    <div style={opening ? { animation: 'cw-capsule-shake 0.35s ease-in-out infinite' } : undefined}>
+      {machine
+        ? <img src={machine} alt="" draggable={false} data-testid="capsule-machine" className="h-[200px] w-auto object-contain" />
+        : <Icon name="capsule" size={120} />}
+    </div>
+  );
+
   return (
-    <div className="grid gap-3 md:grid-cols-2" data-testid="capsule">
-      <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+    <div className="grid gap-3 min-[900px]:grid-cols-2 items-start" data-testid="capsule">
+      <Panel>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-white font-bold">🎰 シールカプセル</span>
-          <span className="text-[#fde68a] font-black" style={fontMono}>🪙 {coins}</span>
+          <span className="flex items-center gap-2 text-cw-16 font-extrabold"><Icon name="capsule" size={26} />シールカプセル</span>
+          <span className="flex items-center gap-1.5 font-cw-num font-black text-cw-16" style={{ color: 'var(--cw-reward)' }}><Icon name="coin" size={24} />{coins}</span>
         </div>
-        <div className="flex flex-col items-center justify-center rounded-2xl py-4 mb-2" style={{ minHeight: 170, background: 'radial-gradient(circle, rgba(125,211,252,0.12), transparent 70%)' }}>
-          {opening ? (
-            <div className="text-6xl" style={{ animation: 'cw-capsule-shake 0.35s ease-in-out infinite' }}>🔮</div>
-          ) : last ? (
-            <div className="flex flex-col items-center gap-1.5" data-testid="pull-result">
-              <StickerView s={last.sticker} size={96} />
-              <div className="text-white font-bold">{last.sticker.name}</div>
-              <div className="text-[11px] font-black" style={{ color: RARITY_INFO[last.sticker.rarity].color }}>
+        <div className="flex flex-col items-center justify-center rounded-cw-lg py-4 mb-3" style={{ minHeight: 220, background: 'radial-gradient(circle, rgba(56,189,248,0.14), transparent 70%)' }}>
+          {opening ? capsulePic : last ? (
+            <div className="flex flex-col items-center gap-1.5 cw-enter cw-reward-pop rounded-cw-lg p-2" data-testid="pull-result">
+              <StickerView s={last.sticker} size={104} />
+              <div className="text-cw-16 font-extrabold" style={{ color: 'var(--cw-fg)' }}>{last.sticker.name}</div>
+              <div className="text-cw-14 font-black" style={{ color: RARITY_INFO[last.sticker.rarity].color }}>
                 {RARITY_INFO[last.sticker.rarity].stars} {RARITY_INFO[last.sticker.rarity].label}{last.pity && '（天井！）'}
               </div>
-              <div className="text-[11px] text-white/70">
+              <div className="text-cw-12" style={{ color: 'var(--cw-fg-2)' }}>
                 {last.dup ? `もう もっていた → シールのかけら +${last.fragGain}` : 'あたらしい シール！ アルバムに はったよ'}
               </div>
             </div>
-          ) : (
-            <div className="text-6xl opacity-80">🔮</div>
-          )}
+          ) : capsulePic}
         </div>
-        <button onClick={doPull} disabled={!can} data-testid="pull"
-          className="w-full py-3 rounded-xl font-black text-base transition-all active:scale-95"
-          style={{ background: can ? 'linear-gradient(90deg,#0ea5e9,#a855f7)' : 'rgba(255,255,255,0.08)', color: can ? '#fff' : 'rgba(255,255,255,0.4)' }}>
-          1回 まわす（🪙{CAPSULE_RULES.cost}）
-        </button>
+        <Button variant="reward" size="xl" fullWidth onClick={doPull} disabled={!can} data-testid="pull">
+          1回 まわす（<Icon name="coin" size={24} />{CAPSULE_RULES.cost}）
+        </Button>
         {coins < CAPSULE_RULES.cost && (
-          <div className="text-[11px] text-white/55 mt-1.5 text-center">あと 🪙{CAPSULE_RULES.cost - coins}。まちがえずに とくと たまるよ</div>
+          <div className="text-cw-12 mt-1.5 text-center" style={{ color: 'var(--cw-fg-3)' }}>あと 🪙{CAPSULE_RULES.cost - coins}。まちがえずに とくと たまるよ</div>
         )}
-        <div className="mt-2 text-center text-[12px]" data-testid="pity">
-          <span className="text-[#c4b5fd] font-bold">あと {left}回で レアいじょう かくてい</span>
-          <span className="text-white/40">（{CAPSULE_RULES.pity}回で 天井）</span>
+        <div className="mt-2 text-center text-cw-14" data-testid="pity">
+          <span className="font-bold" style={{ color: 'var(--cw-rare)' }}>あと {left}回で レアいじょう かくてい</span>
+          <span style={{ color: 'var(--cw-fg-3)' }}>（{CAPSULE_RULES.pity}回で 天井）</span>
         </div>
-        <button onClick={onAlbum} className="w-full mt-2 py-1.5 rounded-lg text-[12px] text-[#7dd3fc] border border-[#7dd3fc]/30">📒 アルバムを 見る</button>
-      </div>
+        <Button variant="secondary" size="md" fullWidth className="mt-2" onClick={onAlbum}><Icon name="album" size={24} />アルバムを 見る</Button>
+      </Panel>
 
       <div className="flex flex-col gap-3">
-        <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(255,255,255,0.03)' }} data-testid="rates">
-          <div className="text-white font-bold text-sm mb-1.5">出る かくりつ</div>
-          <table className="w-full text-[12px]">
+        <Panel data-testid="rates">
+          <SectionTitle tone="rare" className="mb-2">出る かくりつ</SectionTitle>
+          <table className="w-full text-cw-12">
             <tbody>
               {RARITY_ORDER.map((r) => {
                 const kinds = STICKERS.filter((s) => s.rarity === r).length;
                 return (
-                  <tr key={r} className="border-t border-white/5">
-                    <td className="py-1" style={{ color: RARITY_INFO[r].color }}>{RARITY_INFO[r].stars} {RARITY_INFO[r].label}</td>
-                    <td className="py-1 text-right text-white font-bold" style={fontMono}>{RARITY_RATE[r]}%</td>
-                    <td className="py-1 text-right text-white/50">{kinds}しゅるい（1しゅるい {(RARITY_RATE[r] / kinds).toFixed(2)}%）</td>
+                  <tr key={r} style={{ borderTop: '1px solid var(--cw-line)' }}>
+                    <td className="py-1.5 font-bold" style={{ color: RARITY_INFO[r].color }}>{RARITY_INFO[r].stars} {RARITY_INFO[r].label}</td>
+                    <td className="py-1.5 text-right font-cw-num font-bold" style={{ color: 'var(--cw-fg)' }}>{RARITY_RATE[r]}%</td>
+                    <td className="py-1.5 text-right" style={{ color: 'var(--cw-fg-3)' }}>{kinds}しゅるい（1しゅるい {(RARITY_RATE[r] / kinds).toFixed(2)}%）</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          <div className="text-[10px] text-white/50 mt-1.5 leading-relaxed">
+          <div className="text-cw-12 mt-2 leading-relaxed" style={{ color: 'var(--cw-fg-3)' }}>
             9回 つづけて「ふつう」だったら、10回めは かならず レアいじょう（そのときの レア・スーパーレア・でんせつ の わりあいは ふだんと 同じ）。
             シールは かざり。強さは かわらない。ぜんぶ あつめても とくべつな ごほうびは ないよ。
           </div>
-        </div>
+        </Panel>
 
-        <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(255,255,255,0.03)' }} data-testid="exchange">
+        <Panel data-testid="exchange">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-white font-bold text-sm">🧩 シールのかけら で こうかん</span>
-            <span className="text-[#c4b5fd] font-black" style={fontMono}>🧩 {cap.frag}</span>
+            <SectionTitle tone="rare">シールのかけら で こうかん</SectionTitle>
+            <span className="flex items-center gap-1.5 font-cw-num font-black text-cw-14" style={{ color: 'var(--cw-rare)' }}><Icon name="shard" size={22} />{cap.frag}</span>
           </div>
-          <div className="text-[10px] text-white/55 mb-1.5 leading-relaxed">
+          <div className="text-cw-12 mb-2 leading-relaxed" style={{ color: 'var(--cw-fg-3)' }}>
             ダブると かけら（ふつう {DUP_FRAGMENTS.normal}・レア {DUP_FRAGMENTS.rare}・スーパーレア {DUP_FRAGMENTS.super}・でんせつ {DUP_FRAGMENTS.legend}）。
             ためると まだ もっていない すきな シールと こうかん（{RARITY_ORDER.map((r) => `${RARITY_INFO[r].label} ${EXCHANGE_COST[r]}`).join('・')}）。
           </div>
-          {msg && <div className="text-[11px] text-[#a3e635] mb-1">{msg}</div>}
-          <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-            {unowned.length === 0 && <span className="text-[11px] text-white/50">ぜんぶ もっているよ</span>}
+          {msg && <div className="text-cw-14 mb-1 font-bold" style={{ color: 'var(--cw-growth)' }}>{msg}</div>}
+          <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto cw-scroll">
+            {unowned.length === 0 && <span className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>ぜんぶ もっているよ</span>}
             {unowned.map((s) => {
               const cost = EXCHANGE_COST[s.rarity];
               const ok = cap.frag >= cost;
               return (
-                <button key={s.id} disabled={!ok}
+                <button key={s.id} type="button" disabled={!ok}
                   onClick={() => { if (exchange(s.id)) { sfx.select(); setMsg(`「${s.name}」と こうかんした！`); } }}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] border"
-                  style={{ borderColor: ok ? RARITY_INFO[s.rarity].color : 'rgba(255,255,255,0.08)', color: ok ? '#fff' : 'rgba(255,255,255,0.35)' }}>
-                  {ok ? <ArtImg src={s.image} size={18} fallback={<span>{s.emoji}</span>} /> : <span>？</span>}{ok ? s.name : RARITY_INFO[s.rarity].label}<span className="text-white/50">🧩{cost}</span>
+                  className="cw-seg cw-press min-h-[44px] flex items-center gap-1.5 px-3 text-cw-12 font-bold"
+                  style={{ boxShadow: `inset 0 0 0 1px ${ok ? RARITY_INFO[s.rarity].color : 'var(--cw-line)'}`, color: ok ? 'var(--cw-fg)' : 'var(--cw-fg-3)' }}>
+                  {ok ? <ArtImg src={s.image} size={24} fallback={<span>{s.emoji}</span>} /> : <Icon name="lock" size={18} />}{ok ? s.name : RARITY_INFO[s.rarity].label}
+                  <span className="flex items-center gap-0.5" style={{ color: 'var(--cw-fg-3)' }}><Icon name="shard" size={14} />{cost}</span>
                 </button>
               );
             })}
           </div>
-        </div>
+        </Panel>
 
-        <div className="rounded-2xl border border-white/10 p-3 text-[11px] text-white/65 leading-relaxed" style={{ background: 'rgba(255,255,255,0.03)' }}>
-          <div className="text-white font-bold text-sm mb-1">🪙 シールコインの もらいかた</div>
+        <Panel className="text-cw-12 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>
+          <div className="flex items-center gap-2 text-cw-14 font-extrabold mb-1" style={{ color: 'var(--cw-fg)' }}><Icon name="coin" size={22} />シールコインの もらいかた</div>
           ・その日 はじめて まちがえずに とく：+{COIN_RULES.firstOfDay}<br />
           ・まちがえずに {COIN_RULES.perPerfect}問 とくごとに +1（1日 {COIN_RULES.dailyPerfectCap}まいまで）<br />
           ・バッジを とる：銅 +{BADGE_COINS[1]}・銀 +{BADGE_COINS[2]}・金 +{BADGE_COINS[3]}<br />
           ・章の 星が ふえる：星1つ +{COIN_RULES.star}<br />
-          <span className="text-white/45">💠クレジット・⚡エナジーでは まわせない。お金も つかわない。</span>
-        </div>
+          <span style={{ color: 'var(--cw-fg-3)' }}>💠クレジット・⚡エナジーでは まわせない。お金も つかわない。</span>
+        </Panel>
       </div>
     </div>
   );
@@ -385,20 +395,21 @@ const AlbumTab: React.FC = () => {
   const have = ownedKinds(stickers);
   return (
     <div data-testid="album">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-white font-bold text-sm">📒 シール アルバム</span>
-        <span className="text-[12px] text-white/70">{have}/{STICKERS.length}しゅるい（{pct(have, STICKERS.length)}%）</span>
+      <div className="flex items-center justify-between mb-3">
+        <span className="flex items-center gap-2 text-cw-16 font-extrabold"><Icon name="album" size={26} />シール アルバム</span>
+        <span className="text-cw-14" style={{ color: 'var(--cw-fg-2)' }}>{have}/{STICKERS.length}しゅるい（{pct(have, STICKERS.length)}%）</span>
       </div>
       {RARITY_ORDER.map((r) => (
-        <div key={r} className="mb-3">
-          <div className="text-[11px] font-bold mb-1" style={{ color: RARITY_INFO[r].color }}>{RARITY_INFO[r].stars} {RARITY_INFO[r].label}</div>
-          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))' }}>
+        <div key={r} className="mb-4">
+          <div className="text-cw-14 font-extrabold mb-1.5" style={{ color: RARITY_INFO[r].color }}>{RARITY_INFO[r].stars} {RARITY_INFO[r].label}</div>
+          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))' }}>
             {STICKERS.filter((s) => s.rarity === r).map((s) => {
               const n = stickers[s.id] ?? 0;
               return (
-                <button key={s.id} onClick={() => n > 0 && setSel(s)} className="flex flex-col items-center gap-0.5" data-owned={n > 0 ? '1' : '0'}>
-                  <StickerView s={s} size={60} owned={n > 0} count={n} />
-                  <span className="text-[10px] leading-tight text-center" style={{ color: n > 0 ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.3)' }}>
+                <button key={s.id} type="button" onClick={() => n > 0 && setSel(s)} className="cw-press flex flex-col items-center gap-1 py-1 min-h-[88px]" data-owned={n > 0 ? '1' : '0'}
+                  aria-label={n > 0 ? s.name : 'まだ もっていない シール'}>
+                  <StickerView s={s} size={64} owned={n > 0} count={n} />
+                  <span className="text-cw-12 leading-tight text-center" style={{ color: n > 0 ? 'var(--cw-fg)' : 'var(--cw-fg-3)' }}>
                     {n > 0 ? s.name : '？？？'}
                   </span>
                 </button>
@@ -408,15 +419,15 @@ const AlbumTab: React.FC = () => {
         </div>
       ))}
       {sel && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4" onClick={() => setSel(null)}>
-          <div className="rounded-3xl p-5 max-w-xs w-full flex flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}
-            style={{ background: 'linear-gradient(160deg,#0a0e1a,#161029)', border: `2px solid ${sel.frame}` }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'rgba(6,10,28,0.78)' }} onClick={() => setSel(null)}>
+          <div className="cw-panel cw-panel-strong cw-enter p-5 max-w-xs w-full flex flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}
+            style={{ boxShadow: `var(--cw-shadow-panel), 0 0 0 2px ${sel.frame}` }}>
             <StickerView s={sel} size={128} />
-            <div className="text-white font-bold text-lg">{sel.name}</div>
-            <div className="text-[12px] font-black" style={{ color: RARITY_INFO[sel.rarity].color }}>{RARITY_INFO[sel.rarity].stars} {RARITY_INFO[sel.rarity].label}</div>
-            <div className="text-[12px] text-white/70 text-center leading-relaxed">{sel.note}</div>
-            <div className="text-[11px] text-white/45">もっている まいすう：{stickers[sel.id] ?? 0}</div>
-            <button onClick={() => setSel(null)} className="mt-1 px-5 py-1.5 rounded-full border border-white/30 text-white/80 text-sm">とじる</button>
+            <div className="text-cw-20 font-extrabold" style={{ color: 'var(--cw-fg)' }}>{sel.name}</div>
+            <div className="text-cw-14 font-black" style={{ color: RARITY_INFO[sel.rarity].color }}>{RARITY_INFO[sel.rarity].stars} {RARITY_INFO[sel.rarity].label}</div>
+            <div className="text-cw-14 text-center leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>{sel.note}</div>
+            <div className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>もっている まいすう：{stickers[sel.id] ?? 0}</div>
+            <Button variant="secondary" className="mt-1" onClick={() => setSel(null)}>とじる</Button>
           </div>
         </div>
       )}
@@ -430,46 +441,42 @@ const TitleTab: React.FC = () => {
   useCampaignStore();  // 星が かわったら かきなおす
   const have = { badgeTiers: badgeTierCount(col.badges), stickers: ownedKinds(col.cap.stickers), badges: col.badges };
   return (
-    <div className="grid gap-3 md:grid-cols-2" data-testid="titles">
+    <div className="grid gap-4 min-[900px]:grid-cols-2 items-start" data-testid="titles">
       <div>
-        <div className="text-white font-bold text-sm mb-1">🎖️ しょうごう（ホームに 出る）</div>
-        <div className="text-[10px] text-white/50 mb-2">バッジ {have.badgeTiers}こ・シール {have.stickers}しゅるい。見た目だけ（強さは かわらない）</div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2 text-cw-16 font-extrabold mb-1"><Icon name="ribbon" size={26} />しょうごう（ホームに 出る）</div>
+        <div className="text-cw-12 mb-2" style={{ color: 'var(--cw-fg-3)' }}>バッジ {have.badgeTiers}こ・シール {have.stickers}しゅるい。見た目だけ（強さは かわらない）</div>
+        <div className="flex flex-col gap-2">
           {TITLES.map((t) => {
             const open = isOpen(t.need, have);
             const on = col.title === t.id;
             return (
-              <button key={t.id} disabled={!open} onClick={() => { col.setTitle(t.id); sfx.select(); }} data-title={t.id} data-open={open ? '1' : '0'}
-                className="flex items-center justify-between px-3 py-2 rounded-xl border text-left"
-                style={{
-                  borderColor: on ? '#facc15' : open ? 'rgba(250,204,21,0.3)' : 'rgba(255,255,255,0.08)',
-                  background: on ? 'rgba(250,204,21,0.14)' : 'rgba(255,255,255,0.02)',
-                }}>
-                <span className="text-[13px] font-bold" style={{ color: open ? '#fde68a' : 'rgba(255,255,255,0.35)' }}>{open ? t.name : `🔒 ${t.name}`}</span>
-                <span className="text-[10px]" style={{ color: on ? '#facc15' : 'rgba(255,255,255,0.5)' }}>{on ? 'つけている' : open ? 'えらぶ' : t.how}</span>
+              <button key={t.id} type="button" disabled={!open} onClick={() => { col.setTitle(t.id); sfx.select(); }} data-title={t.id} data-open={open ? '1' : '0'}
+                className="cw-seg cw-press cw-tone-reward min-h-[52px] flex items-center justify-between gap-2 px-3 text-left"
+                style={{ boxShadow: on ? 'var(--cw-lit-reward)' : undefined, background: on ? 'var(--tone-bg)' : undefined }}>
+                <span className="flex items-center gap-2 text-cw-14 font-extrabold" style={{ color: open ? 'var(--cw-reward)' : 'var(--cw-fg-3)' }}>
+                  {!open && <Icon name="lock" size={18} />}{t.name}
+                </span>
+                <span className="text-cw-12" style={{ color: on ? 'var(--cw-reward)' : 'var(--cw-fg-3)' }}>{on ? 'つけている' : open ? 'えらぶ' : t.how}</span>
               </button>
             );
           })}
         </div>
       </div>
       <div>
-        <div className="text-white font-bold text-sm mb-1">🚩 基地の はた（かざり）</div>
-        <div className="text-[10px] text-white/50 mb-2">ホームの 基地に たつ。見た目だけ</div>
+        <div className="flex items-center gap-2 text-cw-16 font-extrabold mb-1"><DecorFlag size={26} />基地の はた（かざり）</div>
+        <div className="text-cw-12 mb-2" style={{ color: 'var(--cw-fg-3)' }}>ホームの 基地に たつ。見た目だけ</div>
         <div className="grid grid-cols-2 gap-2">
           {DECORS.map((d) => {
             const open = isOpen(d.need, have);
             const on = col.decor === d.id;
             return (
-              <button key={d.id} disabled={!open} onClick={() => { col.setDecor(d.id); sfx.select(); }} data-decor={d.id}
-                className="flex items-center gap-2 px-2.5 py-2 rounded-xl border text-left"
-                style={{
-                  borderColor: on ? '#7dd3fc' : 'rgba(255,255,255,0.1)', background: on ? 'rgba(125,211,252,0.12)' : 'rgba(255,255,255,0.02)',
-                  opacity: open ? 1 : 0.5,
-                }}>
-                <DecorFlag id={d.id} size={30} />
+              <button key={d.id} type="button" disabled={!open} onClick={() => { col.setDecor(d.id); sfx.select(); }} data-decor={d.id}
+                className="cw-seg cw-press cw-tone-action min-h-[60px] flex items-center gap-2 px-3 text-left"
+                style={{ boxShadow: on ? 'var(--cw-lit-action)' : undefined, background: on ? 'var(--tone-bg)' : undefined, opacity: open ? 1 : 0.85 }}>
+                <DecorFlag id={d.id} size={32} />
                 <div className="min-w-0">
-                  <div className="text-[12px] font-bold text-white truncate">{d.name}</div>
-                  <div className="text-[10px] text-white/50">{on ? 'たてている' : open ? 'えらぶ' : `🔒 ${d.how}`}</div>
+                  <div className="text-cw-14 font-bold truncate" style={{ color: 'var(--cw-fg)' }}>{d.name}</div>
+                  <div className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>{on ? 'たてている' : open ? 'えらぶ' : d.how}</div>
                 </div>
               </button>
             );

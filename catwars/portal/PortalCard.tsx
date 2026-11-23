@@ -13,6 +13,7 @@ import { isDemo } from './demoMode';
 import { enterDemo, exitDemo } from './saveProfile';
 import { usePortal, sortieLock } from './usePortal';
 import { sortieStamina } from './stamina';
+import { Button, Icon, Panel } from '../components/ui';
 
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 
@@ -36,53 +37,55 @@ export const PortalCard: React.FC = () => {
   const demo = !student && !trial && isDemo();
 
   return (
-    <div className="px-4 pt-3" data-testid="portal-card">
-      <div className="rounded-2xl border border-[#38bdf8]/30 p-3" style={{ background: 'rgba(6,10,24,0.6)' }}>
+    <Panel className="mt-3" data-testid="portal-card">
         {student ? (
           <>
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-white/80 text-xs font-bold">がっきゅうコード {student.joinCode}・{student.number}ばん</span>
-              <span className="text-[#fbbf24] text-xs font-bold" data-testid="stamina-common">
-                ⚡スタミナ 共通 <span style={fontMono}>{loaded ? status?.stamina ?? 0 : '…'}</span>
-                <span className="text-white/40">/{SANMON_RULES.maxStamina}</span>
+              <span className="text-cw-14 font-bold" style={{ color: 'var(--cw-fg-2)' }}>がっきゅうコード {student.joinCode}・{student.number}ばん</span>
+              <span className="flex items-center gap-1.5 text-cw-14 font-bold" style={{ color: 'var(--cw-reward)' }} data-testid="stamina-common">
+                <Icon name="energy" size={22} />スタミナ 共通 <span className="font-cw-num">{loaded ? status?.stamina ?? 0 : '…'}</span>
+                <span style={{ color: 'var(--cw-fg-3)' }}>/{SANMON_RULES.maxStamina}</span>
               </span>
             </div>
             {loaded && (
-              <p className="text-white/60 text-[11px] mt-1 leading-relaxed">
+              <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-2)' }}>
                 {towns.length > 0
                   ? <>町の スタミナ：{towns.map((t) => `『${t.name}』${t.n}`).join('・')}</>
                   : '単元アプリで れんしゅうすると、その単元の 町の スタミナが たまるよ（SANMON と おなじ スタミナ）'}
               </p>
             )}
-            <p className="text-white/45 text-[10px] mt-1">出撃1回で スタミナを つかうよ（SANMON の ぼうけんの バトル1回と おなじ）。</p>
-            {lock && <p className="text-[#fca5a5] text-[11px] mt-1 font-bold" data-testid="portal-lock">🔒 {lock}</p>}
+            <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>出撃1回で スタミナを つかうよ（SANMON の ぼうけんの バトル1回と おなじ）。</p>
+            {lock && (
+              <p className="flex items-center gap-1.5 text-cw-14 mt-2 font-bold" style={{ color: 'var(--cw-danger)' }} data-testid="portal-lock">
+                <Icon name="lock" size={18} />{lock}
+              </p>
+            )}
           </>
         ) : trial ? (
-          <p className="text-white/70 text-[11px] leading-relaxed">いまは たいけんばん。スタミナは つかわないよ。きろくは のこらないよ。</p>
+          <p className="text-cw-14" style={{ color: 'var(--cw-fg-2)' }}>いまは たいけんばん。スタミナは つかわないよ。きろくは のこらないよ。</p>
         ) : demo ? (
           <div className="text-center" data-testid="portal-demo">
-            <p className="text-sm font-black text-amber-300">デモモード</p>
-            <p className="text-[11px] text-amber-100/80 mt-1 leading-relaxed">
+            <p className="text-cw-16 font-black" style={{ color: 'var(--cw-reward)' }}>デモモード</p>
+            <p className="text-cw-12 mt-1 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>
               すべての 章と 3つの 段が えらべるよ。かけらは ぜんぶ 8。スタミナは つかわず、きろくも セーブも どこにも おくられないよ（セーブは この たんまつの デモ用）。
             </p>
-            <button onClick={exitDemo} className="mt-2 text-xs font-bold text-amber-200 underline underline-offset-4" data-testid="demo-exit">デモを おわる</button>
+            <Button variant="secondary" size="sm" className="mt-2" onClick={exitDemo} data-testid="demo-exit">デモを おわる</Button>
           </div>
         ) : (
-          <p className="text-white/70 text-[11px] leading-relaxed" data-testid="portal-otameshi">
-            いまは <b className="text-white">おためし</b>。スタミナを つかわずに あそべるよ。きろくは 先生に とどかないし、
+          <p className="text-cw-14" style={{ color: 'var(--cw-fg-2)' }} data-testid="portal-otameshi">
+            いまは <b style={{ color: 'var(--cw-fg)' }}>おためし</b>。スタミナを つかわずに あそべるよ。きろくは 先生に とどかないし、
             おためしの セーブは がっきゅうコードを 入れると べつに なるよ。
           </p>
         )}
         {isPortalConfigured && !trial && !demo && (
           student && !openJoin ? (
-            <button onClick={() => setOpenJoin(true)} className="mt-2 text-[11px] text-[#7dd3fc] underline underline-offset-4">がっきゅうコードを 入れなおす</button>
+            <Button variant="ghost" size="sm" className="mt-1 underline underline-offset-4" onClick={() => setOpenJoin(true)}>がっきゅうコードを 入れなおす</Button>
           ) : (
             // 学級コード 0000・番号 0 は デモモード（先生のパスワード。SANMON と同じ）
             <div className="mt-2 bg-white rounded-xl p-2"><JoinSettingsRow config={PORTAL} onDemo={enterDemo} /></div>
           )
         )}
-      </div>
-    </div>
+    </Panel>
   );
 };
 

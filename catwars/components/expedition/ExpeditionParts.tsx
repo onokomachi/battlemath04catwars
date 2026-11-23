@@ -16,14 +16,17 @@ import { useClassExpedition, refreshClassExpedition, flushExpedition, expedition
 import { usePortal } from '../../portal/usePortal';
 import { isPortalConfigured } from '../../portal/config';
 import { isDemo } from '../../portal/demoMode';
+import { Card, Icon, ScreenBackdrop, TitleBar } from '../ui';
 
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const ACCENT = '#c084fc';
 
 export const StarRow: React.FC<{ n: number | null | undefined; size?: number }> = ({ n, size = 14 }) => (
-  <span aria-label={n == null ? 'まだ' : `ほし ${n}`} style={{ fontSize: size, letterSpacing: 1 }}>
-    {[1, 2, 3].map((i) => <span key={i} style={{ color: n != null && n >= i ? '#facc15' : 'rgba(255,255,255,0.22)' }}>★</span>)}
+  <span aria-label={n == null ? 'まだ' : `ほし ${n}`} className="inline-flex gap-0.5 align-middle">
+    {[1, 2, 3].map((i) => (
+      <Icon key={i} name="star" size={Math.max(size, 16)} style={n != null && n >= i ? undefined : { filter: 'grayscale(1) brightness(0.55)', opacity: 0.7 }} />
+    ))}
   </span>
 );
 
@@ -70,45 +73,25 @@ function useClassRefresh(): void {
 /** ホームの 遠征のカード */
 export const ExpeditionCard: React.FC<{ expedition: Expedition; locked?: string | null; onOpen: () => void }> = ({ expedition: e, locked, onOpen }) => {
   useClassRefresh();
-  const counts = useCounts();
-  const data = useClassExpedition((s) => s.data);
-  const reward = useClassExpedition((s) => s.reward);
   const mine = useExpeditionStore((s) => s.best[e.weekStart]);
   const left = daysLeftInWeek(Date.now());
   return (
-    <div className="px-4 pt-4">
-      <button onClick={onOpen} data-testid="expedition-card" aria-disabled={locked ? true : undefined}
-        className={`w-full text-left rounded-2xl border-2 p-3.5 transition-all active:scale-[0.99] ${locked ? 'opacity-70' : ''}`}
-        style={{ borderColor: ACCENT, background: 'linear-gradient(135deg, rgba(124,58,237,0.20), rgba(15,23,42,0.6))', boxShadow: `0 0 16px ${ACCENT}44`, ...font }}>
-        <div className="flex items-center gap-3">
-          <span className="text-3xl leading-none">{e.rule.icon}</span>
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] tracking-[0.2em]" style={{ color: ACCENT, ...fontMono }}>WEEKLY EXPEDITION</div>
-            <div className="text-white font-black text-base leading-tight">週がわりの 遠征「{e.rule.name}」</div>
-            <div className="text-white/55 text-[11px] truncate">戦場：{e.map.name}（第{e.chapter.no}章）・あと {left}日で つぎの 遠征</div>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <div className="text-white/50 text-[10px]">今週の きみ</div>
-            <StarRow n={mine ?? null} size={16} />
-          </div>
-        </div>
-        <div className="mt-2.5">
-          {data && (counts === 'class' || counts === 'demo')
-            ? <ClassGoalBar w={data.thisWeek} sample={data.sample} />
-            : <p className="text-white/55 text-[11px] leading-snug" data-testid="expedition-not-counted">
-                {counts === 'class' ? 'がっきゅうの ほしを よみこみ中…（よめないときは あとで もういちど）'
-                  : counts === 'offline' ? '学級の ほしは、がっきゅうポータルに つないだ アプリで あつまるよ。'
-                  : 'おためしでは 学級の ほしには 入らないよ（がっきゅうコードを 入れると 入る）。'}
-              </p>}
-        </div>
-        {locked && <p className="mt-1.5 text-[11px] text-[#fca5a5]">🔒 {locked}</p>}
-      </button>
-      {reward > 0 && (
-        <p className="mt-1.5 text-center text-[12px] font-bold text-[#a3e635]" role="status" data-testid="expedition-reward">
-          🎉 学級の もくひょう たっせいの ごほうび 🪙{reward} を もらったよ！
-        </p>
-      )}
-    </div>
+    <Card icon="expedition" title="週がわりの 遠征" data-testid="expedition-card"
+      sub={<>「{e.rule.name}」・あと {left}日で つぎの 遠征</>}
+      right={<span className="flex flex-col items-end"><span className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>今週の きみ</span><StarRow n={mine ?? null} size={16} /></span>}
+      lockReason={locked ?? undefined} locked={!!locked}
+      onClick={onOpen} />
+  );
+};
+
+/** 学級の もくひょうを たっせいしたときの ごほうび（ホームの カードの下） */
+export const ExpeditionRewardNote: React.FC = () => {
+  const reward = useClassExpedition((s) => s.reward);
+  if (reward <= 0) return null;
+  return (
+    <p className="mt-2 text-center text-cw-14 font-bold" style={{ color: 'var(--cw-growth)' }} role="status" data-testid="expedition-reward">
+      🎉 学級の もくひょう たっせいの ごほうび 🪙{reward} を もらったよ！
+    </p>
   );
 };
 
@@ -124,14 +107,9 @@ export const ExpeditionScreen: React.FC<{
   const lv = expeditionEnemyLevel(avgLevel);
   const last = data?.lastWeek;
   return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col" style={font} data-testid="expedition-screen">
-      <div className="flex items-center gap-3 p-4 border-b border-white/10">
-        <button onClick={onBack} className="text-white/60 hover:text-white text-sm">← もどる</button>
-        <div className="min-w-0">
-          <h2 className="font-bold text-sm leading-tight" style={{ color: ACCENT, ...fontMono }}>週がわりの 遠征</h2>
-          <p className="text-white/45 text-[10px]">{e.weekStart} の 週（月曜 0:00 に かわる）</p>
-        </div>
-      </div>
+    <div className="cw-screen min-h-[100dvh] h-[100dvh] flex flex-col" style={font} data-testid="expedition-screen">
+      <ScreenBackdrop name="expedition" />
+      <TitleBar title="週がわりの 遠征" onBack={onBack} subtitle={<>{e.weekStart} の 週（月曜 0:00 に かわる）</>} />
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-w-2xl w-full mx-auto">
         <div className="rounded-2xl border p-4" style={{ borderColor: `${ACCENT}88`, background: 'rgba(124,58,237,0.14)' }}>
           <div className="flex items-center gap-3">

@@ -12,6 +12,7 @@ import {
 import { BATTLE_MAP_BY_ID, zoneSize } from '../data/battleMaps';
 import { CampaignChapter } from '../data/campaign';
 import { sfx } from '../utils/audioEngine';
+import { StatPill, TitleBar } from './ui';
 
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
 const fontMono = { fontFamily: 'Orbitron, monospace' };
@@ -224,19 +225,8 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
   return (
     <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden" style={font}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 flex-shrink-0"
-        style={{ background: 'rgba(6,10,24,0.85)', backdropFilter: 'blur(12px)' }}>
-        <button onClick={onBack} className="text-white/60 hover:text-white text-sm">← もどる</button>
-        <div className="min-w-0">
-          <h2 className="text-[#38bdf8] font-bold text-sm leading-tight" style={fontMono}>陣地づくり</h2>
-          <p className="text-white/45 text-[10px] truncate">第{chapter.no}章「{chapter.title}」／{map.name}</p>
-        </div>
-        <span className="ml-auto flex items-center gap-1 px-3 py-1 rounded-full flex-shrink-0" data-testid="credits"
-          style={{ background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.4)' }}>
-          <span>💠</span>
-          <span className="text-[#38bdf8] font-bold" style={fontMono}>{credits}</span>
-        </span>
-      </div>
+      <TitleBar title="陣地づくり" onBack={onBack} subtitle={<>第{chapter.no}章「{chapter.title}」／{map.name}</>}
+        right={<StatPill icon="credit" value={credits} label="クレジット" data-testid="credits" />} />
 
       {msg && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 border border-[#38bdf8]/50 text-white text-xs font-bold px-5 py-2 rounded-full shadow-2xl">

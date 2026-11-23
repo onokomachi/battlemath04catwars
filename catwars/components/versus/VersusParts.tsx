@@ -34,6 +34,7 @@ import { BOT_LEVELS, createPractice, smartPlacement, type BotLevel } from '../..
 import { rewardWeight } from '../../learn/gradePack';
 import { startSortie, usePortal } from '../../portal/usePortal';
 import { SortieStamina } from '../../portal/PortalCard';
+import { Card, TitleBar } from '../ui';
 import {
   createRoom, joinRoom, roomState, markReady, leaveRoom, versusNamed, type VersusRoom, type VersusErrorKind,
 } from '../../portal/versusSync';
@@ -45,21 +46,9 @@ const ACCENT = '#f472b6';
 
 // ── ホームの カード ───────────────────────────────────────────────
 export const VersusCard: React.FC<{ locked?: string | null; onOpen: () => void }> = ({ locked, onOpen }) => (
-  <div className="px-4 pt-3">
-    <button onClick={onOpen} data-testid="versus-card" aria-disabled={locked ? true : undefined}
-      className={`w-full text-left rounded-2xl border-2 p-3.5 transition-all active:scale-[0.99] ${locked ? 'opacity-70' : ''}`}
-      style={{ borderColor: ACCENT, background: 'linear-gradient(135deg, rgba(244,114,182,0.16), rgba(15,23,42,0.6))', boxShadow: `0 0 14px ${ACCENT}44`, ...font }}>
-      <div className="flex items-center gap-3">
-        <span className="text-3xl leading-none">🆚</span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] tracking-[0.2em]" style={{ color: ACCENT, ...fontMono }}>VERSUS</div>
-          <div className="text-white font-black text-base leading-tight">となりの 子と 同時に たいせん</div>
-          <div className="text-white/55 text-[11px]">同じ学級の 2人で、とく → おく → みる を 3ラウンド。はやさでは きまらないよ（コンピュータとの れんしゅうも できる）</div>
-        </div>
-      </div>
-      {locked && <p className="mt-1.5 text-[11px] text-[#fca5a5]">🔒 {locked}</p>}
-    </button>
-  </div>
+  <Card icon="versus" title="となりの 子と たいせん" data-testid="versus-card"
+    sub="2人で 同時に。コンピュータとの れんしゅうも できる"
+    lockReason={locked ?? undefined} locked={!!locked} onClick={onOpen} />
 );
 
 // ── つかう 文 ─────────────────────────────────────────────────────
@@ -437,10 +426,7 @@ export const VersusScreen: React.FC<Props> = ({ formation: savedFormation, unloc
 };
 
 const TopBar: React.FC<{ title: string; onBack: () => void }> = ({ title, onBack }) => (
-  <div className="flex items-center gap-3 p-4 border-b border-white/10 sticky top-0 z-20" style={{ background: 'rgba(6,10,24,0.85)', backdropFilter: 'blur(10px)' }}>
-    <button onClick={onBack} className="text-white/60 hover:text-white text-sm" data-testid="versus-back">← もどる</button>
-    <h2 className="font-bold text-sm" style={{ color: ACCENT, ...fontMono }}>{title}</h2>
-  </div>
+  <TitleBar title={title} onBack={onBack} className="sticky top-0 z-20" data-testid="versus-topbar" />
 );
 
 /** 出撃の5枠（対戦で つれていく ネコ）。ボスの ネコは つれてこない */
