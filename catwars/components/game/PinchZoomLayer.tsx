@@ -160,24 +160,24 @@ export const PinchZoomLayer: React.FC<Props> = ({
       </div>
 
       {/* Zoom controls */}
-      <div className="absolute bottom-2 right-2 z-[80] flex flex-col gap-1.5 pointer-events-auto">
+      <div className="absolute bottom-2 right-2 z-[80] flex flex-col gap-2 pointer-events-auto">
         <button
           onClick={() => zoomBy(1.25)}
-          className="w-9 h-9 rounded-lg bg-black/70 border border-white/20 text-white text-lg font-bold flex items-center justify-center active:scale-90 transition-transform"
+          className="cw-btn cw-press cw-btn-secondary w-12 h-12 !px-0 text-cw-20"
           aria-label="ズームイン"
         >
           ＋
         </button>
         <button
           onClick={() => zoomBy(0.8)}
-          className="w-9 h-9 rounded-lg bg-black/70 border border-white/20 text-white text-lg font-bold flex items-center justify-center active:scale-90 transition-transform"
+          className="cw-btn cw-press cw-btn-secondary w-12 h-12 !px-0 text-cw-20"
           aria-label="ズームアウト"
         >
           －
         </button>
         <button
           onClick={reset}
-          className="w-9 h-9 rounded-lg bg-black/70 border border-white/20 text-white text-xs font-bold flex items-center justify-center active:scale-90 transition-transform"
+          className="cw-btn cw-press cw-btn-secondary w-12 h-12 !px-0 text-cw-20"
           aria-label="リセット"
         >
           ⟳
@@ -186,8 +186,8 @@ export const PinchZoomLayer: React.FC<Props> = ({
 
       {/* Hint */}
       <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] pointer-events-none">
-        <span className="text-[10px] text-white/40 bg-black/40 px-2 py-0.5 rounded-full whitespace-nowrap">
-          ✌️ 2本指でうごかす・ひろげる
+        <span className="cw-chip whitespace-nowrap" style={{ background: 'var(--cw-surface-strong)', color: 'var(--cw-fg-2)' }}>
+          2本指でうごかす・ひろげる
         </span>
       </div>
     </div>

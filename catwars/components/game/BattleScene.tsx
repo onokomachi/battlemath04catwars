@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { GameState, Troop, BuildingType, BattleEntity, GRID_W, GRID_H } from '../../types';
 import { BUILDING_STATS } from '../../constants';
-import { Button } from '../ui/Button';
-import { Swords, Trophy, Skull, Zap, Heart } from '../ui/BattleIcons';
+import { Button, Chip, FacilityImg, Icon, Panel, StatPill, TitleBar } from '../ui';
 import { TerrainLayer } from './TerrainLayer';
 // ── 決定論シミュレーション（catwars/sim/）──
 // ゲーム状態はすべてこちらが持つ。このコンポーネントは描画と入力だけを担当する。
@@ -432,6 +431,20 @@ export const BattleScene: React.FC<Props> = ({
       damage: c.base.damage, hp: c.base.hp, target: c.base.target, moveSpeed: c.base.moveSpeed,
     })), [formation]);
 
+  // 下の操作の列の高さ（問題カードの手札を その上に のせる。見た目だけ）
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const hotbarRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const bar = hotbarRef.current, root = rootRef.current;
+    if (!bar || !root) return;
+    const set = () => root.style.setProperty('--cw-hotbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
+    set();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(set);
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, []);
+
   const showMessage = (text: string, ms = 2000) => {
     setTriggerMessage(text);
     window.setTimeout(() => setTriggerMessage(null), ms);
@@ -713,7 +726,7 @@ export const BattleScene: React.FC<Props> = ({
   };
 
   return (
-    <div className="relative w-full min-h-[100dvh] h-[100dvh] bg-[#05070f] flex flex-col overflow-hidden">
+    <div ref={rootRef} className="cw-screen relative w-full min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden" style={{ background: 'var(--cw-bg-0)' }}>
        {/* High-quality micro-dynamic keyframes style definitions */}
        <style>{`
          @keyframes limb-swing-L {
@@ -846,58 +859,32 @@ export const BattleScene: React.FC<Props> = ({
          }
        `}</style>
 
-       {/* Top Bar */}
-       <div className="h-16 bg-black/75 flex justify-between items-center px-4 text-white z-50 relative border-b border-white/5">
-          <div className="font-bold text-sm tracking-tight flex items-center gap-2 min-w-0">
-            <Swords className="text-red-500 animate-pulse flex-shrink-0" size={18} />
-            <span className="text-red-400 font-extrabold text-base whitespace-nowrap">{expedition ? `${expedition.ruleIcon} ${expedition.label ?? '遠征'}` : `第${chapter.no}章`}</span>
-            <span className="text-white/60 text-xs truncate hidden sm:inline" style={{ fontFamily: '"M PLUS Rounded 1c", sans-serif' }}>
-              {chapter.title}
-            </span>
-            {tier !== 'normal' && (
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
-                style={{ background: `${TIER_INFO[tier].color}22`, borderColor: TIER_INFO[tier].color, color: TIER_INFO[tier].color }}>
-                {TIER_INFO[tier].label}
-              </span>
-            )}
-            {expedition && (
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0" data-testid="expedition-enemy-level"
-                title="てきの つよさは きみの ネコの レベルに あわせて きまるよ"
-                style={{ background: 'rgba(244,114,182,0.14)', borderColor: 'rgba(244,114,182,0.6)', color: '#f472b6' }}>
-                てき Lv.{expedition.enemyLevel}
-              </span>
-            )}
-            {threat >= 1 && (
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
-                title={`手持ちが育っているぶん、敵も強くなっているよ（+${threatPct}%）`}
-                style={{ background: 'rgba(244,114,182,0.14)', borderColor: 'rgba(244,114,182,0.6)', color: '#f472b6' }}>
-                ⚠️ 脅威 Lv.{threat}
-              </span>
-            )}
-            {assistLevel > 0 && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
-                style={{ background: 'rgba(163,230,53,0.12)', borderColor: 'rgba(163,230,53,0.45)', color: '#a3e635' }}>
-                🛟 {ASSIST_LEVELS[assistLevel].label}
-              </span>
-            )}
-            {selectedSpell && (
-              <span className="text-xs bg-purple-600/50 text-purple-200 px-2 py-0.5 rounded-full select-none animate-bounce border border-purple-400/30">
-                🔮 まほうを おく 場所を タップ
-              </span>
-            )}
-          </div>
-          
-          <div className="flex gap-2">
-            <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#facc15]/50 bg-[#facc15]/10"
-              style={{ fontFamily: 'Orbitron, monospace' }}>
-              <span className="text-base">⚡</span>
-              <span className="text-[#facc15] font-bold text-sm">{Math.floor(gold)}</span>
-            </div>
-            <Button variant="secondary" size="xs" onClick={() => onEndBattle(false, { gold: 0 })}>
-              たいきゃく する
-            </Button>
-          </div>
-       </div>
+       {/* 上の帯：章・段・脅威・⚡・たいきゃく */}
+       <TitleBar
+         title={expedition ? `${expedition.ruleIcon} ${expedition.label ?? '遠征'}` : `第${chapter.no}章`}
+         subtitle={chapter.title}
+         className="!z-50"
+         data-testid="battle-topbar"
+         right={<>
+           {tier !== 'normal' && <Chip tone={tier === 'hard' ? 'rare' : 'danger'}>{TIER_INFO[tier].label}</Chip>}
+           {expedition && (
+             <span data-testid="expedition-enemy-level" title="てきの つよさは きみの ネコの レベルに あわせて きまるよ">
+               <Chip tone="danger">てき Lv.{expedition.enemyLevel}</Chip>
+             </span>
+           )}
+           {threat >= 1 && (
+             <span title={`手持ちが育っているぶん、敵も強くなっているよ（+${threatPct}%）`}>
+               <Chip tone="danger"><Icon name="warn" size={16} />脅威 Lv.{threat}</Chip>
+             </span>
+           )}
+           {assistLevel > 0 && <Chip tone="growth">{ASSIST_LEVELS[assistLevel].label}</Chip>}
+           {selectedSpell && <Chip tone="action">まほうを おく 場所を タップ</Chip>}
+           <StatPill icon="energy" value={Math.floor(gold)} label="エナジー" data-testid="energy" />
+           <Button variant="secondary" size="sm" onClick={() => onEndBattle(false, { gold: 0 })}>
+             たいきゃく する
+           </Button>
+         </>}
+       />
 
        {/* 問題カード（戦闘の主役の操作）。エナジーは自動ではたまらず、カードを解いて手に入れる。
            解いている間は戦闘を止める（対戦のときは止めない）。 */}
@@ -919,9 +906,10 @@ export const BattleScene: React.FC<Props> = ({
          />
        )}
 
-       {/* Temporary visual dynamic notification banner inside combat */}
+       {/* 戦闘中の ひとこと通知 */}
        {triggerMessage && (
-         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-amber-900/95 border-2 border-amber-500 text-white font-bold text-xs py-2 px-6 rounded-full shadow-2xl animate-bounce backdrop-blur">
+         <div role="status" className="cw-panel cw-panel-strong cw-enter absolute top-[76px] left-1/2 -translate-x-1/2 z-50 text-cw-14 font-bold py-2 px-5 rounded-cw-pill max-w-[92vw] text-center"
+           style={{ color: 'var(--cw-fg)', boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
            {triggerMessage}
          </div>
        )}
@@ -930,19 +918,12 @@ export const BattleScene: React.FC<Props> = ({
            ロックステップは相手待ちで画面が止まる。無言のフリーズは
            いちばん悪い体験なので、何が起きているかを必ず言葉で出す。 */}
        {isPvp && netStatusRef.current.kind !== 'RUNNING' && (
-         <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-           <div className="rounded-2xl border-2 px-8 py-6 text-center max-w-sm mx-4"
-             style={{
-               background: 'rgba(6,10,24,0.96)',
-               borderColor: netStatusRef.current.kind === 'WAITING' ? '#facc15' : '#ef4444',
-             }}>
+         <div className="absolute inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'rgba(6,10,28,0.78)' }}>
+           <Panel strong className="text-center max-w-sm w-full" style={{ boxShadow: `var(--cw-shadow-panel), ${netStatusRef.current.kind === 'WAITING' ? 'var(--cw-lit-reward)' : 'var(--cw-lit-danger)'}` }}>
              {netStatusRef.current.kind === 'WAITING' && (
                <>
-                 <div className="text-3xl mb-2 animate-pulse">📡</div>
-                 <div className="text-[#facc15] font-black text-base mb-1" style={{ fontFamily: 'Orbitron, monospace' }}>
-                   あいてを まっています…
-                 </div>
-                 <div className="text-white/60 text-xs">
+                 <div className="text-cw-20 font-extrabold mb-1" style={{ color: 'var(--cw-reward)' }}>あいてを まっています…</div>
+                 <div className="text-cw-14" style={{ color: 'var(--cw-fg-2)' }}>
                    つうしんが すこし おそいみたい。そのまま まってね
                    （{Math.round(netStatusRef.current.waitingMs / 1000)}びょう）
                  </div>
@@ -950,39 +931,33 @@ export const BattleScene: React.FC<Props> = ({
              )}
              {netStatusRef.current.kind === 'DROPPED' && (
                <>
-                 <div className="text-3xl mb-2">🔌</div>
-                 <div className="text-[#ef4444] font-black text-base mb-1" style={{ fontFamily: 'Orbitron, monospace' }}>
-                   あいてと せつだんされました
-                 </div>
-                 <div className="text-white/60 text-xs mb-4">
+                 <div className="text-cw-20 font-extrabold mb-1" style={{ color: 'var(--cw-danger)' }}>あいてと せつだんされました</div>
+                 <div className="text-cw-14 mb-4" style={{ color: 'var(--cw-fg-2)' }}>
                    あいての つうしんが とぎれたため、この しょうぶは ここまでです。
                  </div>
-                 <Button size="sm" onClick={() => onEndBattle(true, { gold: 0 })}>もどる</Button>
+                 <Button size="md" onClick={() => onEndBattle(true, { gold: 0 })}>もどる</Button>
                </>
              )}
              {netStatusRef.current.kind === 'DESYNC' && (
                <>
-                 <div className="text-3xl mb-2">⚠️</div>
-                 <div className="text-[#ef4444] font-black text-base mb-1" style={{ fontFamily: 'Orbitron, monospace' }}>
-                   しあいを ちゅうだんしました
-                 </div>
-                 <div className="text-white/60 text-xs mb-4">
+                 <div className="text-cw-20 font-extrabold mb-1" style={{ color: 'var(--cw-danger)' }}>しあいを ちゅうだんしました</div>
+                 <div className="text-cw-14 mb-4" style={{ color: 'var(--cw-fg-2)' }}>
                    ふたりの がめんで ちがう けっかに なってしまったため、
                    ひきわけで しゅうりょうします。（tick {netStatusRef.current.tick}）
                  </div>
-                 <Button size="sm" onClick={() => onEndBattle(false, { gold: 0 })}>もどる</Button>
+                 <Button size="md" onClick={() => onEndBattle(false, { gold: 0 })}>もどる</Button>
                </>
              )}
-           </div>
+           </Panel>
          </div>
        )}
 
        {/* Battle Stage */}
        <div
-         className="flex-1 relative overflow-hidden flex items-center justify-center bg-[#0a0e1a]"
+         className="flex-1 relative overflow-hidden flex items-center justify-center"
          style={{
            backgroundImage: 'radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.6) 0, transparent 100%), radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,0.5) 0, transparent 100%), radial-gradient(1px 1px at 40% 80%, rgba(34,211,238,0.5) 0, transparent 100%), radial-gradient(1.5px 1.5px at 85% 20%, rgba(168,85,247,0.5) 0, transparent 100%)',
-           backgroundColor: '#0a0e1a',
+           backgroundColor: 'var(--cw-bg-1)',
          }}
        >
         {/* 青⇄赤の回転オーラ（CAT-WARS 世界観の動的バックドロップ） */}
@@ -1033,8 +1008,8 @@ export const BattleScene: React.FC<Props> = ({
                       : 'inset 0 0 15px rgba(139,92,246,0.4), 0 0 15px rgba(139,92,246,0.4)'
                  }}
               >
-                <span className={`text-[9px] font-black tracking-widest uppercase scale-75 ${s.type === 'HEAL' ? 'text-emerald-400' : 'text-purple-300'}`}>
-                  {s.type === 'HEAL' ? '💚 かいふく' : '⚡ げきおこ'}
+                <span className="text-cw-12 font-black flex items-center gap-1 rounded-cw-pill px-2" style={{ background: 'var(--cw-surface-strong)', color: s.type === 'HEAL' ? 'var(--cw-growth)' : 'var(--cw-cat)' }}>
+                  <Icon name={s.type === 'HEAL' ? 'heal' : 'rage'} size={16} />{s.type === 'HEAL' ? 'かいふく' : 'げきおこ'}
                 </span>
               </div>
             ))}
@@ -1317,6 +1292,9 @@ export const BattleScene: React.FC<Props> = ({
                 }
 
                 const isDamaged = damagedEntities.has(e.id);
+                // 絵の表示だけ 大きくする（sim の座標・当たり・箱の大きさは そのまま）。小さい子ほど 大きく（さいだい ×1.6。体が 58px 以上の子は そのまま）
+                const spriteScale = e.type === 'TROOP' ? Math.max(1, Math.min(1.6, 58 / width)) : 1;
+                const lift = Math.round((spriteScale - 1) * height * 0.62);
 
                 return (
                     <div
@@ -1376,11 +1354,12 @@ export const BattleScene: React.FC<Props> = ({
                               draggable={false}
                             />
                             {e.subType === BuildingType.HIDDEN_TESLA && (
-                              <span className="text-[7px] font-black text-cyan-400 select-none bg-cyan-950/80 px-1 rounded absolute -bottom-1">活性中</span>
+                              <span aria-label="活性中" className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full" style={{ background: 'var(--cw-action)', boxShadow: '0 0 8px var(--cw-action)' }} />
                             )}
                           </div>
                         ) : (
-                          <div className="relative w-full h-full flex items-center justify-center">
+                          <div className="relative w-full h-full flex items-center justify-center"
+                            style={spriteScale > 1 ? { transform: `scale(${spriteScale})`, transformOrigin: '50% 72%' } : undefined}>
                             {e.subType === 'skeleton' && (
                               <div className="absolute w-4 h-1.5 bg-blue-900/40 rounded-full bottom-0 left-1/2 -translate-x-1/2 blur-[1px]" />
                             )}
@@ -1456,90 +1435,51 @@ export const BattleScene: React.FC<Props> = ({
                               ) : renderStickFigure(e.subType, !!(e.path && e.path.length > 0), e.lastAttack);
                             })()}
 
-                            {/* Unit order menu */}
-                            {selectedOrderTroopId === e.id && (
-                              <div
-                                className="absolute flex gap-1 z-[150]"
-                                style={{ top: -42, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all' }}
-                                onClick={ev => ev.stopPropagation()}
-                              >
-                                {(
-                                  [
-                                    { order: 'RUSH' as const, label: '🏃突撃', color: '#ef4444' },
-                                    { order: 'DEFENSE' as const, label: '🛡まもる', color: '#22d3ee' },
-                                    { order: 'HOLD' as const, label: '⏸待機', color: '#94a3b8' },
-                                  ] as { order: 'RUSH' | 'DEFENSE' | 'HOLD'; label: string; color: string }[]
-                                ).map(({ order, label, color }) => (
-                                  <button
-                                    key={order}
-                                    onClick={() => {
-                                      if (selectedOrderTroopId) {
-                                        issue({ type: 'SET_ORDER', player: localPlayer, entityId: selectedOrderTroopId, order });
-                                      }
-                                      setSelectedOrderTroopId(null);
-                                    }}
-                                    className="px-2 py-1 text-[10px] font-black rounded-lg text-white"
-                                    style={{
-                                      background: 'rgba(10,14,26,0.95)',
-                                      border: `1px solid ${color}`,
-                                      color,
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {label}
-                                  </button>
-                                ))}
-                                {/* ⑤ 旧「📍移動先タップ」ボタンは撤去した。
-                                    onClick を持たないただのラベルで、実際には
-                                    「ネコを選ぶ → 行き先をタップ」で既に動いていたため、
-                                    押す必要のないボタンが並んでいるだけだった。
-                                    いまは操作の説明だけを出す。 */}
-                                <span className="px-2 py-1 text-[10px] font-black rounded-lg whitespace-nowrap"
-                                  style={{ background: 'rgba(10,14,26,0.95)', border: '1px solid #a78bfa', color: '#a78bfa' }}>
-                                  📍行き先/敵をタップ
-                                </span>
-                              </div>
-                            )}
                           </div>
                         )}
 
-                        {/* HP Bar with color dynamics based on health depletion */}
-                        <div className="absolute -top-4 left-0 w-full h-1.5 bg-gray-950/80 rounded-full border border-black/30 overflow-hidden">
+                        {/* HPバー・しるし：拡大した絵の 上にそろえる（箱は 動かさない） */}
+                        <div className="absolute left-0 w-full pointer-events-none" style={{ top: -lift, height: 0 }}>
+                          <div className="absolute -top-4 left-0 w-full h-1.5 rounded-full overflow-hidden"
+                            style={{ background: 'rgba(6,10,28,0.85)', boxShadow: '0 0 0 1px rgba(6,10,28,0.9)' }}>
                             <div
                               className="h-full transition-all duration-150"
                               style={{
                                 width: `${(e.hp / e.maxHp) * 100}%`,
-                                background: e.team === 'DEFENDER' ? '#ef4444' : '#22c55e',
-                                boxShadow: e.team === 'DEFENDER' ? '0 0 4px #ef4444' : '0 0 4px #22c55e',
+                                background: e.team === 'DEFENDER' ? 'var(--cw-danger)' : 'var(--cw-growth)',
+                                boxShadow: e.team === 'DEFENDER' ? '0 0 4px var(--cw-danger)' : '0 0 4px var(--cw-growth)',
                               }}
                             ></div>
-                        </div>
-                        {/* 特別な敵のしるし（空中・盾持ち・回復役・自爆）。たおし方は ステージえらびの画面に出している */}
-                        {e.team === 'DEFENDER' && e.kind && ENEMY_TRAIT_NOTE[e.kind as EnemyUnitKind] && (
-                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-[12px] leading-none pointer-events-none select-none"
-                            style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.9))' }}>
-                            {ENEMY_TRAIT_NOTE[e.kind as EnemyUnitKind]!.icon}
                           </div>
-                        )}
-                        {/* ボスのシールド（ふくしゅうカードを といて わる） */}
-                        {e.team === 'DEFENDER' && (e.shield ?? 0) > 0 && (
-                          <>
-                            <div className="absolute rounded-full pointer-events-none"
-                              style={{
-                                inset: -8, border: '3px solid rgba(103,232,249,0.9)',
-                                boxShadow: '0 0 14px rgba(103,232,249,0.85), inset 0 0 10px rgba(103,232,249,0.5)',
-                                animation: 'cw-shield-ring 1.4s ease-in-out infinite',
-                              }} />
-                            <div className="absolute -top-9 left-1/2 -translate-x-1/2 text-[10px] font-black px-1.5 rounded-full whitespace-nowrap pointer-events-none"
-                              style={{ background: 'rgba(8,47,73,0.95)', border: '1px solid #67e8f9', color: '#67e8f9' }}>
-                              🛡️×{e.shield}
+                          {/* 特別な敵のしるし（空中・盾持ち・回復役・自爆）。たおし方は ステージえらびの画面に出している */}
+                          {e.team === 'DEFENDER' && e.kind && ENEMY_TRAIT_NOTE[e.kind as EnemyUnitKind] && (
+                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-[16px] leading-none select-none"
+                              style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.9))' }}>
+                              {ENEMY_TRAIT_NOTE[e.kind as EnemyUnitKind]!.icon}
                             </div>
-                          </>
-                        )}
-                        {e.team === 'ATTACKER' && (tempRank[e.subType] ?? 0) > 0 && (
-                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-[8px] font-black text-[#facc15] bg-black/80 px-1 rounded-full border border-[#facc15]/60 whitespace-nowrap" style={{ fontFamily: 'Orbitron, monospace' }}>
-                            ⬆+{tempRank[e.subType]}
-                          </div>
+                          )}
+                          {/* ボスのシールド（ふくしゅうカードを といて わる） */}
+                          {e.team === 'DEFENDER' && (e.shield ?? 0) > 0 && (
+                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-cw-12 font-black px-2 py-0.5 rounded-cw-pill whitespace-nowrap"
+                              style={{ background: 'var(--cw-surface-strong)', boxShadow: '0 0 0 1px var(--cw-action)', color: 'var(--cw-action)' }}>
+                              シールド×{e.shield}
+                            </div>
+                          )}
+                          {e.team === 'ATTACKER' && (tempRank[e.subType] ?? 0) > 0 && (
+                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-cw-12 font-black px-2 py-0.5 rounded-cw-pill whitespace-nowrap font-cw-num"
+                              style={{ background: 'var(--cw-surface-strong)', boxShadow: '0 0 0 1px var(--cw-reward)', color: 'var(--cw-reward)' }}>
+                              強化+{tempRank[e.subType]}
+                            </div>
+                          )}
+                        </div>
+                        {/* ボスのシールドの輪（ふくしゅうカードを といて わる） */}
+                        {e.team === 'DEFENDER' && (e.shield ?? 0) > 0 && (
+                          <div className="absolute rounded-full pointer-events-none"
+                            style={{
+                              inset: -8, border: '3px solid rgba(103,232,249,0.9)',
+                              boxShadow: '0 0 14px rgba(103,232,249,0.85), inset 0 0 10px rgba(103,232,249,0.5)',
+                              animation: 'cw-shield-ring 1.4s ease-in-out infinite',
+                            }} />
                         )}
                     </div>
                 );
@@ -1547,15 +1487,50 @@ export const BattleScene: React.FC<Props> = ({
             
             {/* Spawn Ground Overlay */}
             {!battleStarted && (
-               <div className="absolute inset-0 border-4 border-dashed border-teal-400/40 pointer-events-none flex items-center justify-center iso-item">
-                  <span className="text-white text-xs font-black bg-slate-950/90 py-3 px-6 rounded-full border border-teal-400/30 shadow-2xl backdrop-blur-md animate-pulse">
-                     👈 自分の じんち（すなの ところ）を タップして、ネコや まほうを 出そう
+               <div className="absolute inset-0 pointer-events-none flex items-center justify-center iso-item" style={{ border: '3px dashed rgba(110,231,183,0.45)' }}>
+                  <span className="cw-panel cw-panel-strong text-cw-16 font-bold py-3 px-6 rounded-cw-pill " style={{ color: 'var(--cw-fg)', boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-growth)' }}>
+                     自分の じんち（すなの ところ）を タップして、ネコや まほうを 出そう
                   </span>
                </div>
             )}
           </div>
         </PinchZoomLayer>
        </div>
+
+       {/* ネコへの めいれい（ネコを タップすると 出る。ひろげた 盤面の外に 出して、的を 48px に保つ） */}
+       {selectedOrderTroopId && (() => {
+         const ent = entities.find(x => x.id === selectedOrderTroopId && x.type === 'TROOP');
+         if (!ent) return null;
+         const fam = CHARACTER_BY_ID[ent.subType];
+         const nm = fam ? fam.forms[Math.max(0, getStage(ent.subType) - 1)]?.name ?? fam.displayName : '';
+         return (
+           <Panel strong pad={false} className="absolute z-[90] px-3 py-2 flex flex-col items-center gap-1.5 cw-enter" data-testid="order-menu"
+             style={{ top: 124, maxWidth: '96vw', ...(ent.x > GRID_W / 2 ? { left: 12 } : { right: 72 }) }}>
+             <span className="text-cw-12 font-bold" style={{ color: 'var(--cw-fg-2)' }}>{nm} への めいれい ・ 行き先か 敵を タップでも OK</span>
+             <div className="flex gap-2">
+               {(
+                 [
+                   { order: 'RUSH' as const, label: 'とつげき', tone: 'danger' },
+                   { order: 'DEFENSE' as const, label: 'まもる', tone: 'action' },
+                   { order: 'HOLD' as const, label: 'たいき', tone: 'neutral' },
+                 ] as { order: 'RUSH' | 'DEFENSE' | 'HOLD'; label: string; tone: string }[]
+               ).map(({ order, label, tone }) => (
+                 <button key={order} type="button"
+                   onClick={() => {
+                     issue({ type: 'SET_ORDER', player: localPlayer, entityId: selectedOrderTroopId, order });
+                     setSelectedOrderTroopId(null);
+                   }}
+                   className={`cw-btn cw-press cw-btn-secondary cw-tone-${tone} min-h-[48px] min-w-[80px] px-3 text-cw-14`}
+                   style={{ color: tone === 'neutral' ? 'var(--cw-fg)' : 'var(--tone)', whiteSpace: 'nowrap', boxShadow: 'var(--tone-lit)' }}>
+                   {label}
+                 </button>
+               ))}
+               <button type="button" onClick={() => setSelectedOrderTroopId(null)} aria-label="めいれいを とじる"
+                 className="cw-btn cw-press cw-btn-ghost min-h-[48px] min-w-[48px] px-3 text-cw-14 whitespace-nowrap">とじる</button>
+             </div>
+           </Panel>
+         );
+       })()}
 
        {/* Result Modal display */}
        {battleResult && (() => {
@@ -1566,156 +1541,117 @@ export const BattleScene: React.FC<Props> = ({
          // fixed + z-[160] にして、下部のキャラ出撃バー(z-50)より確実に手前へ出す。
          // 以前は両方 z-50 の兄弟要素で、DOM順が後のバーがリザルトを覆っていた。
          return (
-         <div className="fixed inset-0 z-[160] bg-black/90 flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 p-4 overflow-y-auto">
+         <div className="fixed inset-0 z-[160] flex flex-col items-center justify-center p-4 cw-enter" data-testid="battle-result" style={{ background: 'rgba(6,10,28,0.88)' }}>
             {win ? (
-               <div className="text-center p-6 bg-slate-900/70 border border-yellow-500/30 rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto backdrop-blur-md shadow-2xl">
-                 <Trophy className="w-16 h-16 text-yellow-400 mx-auto mb-3 animate-bounce" />
-                 <div className="text-[10px] tracking-[0.25em] text-yellow-400/70 mb-1" style={{ fontFamily: 'Orbitron, monospace' }}>
-                   {expedition ? (expedition.winLabel ?? '遠征 せいこう！') : `だい${chapter.no}しょう クリア！`}
-                 </div>
-                 <h2 className="text-2xl font-extrabold text-yellow-400 mb-2 leading-tight">{chapter.title}</h2>
-                 <div className="flex items-center gap-2 mb-4 text-left">
-                   {!isPvp && !expedition?.hideBoss && bossSprite(chapter.id) && (
-                     <img src={bossSprite(chapter.id)} alt={chapter.enemyName} draggable={false} data-testid="result-boss"
-                       style={{ width: 52, height: 52, objectFit: 'contain', flexShrink: 0, opacity: 0.85 }} />
+               <Panel strong pad={false} className="cw-reward-pop text-center max-w-md w-full max-h-[94dvh] flex flex-col" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
+                 <div className="min-h-0 flex-1 overflow-y-auto cw-scroll p-5 pb-3">
+                   <div className="flex items-center justify-center gap-2 mb-1" style={{ color: 'var(--cw-reward)' }}>
+                     <Icon name="crown" size={36} />
+                     <span className="text-cw-14 font-extrabold">
+                       {expedition ? (expedition.winLabel ?? '遠征 せいこう！') : `だい${chapter.no}しょう クリア！`}
+                     </span>
+                   </div>
+                   <h2 className="text-cw-28 font-extrabold mb-3 leading-tight" style={{ color: 'var(--cw-fg)' }}>{chapter.title}</h2>
+                   <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} win />
+                   {loot.gold > 0 && (
+                     <div className="flex items-center justify-center gap-2 mb-3" data-testid="result-loot" aria-label={`クレジット ${loot.gold}`}>
+                       <Icon name="credit" size={44} />
+                       <span className="font-cw-num font-black text-cw-40" style={{ color: 'var(--cw-reward)' }}>+{loot.gold}</span>
+                       {hasBuff('DOUBLE_LOOT') && <Chip tone="reward">アップ！</Chip>}
+                     </div>
                    )}
-                   <p className="text-sm text-gray-200 leading-relaxed">{chapter.victoryLine}</p>
+                   <div className="flex items-center gap-3 mb-3 text-left">
+                     {!isPvp && !expedition?.hideBoss && bossSprite(chapter.id) && (
+                       <img src={bossSprite(chapter.id)} alt={chapter.enemyName} draggable={false} data-testid="result-boss"
+                         style={{ width: 52, height: 52, objectFit: 'contain', flexShrink: 0, opacity: 0.9 }} />
+                     )}
+                     <p className="text-cw-14 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>{chapter.victoryLine}</p>
+                   </div>
+                   {expedition?.resultExtra}
+                   <GainsSummary gains={gains} />
+                   <NewSkillNotice />
+                   <LevelUpSummary events={levelUps} />
                  </div>
-                 <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} win />
-                 {expedition?.resultExtra}
-                 <GainsSummary gains={gains} />
-                 <NewSkillNotice />
-                 <LevelUpSummary events={levelUps} />
-                 <Button className="w-full mt-2" size="lg" onClick={() => onEndBattle(true, loot, winStars)}>
-                   {loot.gold <= 0 ? '基地へ もどる'
-                     : settled ? `基地へ もどる（💠${loot.gold} ゲット！${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}）` : `ごほうびを もらって かえる（💠${loot.gold}）${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}`}
-                 </Button>
-               </div>
+                 <div className="p-4 pt-2" style={{ boxShadow: 'inset 0 1px 0 var(--cw-line)' }}>
+                   <Button variant="reward" size="xl" fullWidth onClick={() => onEndBattle(true, loot, winStars)}>
+                     {loot.gold <= 0 ? '基地へ もどる'
+                       : settled ? `基地へ もどる（💠${loot.gold} ゲット！${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}）` : `ごほうびを もらって かえる（💠${loot.gold}）${hasBuff('DOUBLE_LOOT') ? ' アップ！' : ''}`}
+                   </Button>
+                 </div>
+               </Panel>
             ) : (
-               <div className="text-center p-6 bg-slate-900/70 border border-red-500/30 rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto backdrop-blur-md shadow-2xl">
-                 <Skull className="w-16 h-16 text-red-500 mx-auto mb-3" />
-                 <h2 className="text-2xl font-extrabold text-red-500 mb-2">たいきゃく...</h2>
-                 <p className="text-sm text-gray-200 mb-2 leading-relaxed">{chapter.defeatLine}</p>
-                 <p className="text-[11px] text-cyan-300/80 mb-3 leading-relaxed">
-                   💡 {chapter.hint}
-                 </p>
-                 {/* 連敗時は次回サポートが入ることを先に伝える（隠れた調整はしない） */}
-                 <div className="text-[11px] text-[#a3e635] mb-3 leading-relaxed">
-                   {expedition
-                     ? (expedition.loseNote ?? 'まけても ネコたちの けいけんちは 手に入るよ。遠征は 今週 なんかいでも ちょうせん できる。いちばん よい 星が のこるよ！')
-                     : 'まけても ネコたちの けいけんちは 手に入るよ。何回か まけると「サポートモード」で やさしく なるので、あきらめずに もう一回！'}
+               <Panel strong pad={false} className="text-center max-w-md w-full max-h-[94dvh] flex flex-col">
+                 <div className="min-h-0 flex-1 overflow-y-auto cw-scroll p-5 pb-3">
+                   <div className="flex justify-center mb-1"><Icon name="cats" size={56} /></div>
+                   <h2 className="text-cw-28 font-extrabold mb-2" style={{ color: 'var(--cw-fg)' }}>たいきゃく...</h2>
+                   <p className="text-cw-14 mb-2 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>{chapter.defeatLine}</p>
+                   <p className="text-cw-14 mb-3 leading-relaxed" style={{ color: 'var(--cw-action)' }}>
+                     💡 {chapter.hint}
+                   </p>
+                   {/* 連敗時は次回サポートが入ることを先に伝える（隠れた調整はしない） */}
+                   <div className="text-cw-14 mb-3 leading-relaxed" style={{ color: 'var(--cw-growth)' }}>
+                     {expedition
+                       ? (expedition.loseNote ?? 'まけても ネコたちの けいけんちは 手に入るよ。遠征は 今週 なんかいでも ちょうせん できる。いちばん よい 星が のこるよ！')
+                       : 'まけても ネコたちの けいけんちは 手に入るよ。何回か まけると「サポートモード」で やさしく なるので、あきらめずに もう一回！'}
+                   </div>
+                   <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
+                   {expedition?.resultExtra}
+                   <GainsSummary gains={gains} />
+                   <NewSkillNotice />
+                   <LevelUpSummary events={levelUps} />
                  </div>
-                 <QuizSummary answered={quizStatsRef.current.answered} perfect={quizStatsRef.current.perfect} />
-                 {expedition?.resultExtra}
-                 <GainsSummary gains={gains} />
-                 <NewSkillNotice />
-                 <LevelUpSummary events={levelUps} />
-                 <Button className="w-full mt-2" size="lg" variant="secondary" onClick={() => onEndBattle(false, { gold: 0 })}>
-                   基地へ もどる
-                 </Button>
-               </div>
+                 <div className="p-4 pt-2" style={{ boxShadow: 'inset 0 1px 0 var(--cw-line)' }}>
+                   <Button variant="secondary" size="xl" fullWidth onClick={() => onEndBattle(false, { gold: 0 })}>
+                     基地へ もどる
+                   </Button>
+                 </div>
+               </Panel>
             )}
          </div>
          );
        })()}
 
-       {/* Hotbar: Bottom selection console for both troops and spells */}
-       {/* iPad 横向きでは画面の高さが限られるため、行数を減らしてコンパクトにしている */}
-       <div className="bg-gray-950/95 border-t border-gray-800 px-3 py-1.5 z-50 relative shadow-2xl flex flex-col gap-1.5 flex-shrink-0">
-         {/* Row 1: 魔法カード（選択＋補充を1行にまとめた） */}
+       {/* 下の操作の列：まほう・たてる（上の段）／出撃するネコ（下の段）。的は 48px いじょう */}
+       {/* iPad 横向きでは画面の高さが限られるため、2段にまとめている */}
+       <div ref={hotbarRef} className="px-3 py-2 z-50 relative flex flex-col gap-2 flex-shrink-0" data-testid="battle-hotbar"
+         style={{ background: 'var(--cw-surface-strong)', WebkitBackdropFilter: 'blur(14px)', backdropFilter: 'blur(14px)', boxShadow: 'inset 0 1px 0 var(--cw-line-strong), inset 0 2px 0 var(--cw-top-light)' }}>
+         {/* 上の段：魔法（えらぶ・ふやす） */}
          <div className="flex gap-2 items-center justify-center flex-wrap">
-           <span className="text-[10px] font-black text-gray-400 self-center uppercase pr-1">まほう:</span>
-           <button
-             onClick={() => {
-               setSelectedSpell('HEAL');
-               setSelectedTroopId(null);
-             }}
-             disabled={spellCounts.HEAL <= 0}
-             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all text-xs ${
-               selectedSpell === 'HEAL'
-                 ? 'bg-emerald-950 text-emerald-300 border-emerald-400'
-                 : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-850'
-             } ${spellCounts.HEAL <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
-           >
-             <Heart size={13} className="text-emerald-400" />
-             <span className="font-bold">かいふく</span>
-             <span className="text-[10px] bg-slate-850 text-stone-300 px-1.5 py-0.2 rounded font-mono">
-               のこり {spellCounts.HEAL}
-             </span>
-           </button>
-
-           <button
-             onClick={() => {
-               setSelectedSpell('RAGE');
-               setSelectedTroopId(null);
-             }}
-             disabled={spellCounts.RAGE <= 0}
-             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all text-xs ${
-               selectedSpell === 'RAGE'
-                 ? 'bg-purple-950 text-purple-300 border-purple-400'
-                 : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-850'
-             } ${spellCounts.RAGE <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
-           >
-             <Zap size={13} className="text-purple-400" />
-             <span className="font-bold">げきおこ</span>
-             <span className="text-[10px] bg-slate-850 text-stone-300 px-1.5 py-0.2 rounded font-mono">
-               のこり {spellCounts.RAGE}
-             </span>
-           </button>
-
-           {/* 補充（旧・独立した行を、この行のチップに統合してバーの高さを削った） */}
-           <button
-             onClick={() => issue({ type: 'BUY_SPELL', player: localPlayer, spell: 'HEAL' })}
-             disabled={gold < 60}
-             className="px-2 py-1.5 text-[10px] font-bold rounded-lg border border-[#22d3ee]/40 bg-[#22d3ee]/10 text-[#22d3ee] disabled:opacity-30 whitespace-nowrap"
-           >
-             ＋💊60⚡
-           </button>
-           <button
-             onClick={() => issue({ type: 'BUY_SPELL', player: localPlayer, spell: 'RAGE' })}
-             disabled={gold < 80}
-             className="px-2 py-1.5 text-[10px] font-bold rounded-lg border border-[#fb923c]/40 bg-[#fb923c]/10 text-[#fb923c] disabled:opacity-30 whitespace-nowrap"
-           >
-             ＋😤80⚡
-           </button>
-
-           {/* 建設（旧・独立した行を、この行に統合） */}
-           <span className="text-[10px] font-black text-gray-400 self-center uppercase pl-2">たてる:</span>
-           {IN_BATTLE_BUILD_OPTIONS.map(type => {
-             const bCost = IN_BATTLE_BUILD_COSTS[type] ?? 0;
-             const canAfford = Math.floor(gold) >= bCost;
-             const selected = buildMode === type;
+           {([
+             { id: 'HEAL' as const, label: 'かいふく', icon: 'heal' as const, tone: 'growth', cost: 60 },
+             { id: 'RAGE' as const, label: 'げきおこ', icon: 'rage' as const, tone: 'cat', cost: 80 },
+           ]).map(sp => {
+             const sel = selectedSpell === sp.id;
+             const none = spellCounts[sp.id] <= 0;
              return (
-               <button
-                 key={type}
-                 onClick={() => {
-                   setBuildMode(selected ? null : type);
-                   setSelectedTroopId(null);
-                   setSelectedSpell(null);
-                 }}
-                 disabled={!canAfford && !selected}
-                 className={`flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[10px] font-bold whitespace-nowrap transition-all active:scale-95 ${
-                   selected
-                     ? 'border-[#22d3ee] bg-[#22d3ee]/20 text-[#22d3ee]'
-                     : canAfford
-                       ? 'border-white/25 bg-white/5 text-white/75 hover:bg-white/10'
-                       : 'border-white/10 bg-transparent text-white/40 opacity-40'
-                 }`}
-               >
-                 <span className="text-sm leading-none">{BUILDING_STATS[type].icon || '🧱'}</span>
-                 <span style={{ fontFamily: 'Orbitron, monospace' }}>{bCost}⚡</span>
-               </button>
+               <React.Fragment key={sp.id}>
+                 <button type="button" aria-pressed={sel} aria-disabled={none || undefined} disabled={none}
+                   onClick={() => { setSelectedSpell(sp.id); setSelectedTroopId(null); }}
+                   className={`cw-btn cw-press cw-btn-secondary cw-tone-${sp.tone} min-h-[48px] px-2.5 !gap-1.5 text-cw-14`}
+                   style={sel ? { background: 'var(--tone-bg)', boxShadow: 'var(--tone-lit)' } : undefined}>
+                   <Icon name={sp.icon} size={26} />
+                   <span>{sp.label}</span>
+                   <span className="font-cw-num text-cw-12" style={{ color: none ? undefined : 'var(--cw-fg-2)' }}>のこり {spellCounts[sp.id]}</span>
+                 </button>
+                 <button type="button" disabled={gold < sp.cost} aria-label={`${sp.label}を ふやす（${sp.cost}エナジー）`}
+                   onClick={() => issue({ type: 'BUY_SPELL', player: localPlayer, spell: sp.id })}
+                   className="cw-btn cw-press cw-btn-secondary min-h-[48px] px-2 !gap-1 text-cw-14">
+                   <span aria-hidden>＋</span><span className="font-cw-num">{sp.cost}</span><Icon name="energy" size={18} />
+                 </button>
+               </React.Fragment>
              );
            })}
-           {buildMode && (
-             <span className="text-[10px] text-[#22d3ee] font-bold animate-pulse whitespace-nowrap">
-               👆 配置する場所をタップ
-             </span>
-           )}
-         </div>
 
-         {/* Row 2: 出撃（えらんだ5枠・エナジーで出す）+ 一時ランクアップ */}
-         <div className="relative flex items-center gap-2 overflow-x-auto px-1">
+         </div>
+         {buildMode && (
+           <span role="status" className="cw-panel cw-panel-strong absolute -top-12 left-1/2 -translate-x-1/2 text-cw-14 font-bold px-4 py-2 rounded-cw-pill whitespace-nowrap"
+             style={{ color: 'var(--cw-action)', boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-action)' }}>
+             配置する場所を タップ
+           </span>
+         )}
+
+         {/* 下の段：出撃（えらんだ5枠・エナジーで出す）+ 一時ランクアップ + たてる */}
+         <div className="relative flex flex-wrap items-center gap-2 px-1" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 4px)' }}>
             {availableTroops.map(troop => {
                const fam = CHARACTER_BY_ID[troop.id];
                const baseStage = getStage(troop.id);
@@ -1727,34 +1663,40 @@ export const BattleScene: React.FC<Props> = ({
                const cost = Math.round((runner.cfg.unitStats[localPlayer][troop.id]?.cost ?? 0) * runner.cfg.costMult[localPlayer]);
                const cdLeft = deployCooldownLeftMs(troop.id);
                const affordable = Math.floor(gold) >= cost && cdLeft <= 0;
+               const sel = selectedTroopId === troop.id;
                return (
                   <button
                     key={troop.id}
+                    type="button"
+                    aria-pressed={sel}
+                    aria-disabled={!affordable || undefined}
+                    data-troop={troop.id}
                     onClick={() => {
                       setSelectedTroopId(troop.id);
                       setSelectedSpell(null);
                     }}
-                    className={`flex-shrink-0 relative w-16 h-16 rounded-xl border-2 flex flex-col items-center justify-center bg-slate-900 transition-all ${
-                      selectedTroopId === troop.id ? 'border-yellow-400 bg-slate-800' : 'border-gray-800 hover:bg-slate-800'
-                    } ${!affordable ? 'opacity-50' : ''}`}
+                    className={`cw-card cw-press cw-tone-cat flex-shrink-0 relative w-[96px] min-h-[76px] flex flex-col items-center justify-center gap-0.5 px-1 py-1 ${sel ? 'cw-card-on' : ''}`}
+                    style={sel ? { background: 'var(--tone-bg)' } : undefined}
                   >
                      <img src={sprite} alt={troop.id}
-                       style={{ width: 28, height: 28, objectFit: 'contain', imageRendering: 'crisp-edges' }}
+                       style={{ width: 34, height: 34, objectFit: 'contain', imageRendering: 'crisp-edges' }}
                        draggable={false} />
-                     <span className="text-[8px] font-bold text-gray-300 leading-none truncate w-full text-center px-0.5">{formName}</span>
-                     <span className="text-[9px] font-black text-[#facc15] leading-none mt-0.5" style={{ fontFamily: 'Orbitron, monospace' }}>{cost}⚡</span>
+                     <span className="text-cw-12 font-bold leading-none truncate w-full text-center" style={{ color: affordable ? 'var(--cw-fg)' : 'var(--cw-fg-3)' }}>{formName}</span>
+                     <span className="flex items-center gap-0.5 font-cw-num text-cw-12 font-black leading-none" style={{ color: affordable ? 'var(--cw-reward)' : 'var(--cw-fg-3)' }}>
+                       {cost}<Icon name="energy" size={14} />
+                     </span>
                      {tr > 0 && (
-                       <span className="absolute -top-1.5 -left-1.5 bg-[#ef4444] text-white text-[8px] font-black px-1 rounded-full border border-white">+{tr}</span>
+                       <span className="absolute top-1 left-1 text-cw-12 font-black px-1.5 py-0.5 rounded-cw-pill font-cw-num leading-[16px]" style={{ background: 'var(--cw-reward)', color: 'var(--cw-on-color)' }}>+{tr}</span>
                      )}
                      {(baseStage > 1) && (
-                       <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[7px] font-black px-1 rounded-full"
-                         style={{ background: fam?.accent ?? '#facc15', color: '#0a0e1a' }}>
+                       <span className="absolute top-1 right-1 text-cw-12 font-black px-1.5 py-0.5 rounded-cw-pill leading-[16px] whitespace-nowrap"
+                         style={{ background: 'var(--cw-surface-strong)', color: fam?.accent ?? 'var(--cw-reward)', boxShadow: `inset 0 0 0 1px ${fam?.accent ?? 'var(--cw-reward)'}` }}>
                          進化{baseStage}
                        </span>
                      )}
                      {cdLeft > 0 && (
-                       <div className="absolute inset-0 rounded-xl bg-black/60 flex items-center justify-center">
-                         <span className="text-white text-xs font-bold">{(cdLeft/1000).toFixed(1)}</span>
+                       <div className="absolute inset-0 rounded-cw-md flex items-center justify-center" style={{ background: 'rgba(6,10,28,0.7)' }}>
+                         <span className="font-cw-num text-cw-14 font-bold" style={{ color: 'var(--cw-fg)' }}>{(cdLeft/1000).toFixed(1)}</span>
                        </div>
                      )}
                   </button>
@@ -1769,23 +1711,50 @@ export const BattleScene: React.FC<Props> = ({
               const can = Math.floor(gold) >= rankCost;
               return (
                 <button
+                  type="button"
                   onClick={() => {
                     if (Math.floor(gold) < rankCost) return;
                     issue({ type: 'BUY_RANK', player: localPlayer, troopId: selectedTroopId });
                     sfx.correct();
                   }}
                   disabled={!can}
-                  className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-xl border-2 transition-all ${
-                    can ? 'border-[#ef4444] bg-[#ef4444]/15 text-[#f87171]' : 'border-gray-700 bg-slate-900 opacity-40'
-                  }`}
-                  style={{ fontFamily: 'Orbitron, monospace' }}
+                  className="cw-btn cw-press cw-btn-secondary cw-tone-growth flex-shrink-0 flex-col !gap-0.5 w-[96px] min-h-[76px] px-1"
+                  style={can ? { boxShadow: 'var(--tone-lit)', background: 'var(--tone-bg)' } : undefined}
                 >
-                  <span className="text-lg">⬆️</span>
-                  <span className="text-[8px] font-bold leading-none">強化</span>
-                  <span className="text-[9px] font-black text-[#facc15] mt-0.5">{rankCost}⚡</span>
+                  <Icon name="buff" size={28} />
+                  <span className="text-cw-12 font-bold leading-none">強化</span>
+                  <span className="flex items-center gap-0.5 font-cw-num text-cw-12 font-black leading-none">{rankCost}<Icon name="energy" size={14} /></span>
                 </button>
               );
             })()}
+
+            {/* 建設（旧・独立した行を、この行に統合） */}
+           <span aria-hidden className="w-px h-10 mx-1" style={{ background: 'var(--cw-line-strong)' }} />
+           <span className="text-cw-12 font-bold" style={{ color: 'var(--cw-fg-3)' }}>たてる</span>
+           {IN_BATTLE_BUILD_OPTIONS.map(type => {
+             const bCost = IN_BATTLE_BUILD_COSTS[type] ?? 0;
+             const canAfford = Math.floor(gold) >= bCost;
+             const selected = buildMode === type;
+             return (
+               <button
+                 key={type}
+                 type="button"
+                 aria-pressed={selected}
+                 aria-label={`${BUILDING_STATS[type].name}を たてる（${bCost}エナジー）`}
+                 onClick={() => {
+                   setBuildMode(selected ? null : type);
+                   setSelectedTroopId(null);
+                   setSelectedSpell(null);
+                 }}
+                 disabled={!canAfford && !selected}
+                 className="cw-btn cw-press cw-btn-secondary cw-tone-action min-h-[48px] px-2 !gap-1 text-cw-14"
+                 style={selected ? { background: 'var(--tone-bg)', boxShadow: 'var(--tone-lit)' } : undefined}
+               >
+                 <FacilityImg type={type} size={30} style={!canAfford && !selected ? { filter: 'grayscale(1) brightness(.8)' } : undefined} />
+                 <span className="font-cw-num">{bCost}</span><Icon name="energy" size={18} />
+               </button>
+             );
+           })}
          </div>
 
        </div>
@@ -1793,58 +1762,48 @@ export const BattleScene: React.FC<Props> = ({
        {/* 開戦ブリーフィング（②: 戦いのタイトル・敵の背景・作戦の一言） */}
        {briefingOpen && (
          <div className="absolute inset-0 z-[130] flex items-center justify-center p-4"
-           style={{ background: 'rgba(3,6,16,0.93)', backdropFilter: 'blur(6px)' }}>
-           <div className="w-full max-w-sm rounded-2xl border p-5 max-h-[90dvh] overflow-y-auto"
-             style={{
-               borderColor: 'rgba(239,68,68,0.4)',
-               background: 'linear-gradient(160deg, rgba(37,99,235,0.16), rgba(239,68,68,0.14)), rgba(6,10,24,0.9)',
-               fontFamily: '"M PLUS Rounded 1c", sans-serif',
-             }}>
-             <div className="text-[10px] tracking-[0.3em] text-[#38bdf8]/80" style={{ fontFamily: 'Orbitron, monospace' }}>
-               {expedition ? (expedition.kicker ?? 'WEEKLY EXPEDITION') : `CHAPTER ${chapter.no}`}
-             </div>
-             <h2 className="text-white font-black text-xl mt-1 mb-3 leading-tight">{chapter.title}</h2>
-
-             <div className="flex items-start gap-3 p-3 rounded-xl mb-3"
-               style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.28)' }}>
-               {bossSprite(chapter.id) && !expedition?.hideBoss
-                 ? <img src={bossSprite(chapter.id)} alt="" draggable={false} data-testid="briefing-boss"
-                     style={{ width: 64, height: 64, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(239,68,68,0.6))' }} />
-                 : <span className="text-4xl leading-none">{expedition?.hideBoss ? expedition.ruleIcon : '😼'}</span>}
-               <div className="min-w-0">
-                 <div className="text-[#f87171] font-bold text-sm">{chapter.enemyName}</div>
-                 <div className="text-white/45 text-[10px] mb-1">{chapter.enemyTitle}</div>
-                 <p className="text-white/75 text-[11px] leading-relaxed">{chapter.background}</p>
+           style={{ background: 'rgba(6,10,28,0.9)', WebkitBackdropFilter: 'blur(6px)', backdropFilter: 'blur(6px)' }}>
+           <Panel strong pad={false} className="cw-enter w-full max-w-md max-h-[94dvh] flex flex-col" data-testid="briefing">
+             <div className="min-h-0 flex-1 overflow-y-auto cw-scroll p-5 pb-3">
+               <div className="font-cw-num text-cw-12 font-bold tracking-widest" style={{ color: 'var(--cw-action)' }}>
+                 {expedition ? (expedition.kicker ?? 'WEEKLY EXPEDITION') : `CHAPTER ${chapter.no}`}
                </div>
-             </div>
+               <h2 className="text-cw-28 font-extrabold mt-0.5 mb-3 leading-tight" style={{ color: 'var(--cw-fg)' }}>{chapter.title}</h2>
 
-             <p className="text-white/85 text-xs leading-relaxed mb-2">▸ {chapter.briefing}</p>
-             <p className="text-[#facc15]/90 text-[11px] leading-relaxed mb-4">💡 {chapter.hint}</p>
-             {!isPvp && cardLimitFor(chapter, tier, assistLevel) != null && (
-               <p className="text-[#fecaca] text-[11px] leading-relaxed mb-4 p-2 rounded-lg" data-testid="briefing-card-limit"
-                 style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.4)' }}>
-                 🃏 この たたかいの カードは {cardLimitFor(chapter, tier, assistLevel)} まいまで。まちがえずに とくほど ⚡ が ふえて、たくさん 出撃できるよ
-               </p>
-             )}
-
-             {assistLevel > 0 && (
-               <div className="p-2.5 rounded-xl mb-4 text-[11px] leading-relaxed"
-                 style={{ background: 'rgba(163,230,53,0.10)', border: '1px solid rgba(163,230,53,0.35)', color: '#a3e635' }}>
-                 🛟 <strong>{ASSIST_LEVELS[assistLevel].label}</strong>：{ASSIST_LEVELS[assistLevel].description}
+               <div className="cw-tone-danger flex items-start gap-3 p-3 rounded-cw-md mb-3" style={{ background: 'var(--tone-bg)', boxShadow: 'inset 0 0 0 1px var(--cw-line-strong)' }}>
+                 {bossSprite(chapter.id) && !expedition?.hideBoss
+                   ? <img src={bossSprite(chapter.id)} alt="" draggable={false} data-testid="briefing-boss"
+                       style={{ width: 72, height: 72, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(248,113,113,0.6))' }} />
+                   : <span className="text-4xl leading-none">{expedition?.hideBoss ? expedition.ruleIcon : '😼'}</span>}
+                 <div className="min-w-0">
+                   <div className="font-extrabold text-cw-16" style={{ color: 'var(--cw-danger)' }}>{chapter.enemyName}</div>
+                   <div className="text-cw-12 mb-1" style={{ color: 'var(--cw-fg-3)' }}>{chapter.enemyTitle}</div>
+                   <p className="text-cw-14 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>{chapter.background}</p>
+                 </div>
                </div>
-             )}
 
-             <button
-               onClick={() => { sfx.select(); setBriefingOpen(false); }}
-               className="w-full py-3.5 rounded-xl font-bold text-base transition-all active:scale-95"
-               style={{
-                 fontFamily: 'Orbitron, monospace',
-                 background: 'rgba(239,68,68,0.2)', border: '2px solid #ef4444', color: '#f87171',
-                 boxShadow: '0 0 14px rgba(239,68,68,0.5)',
-               }}>
-               ⚔️ 作戦かいし！
-             </button>
-           </div>
+               <p className="text-cw-14 leading-relaxed mb-2" style={{ color: 'var(--cw-fg)' }}>▸ {chapter.briefing}</p>
+               <p className="text-cw-14 leading-relaxed mb-3" style={{ color: 'var(--cw-reward)' }}>💡 {chapter.hint}</p>
+               {!isPvp && cardLimitFor(chapter, tier, assistLevel) != null && (
+                 <p className="cw-tone-danger text-cw-14 leading-relaxed mb-3 p-3 rounded-cw-md" data-testid="briefing-card-limit"
+                   style={{ background: 'var(--tone-bg)', boxShadow: 'inset 0 0 0 1px var(--cw-line-strong)', color: 'var(--cw-fg)' }}>
+                   🃏 この たたかいの カードは {cardLimitFor(chapter, tier, assistLevel)} まいまで。まちがえずに とくほど ⚡ が ふえて、たくさん 出撃できるよ
+                 </p>
+               )}
+
+               {assistLevel > 0 && (
+                 <div className="cw-tone-growth p-3 rounded-cw-md mb-1 text-cw-14 leading-relaxed"
+                   style={{ background: 'var(--tone-bg)', boxShadow: 'inset 0 0 0 1px var(--cw-line-strong)', color: 'var(--cw-growth)' }}>
+                   🛟 <strong>{ASSIST_LEVELS[assistLevel].label}</strong>：{ASSIST_LEVELS[assistLevel].description}
+                 </div>
+               )}
+             </div>
+             <div className="p-4 pt-2" style={{ boxShadow: 'inset 0 1px 0 var(--cw-line)' }}>
+               <Button variant="primary" size="xl" fullWidth onClick={() => { sfx.select(); setBriefingOpen(false); }}>
+                 <Icon name="sortie" size={30} />作戦かいし！
+               </Button>
+             </div>
+           </Panel>
          </div>
        )}
 
@@ -1852,22 +1811,24 @@ export const BattleScene: React.FC<Props> = ({
   );
 };
 
-// 戦闘リザルトのレベルアップ/進化サマリー
 /** この戦闘で解いた問題のまとめ。勝ったときは星（まちがえずに解けた割合で決まる。速さでは決まらない） */
 const QuizSummary: React.FC<{ answered: number; perfect: number; win?: boolean }> = ({ answered, perfect, win }) => {
   const stars = starsFor(answered, perfect);
   return (
-    <div className="mb-3 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-left">
+    <div className="mb-3 text-center" data-testid="quiz-summary">
       {win && (
-        <div className="text-center text-2xl mb-1" aria-label={`星 ${stars}つ`}>
-          {[1, 2, 3].map((n) => <span key={n} style={{ color: n <= stars ? '#facc15' : 'rgba(255,255,255,0.18)' }}>★</span>)}
+        <div className="flex justify-center gap-1.5 mb-2" role="img" aria-label={`星 ${stars}つ`}>
+          {[1, 2, 3].map((n) => (
+            <Icon key={n} name="star" size={n === 2 ? 64 : 52}
+              style={n <= stars ? { filter: 'drop-shadow(0 0 10px rgba(250,204,21,.6))' } : { filter: 'grayscale(1) brightness(.5)', opacity: 0.7 }} />
+          ))}
         </div>
       )}
-      <div className="text-[12px] text-gray-200 text-center">
-        といた問題 <b className="text-white">{answered}</b>問 ・ まちがえずに とけた <b className="text-[#a3e635]">{perfect}</b>問
+      <div className="text-cw-14" style={{ color: 'var(--cw-fg-2)' }}>
+        といた問題 <b className="font-cw-num text-cw-16" style={{ color: 'var(--cw-fg)' }}>{answered}</b>問 ・ まちがえずに とけた <b className="font-cw-num text-cw-16" style={{ color: 'var(--cw-growth)' }}>{perfect}</b>問
       </div>
       {win && stars < 3 && (
-        <div className="text-[10px] text-white/50 text-center mt-1">
+        <div className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>
           ★3は「8問いじょう といて、9わり まちがえない」。★2は「5問いじょうで 7わり」。はやさは かんけいないよ
         </div>
       )}
@@ -1878,7 +1839,7 @@ const QuizSummary: React.FC<{ answered: number; perfect: number; win?: boolean }
 const LevelUpSummary: React.FC<{ events: import('../../store/useArmyStore').LevelUpEvent[] }> = ({ events }) => {
   if (!events || events.length === 0) {
     return (
-      <div className="text-xs text-cyan-300/80 mb-2">出撃した ネコに けいけんちが 入ったよ！</div>
+      <div className="text-cw-14 mb-2" style={{ color: 'var(--cw-action)' }}>出撃した ネコに けいけんちが 入ったよ！</div>
     );
   }
   return (
@@ -1889,15 +1850,15 @@ const LevelUpSummary: React.FC<{ events: import('../../store/useArmyStore').Leve
         const newForm = fam.forms[ev.newStage - 1];
         return (
           <div key={ev.familyId}
-            className="flex items-center gap-2 p-2 rounded-xl"
-            style={{ background: `${fam.accent}1a`, border: `1px solid ${fam.accent}55` }}>
+            className="flex items-center gap-3 p-2 rounded-cw-md"
+            style={{ background: 'var(--cw-surface)', boxShadow: 'inset 0 0 0 1px var(--cw-line)' }}>
             <img src={getCharacterSprite(fam.spriteFamily, ev.newStage)} alt={fam.id}
-              style={{ width: 36, height: 36, objectFit: 'contain' }} draggable={false} />
+              style={{ width: 44, height: 44, objectFit: 'contain' }} draggable={false} />
             <div className="flex-1 text-left">
-              <div className="text-white font-bold text-xs">
-                {ev.evolved ? `✨ 進化！ ${newForm.name}` : `${newForm.name}`}
+              <div className="font-bold text-cw-14" style={{ color: 'var(--cw-fg)' }}>
+                {ev.evolved ? `進化！ ${newForm.name}` : `${newForm.name}`}
               </div>
-              <div className="text-[10px]" style={{ color: fam.accent }}>
+              <div className="text-cw-12 font-cw-num" style={{ color: 'var(--cw-growth)' }}>
                 Lv{ev.fromLevel} → Lv{ev.toLevel}{ev.evolved && ' ・ あたらしいすがた！'}
               </div>
             </div>
