@@ -19,6 +19,7 @@ npm run test:versus:balance  # 同時対戦：コンピュータ4段の総あた
 ```
 
 ## 構成
+- `catwars/components/ui/` … 共通の部品（Button・Panel・Card・TitleBar・StatPill など）・手描きアイコン（`ui/icons/`）・画面のトークン（`index.css` の `--cw-*`。Tailwind にも `cw-*` で登録）。**新しい画面は ここの部品とトークンだけを使う**（きまり・使い方・よい例わるい例は `docs/UI_STYLE.md`）
 - `index.tsx` … 入口（CAT-WARS だけ）
 - `catwars/` … ゲーム本体。`sim/`（決定的な戦闘の計算）・`data/`（キャラ・章・マップ）・`store/`（Zustand）・`components/`
 - `catwars/learn/gradePack.ts` … **学年パック**（単元 → 出せる問題）。ゲーム本体はここだけを見る。5年・6年はパックを足す
@@ -39,6 +40,7 @@ npm run test:versus:balance  # 同時対戦：コンピュータ4段の総あた
 - `docs/CATWARS_DESIGN.md` … 以前の設計の経緯（古い本体と一緒だったころのもの。経済・陣地の節は作り直しの対象）
 
 ## 必ず守ること
+- **画面の見た目は トークンと部品だけで作る。** 色は役目の色（行動＝シアン・ごほうび＝ゴールド・成長＝ミント・めずらしい＝バイオレット・危険＝コーラル・ネコ＝オレンジ）、字は 6段（12・14・16・20・28・40px）で **12px 未満を使わない**、押せるものは **44×44px 以上**、文字は面の上で 4.5:1 以上（`text-white/40` や gray の直指定・16進の色・`text-[10px]` を足さない）。`docs/UI_STYLE.md`
 - **問題は SOL の単元アプリと同じ問題・同じ答え方にする。** `apps/` は手で直さない。直すときは 単元アプリ → SANMON（`npm run sync-apps`）→ ここ（`node scripts/sync-apps-from-sanmon.mjs`）。
 - **判定は1回目のまちがいで×**（SANMON と同じ）。まちがえても罰はなく、ヒントで最後まで解ける。
 - **記録の名前は単元アプリの skill_id**（`PackRound.skillId`）。前に何かを足さない。
