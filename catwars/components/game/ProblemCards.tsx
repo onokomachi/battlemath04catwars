@@ -3,6 +3,8 @@ import { AppRoundHost } from '../../learn/AppRoundHost';
 import { loadPack, rewardWeight, PACK_UNITS, type PackRound, type RoundRegistry } from '../../learn/gradePack';
 import { sfx } from '../../utils/audioEngine';
 import { useReviewStore } from '../../store/useReviewStore';
+import { Button, Chip, Icon, Panel } from '../ui';
+import type { Tone } from '../ui';
 
 /**
  * 問題カード（戦闘の主役の操作。2026-11-15）。
@@ -42,13 +44,13 @@ interface Props {
 
 /** 手札の中で シールドのカードを指す番号 */
 const SHIELD_IDX = 3;
-const SHIELD_COLOR = '#67e8f9';
 
+/** 3まいの 色：やさしい＝成長（ミント）・ふつう＝行動（シアン）・むずかしい＝めずらしい（バイオレット） */
 type Band = 'easy' | 'mid' | 'hard';
-const BANDS: { band: Band; label: string; color: string; match: (d: number) => boolean }[] = [
-  { band: 'easy', label: 'やさしい', color: '#34d399', match: (d) => d <= 2 },
-  { band: 'mid', label: 'ふつう', color: '#38bdf8', match: (d) => d === 3 },
-  { band: 'hard', label: 'むずかしい', color: '#f472b6', match: (d) => d >= 4 },
+const BANDS: { band: Band; label: string; tone: Tone; match: (d: number) => boolean }[] = [
+  { band: 'easy', label: 'やさしい', tone: 'growth', match: (d) => d <= 2 },
+  { band: 'mid', label: 'ふつう', tone: 'action', match: (d) => d === 3 },
+  { band: 'hard', label: 'むずかしい', tone: 'rare', match: (d) => d >= 4 },
 ];
 const UNIT_NAME: Record<string, string> = Object.fromEntries(PACK_UNITS.map((u) => [u.key, u.name]));
 const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
@@ -153,99 +155,93 @@ export const ProblemCards: React.FC<Props> = ({
 
   return (
     <>
-      {/* 手札（左下にたてに3枚）。エナジーが足りないときは ふちが光る */}
-      <div className="absolute z-[60] flex flex-col gap-1.5" style={{ left: 10, bottom: 150, width: 148 }}>
-        <div className="text-[10px] font-black text-white/80 px-1" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-          📚 といて ⚡ を ためよう{combo >= 1 ? `　🔥${combo}` : ''}
-        </div>
-        {cardsLeft !== null && (
-          <div data-testid="cards-left" className="rounded-lg px-2 py-1 text-[11px] font-black flex items-center justify-between"
-            style={{ background: 'rgba(239,68,68,0.16)', border: '1px solid rgba(239,68,68,0.6)', color: '#fecaca' }}>
-            <span>🃏 のこり {cardsLeft} まい</span>
-            <span className="text-[9px] font-bold text-white/60">/ {cardLimit}</span>
-          </div>
-        )}
-        {outOfCards && (
-          <div data-testid="cards-out" className="rounded-xl px-2.5 py-2 text-[11px] font-bold leading-snug text-[#fde68a] bg-slate-900/90 border border-[#fde68a]/50">
-            カードを つかいきった！<br />いまの ネコで がんばれ
-          </div>
-        )}
-        {shieldLayers > 0 && shieldCard && (
-          <button data-testid="shield-card" onClick={() => open(SHIELD_IDX)}
-            className="text-left rounded-xl px-2.5 py-1.5 active:scale-95 transition-transform"
-            style={{
-              background: 'linear-gradient(135deg, rgba(8,47,73,0.96), rgba(12,18,40,0.96))',
-              border: `2px solid ${SHIELD_COLOR}`,
-              boxShadow: `0 0 18px ${SHIELD_COLOR}cc`,
-              animation: 'cw-shield-glow 1.2s ease-in-out infinite',
-            }}>
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-[10px] font-black" style={{ color: SHIELD_COLOR }}>🛡️ シールドを わる</span>
-              <span className="text-[10px] font-black text-white/80">×{shieldLayers}</span>
+      {/* 手札（下の操作の列の すぐ上に 横ならび）。エナジーが足りないときは 光る */}
+      <div className="absolute z-[60] flex flex-col gap-1.5 pointer-events-none" data-testid="hand"
+        style={{ left: 10, right: 72, bottom: 'calc(var(--cw-hotbar-h, 150px) + 10px)' }}>
+        <div className="flex items-stretch gap-1.5 flex-wrap pointer-events-auto">
+          <span className="cw-chip self-center" style={{ background: 'var(--cw-surface-strong)', color: 'var(--cw-fg)', minHeight: 28 }}>
+            といて <Icon name="energy" size={16} /> を ためよう{combo >= 1 && <><Icon name="streak" size={16} /><b className="font-cw-num">{combo}</b></>}
+          </span>
+          {cardsLeft !== null && (
+            <span data-testid="cards-left" className="cw-chip cw-tone-danger self-center" style={{ background: 'var(--cw-surface-strong)', minHeight: 28 }}>
+              <span>のこり {cardsLeft} まい</span>
+              <span style={{ color: 'var(--cw-fg-2)' }}>/ {cardLimit}</span>
+            </span>
+          )}
+          {outOfCards && (
+            <div data-testid="cards-out" className="cw-panel cw-panel-strong rounded-cw-md px-3 py-2 text-cw-14 font-bold leading-snug"
+              style={{ color: 'var(--cw-reward)' }}>
+              カードを つかいきった！ いまの ネコで がんばれ
             </div>
-            <div className="text-[11px] font-bold text-white leading-tight truncate">{shieldCard.label}</div>
-            <div className="text-[9px] truncate" style={{ color: `${SHIELD_COLOR}cc` }}>ふくしゅう・{UNIT_NAME[shieldCard.unitKey] ?? ''}</div>
-          </button>
-        )}
-        {!pack && <div className="rounded-xl px-2 py-3 text-[11px] text-white/70 bg-slate-900/85 border border-white/15">よみこみ中…</div>}
-        {pack && pool.length === 0 && <div className="rounded-xl px-2 py-3 text-[11px] text-white/70 bg-slate-900/85 border border-white/15">出せる問題がありません</div>}
-        {!outOfCards && hand.map((c, i) => c && (
-          <button key={`${i}-${c.unitKey}-${c.skillId}`} onClick={() => open(i)}
-            className="text-left rounded-xl px-2.5 py-1.5 active:scale-95 transition-transform"
-            style={{
-              background: 'rgba(8,12,24,0.92)',
-              border: `2px solid ${BANDS[i].color}`,
-              boxShadow: poor ? `0 0 16px ${BANDS[i].color}cc` : '0 4px 12px rgba(0,0,0,0.5)',
-              animation: poor ? 'cw-quiz-urgent 1s ease-in-out infinite' : undefined,
-            }}>
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-[9px] font-black" style={{ color: BANDS[i].color }}>{BANDS[i].label}</span>
-              <span className="text-[12px] font-black text-[#facc15]" style={{ fontFamily: 'Orbitron, monospace' }}>
-                +{Math.round(rewardOf(c) * comboMultiplier(combo + 1))}⚡
+          )}
+          {shieldLayers > 0 && shieldCard && (
+            <button data-testid="shield-card" type="button" onClick={() => open(SHIELD_IDX)}
+              className="cw-card cw-press cw-tone-action cw-card-on cw-nudge text-left px-3 py-1.5 min-h-[56px] min-w-[200px] max-w-[300px] flex-1">
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-cw-14 font-extrabold flex items-center gap-1.5" style={{ color: 'var(--cw-action)' }}><Icon name="target" size={20} />シールドを わる</span>
+                <span className="text-cw-14 font-black font-cw-num" style={{ color: 'var(--cw-fg)' }}>×{shieldLayers}</span>
               </span>
-            </div>
-            <div className="text-[11px] font-bold text-white leading-tight truncate">{c.label}</div>
-            <div className="text-[9px] text-white/50 truncate">{UNIT_NAME[c.unitKey] ?? ''}</div>
-          </button>
-        ))}
+              <span className="block text-cw-14 font-bold leading-tight truncate" style={{ color: 'var(--cw-fg)' }}>{shieldCard.label}</span>
+              <span className="block text-cw-12 truncate" style={{ color: 'var(--cw-fg-2)' }}>ふくしゅう・{UNIT_NAME[shieldCard.unitKey] ?? ''}</span>
+            </button>
+          )}
+        </div>
+        {!pack && <div className="cw-panel rounded-cw-md px-3 py-2 text-cw-14 pointer-events-auto self-start" style={{ color: 'var(--cw-fg-2)' }}>よみこみ中…</div>}
+        {pack && pool.length === 0 && <div className="cw-panel rounded-cw-md px-3 py-2 text-cw-14 pointer-events-auto self-start" style={{ color: 'var(--cw-fg-2)' }}>出せる問題がありません</div>}
+        <div className="flex gap-1.5 pointer-events-auto">
+          {!outOfCards && hand.map((c, i) => c && (
+            <button key={`${i}-${c.unitKey}-${c.skillId}`} type="button" onClick={() => open(i)}
+              data-band={BANDS[i].band}
+              className={`cw-card cw-press cw-tone-${BANDS[i].tone} ${poor ? 'cw-card-on cw-nudge' : ''} text-left px-3 py-1.5 min-h-[60px] flex-1 min-w-0 max-w-[260px]`}>
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-cw-12 font-extrabold" style={{ color: 'var(--tone)' }}>{BANDS[i].label}</span>
+                <span className="flex items-center gap-0.5 font-cw-num text-cw-14 font-black" style={{ color: 'var(--cw-reward)' }}>
+                  +{Math.round(rewardOf(c) * comboMultiplier(combo + 1))}<Icon name="energy" size={16} />
+                </span>
+              </span>
+              <span className="block text-cw-14 font-bold leading-tight truncate" style={{ color: 'var(--cw-fg)' }}>{c.label}</span>
+              <span className="block text-cw-12 truncate" style={{ color: 'var(--cw-fg-2)' }}>{UNIT_NAME[c.unitKey] ?? ''}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 解く画面（戦闘は止まっている） */}
       {item && pack && (
-        <div className="fixed inset-0 z-[140] flex flex-col" style={{ background: 'rgba(3,6,16,0.34)', backdropFilter: 'blur(1.5px)' }}>
-          <div className="flex items-center gap-3 p-3 border-b border-[#facc15]/25 flex-wrap" style={{ background: 'rgba(3,6,16,0.92)' }}>
+        <div className="fixed inset-0 z-[140] flex flex-col" data-testid="quiz-overlay" style={{ background: 'rgba(6,10,28,0.5)', backdropFilter: 'blur(2px)' }}>
+          <div className="flex items-center gap-2 px-3 py-2 flex-wrap" data-testid="quiz-header"
+            style={{ background: 'var(--cw-surface-strong)', WebkitBackdropFilter: 'blur(14px)', backdropFilter: 'blur(14px)', boxShadow: 'inset 0 -1px 0 var(--cw-line), inset 0 1px 0 var(--cw-top-light)' }}>
             {isShield
-              ? <span className="font-bold text-sm" style={{ color: SHIELD_COLOR }}>🛡️ シールドブレイク</span>
-              : <span className="text-[#facc15] font-bold text-sm" style={{ fontFamily: 'Orbitron, monospace' }}>⚡ エナジーチャージ</span>}
-            <span className="text-[11px] font-black px-2 py-0.5 rounded-full whitespace-nowrap bg-sky-400/10 border border-sky-400/40 text-sky-300">
-              {item.label}　+{Math.round(rewardOf(item) * comboMultiplier(comboRef.current + (result === 'perfect' ? 0 : 1)))}⚡
-            </span>
-            {combo >= 2 && <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-[#facc15]/15 text-[#facc15] border border-[#facc15]/40">🔥 {combo}れんぞく</span>}
-            <button onClick={close} className="ml-auto text-white/70 hover:text-white text-sm px-3 py-1 rounded-lg border border-white/15">
-              {result === null ? 'やめて もどる ✕' : '戦場へもどる ✕'}
-            </button>
+              ? <span className="font-extrabold text-cw-16 flex items-center gap-1.5" style={{ color: 'var(--cw-action)' }}><Icon name="target" size={24} />シールドブレイク</span>
+              : <span className="font-extrabold text-cw-16 flex items-center gap-1.5" style={{ color: 'var(--cw-reward)' }}><Icon name="energy" size={24} />エナジーチャージ</span>}
+            <Chip tone="action">
+              {item.label}　+{Math.round(rewardOf(item) * comboMultiplier(comboRef.current + (result === 'perfect' ? 0 : 1)))}<Icon name="energy" size={14} />
+            </Chip>
+            {combo >= 2 && <Chip tone="reward"><Icon name="streak" size={16} />{combo}れんぞく</Chip>}
+            <Button variant="secondary" size="sm" className="ml-auto" onClick={close}>
+              {result === null ? 'やめて もどる' : '戦場へもどる'}<Icon name="back" size={18} className="rotate-180" />
+            </Button>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col items-center">
+          <div className="flex-1 overflow-y-auto cw-scroll p-3 flex flex-col items-center">
             <div className="w-full max-w-2xl">
               {result === 'perfect' && (
-                <div className="text-center mb-2 rounded-xl py-2 font-black text-[#a3e635] border border-[#a3e635]/50" style={{ background: 'rgba(8,12,22,0.95)' }}>
-                  ✓ せいかい！ {isShield ? 'シールドが われた！ ' : ''}+{gained}⚡{combo >= 2 ? `　🔥${combo}れんぞく ×${comboMultiplier(combo).toFixed(1)}` : ''}
-                </div>
+                <Panel strong pad={false} className="cw-reward-pop text-center mb-2 rounded-cw-md py-2 px-3 font-black text-cw-16" role="status"
+                  style={{ color: 'var(--cw-growth)', boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-growth)' }}>
+                  <Icon name="check" size={24} className="inline-block align-[-6px] mr-1" />せいかい！ {isShield ? 'シールドが われた！ ' : ''}+{gained}⚡{combo >= 2 ? `　${combo}れんぞく ×${comboMultiplier(combo).toFixed(1)}` : ''}
+                </Panel>
               )}
               {result === 'missed' && (
-                <div className="text-center mb-2 rounded-xl py-2 text-sm font-bold text-amber-200 border border-amber-300/40" style={{ background: 'rgba(8,12,22,0.95)' }}>
+                <Panel strong pad={false} className="text-center mb-2 rounded-cw-md py-2 px-3 text-cw-14 font-bold" role="status" style={{ color: 'var(--cw-fg)' }}>
                   {isShield
                     ? (solved ? 'さいごまで とけたね。シールドは つぎの カードで わろう！' : 'ヒントを見て、さいごまで といてみよう（シールドは つぎの カードで）')
                     : (solved ? 'さいごまで とけたね。つぎの カードで ⚡ を とろう！' : 'ヒントを見て、さいごまで といてみよう（⚡ は つぎの カードで）')}
-                </div>
+                </Panel>
               )}
               <AppRoundHost key={serial} registry={pack.registry} item={item} onFirstResult={onFirstResult} onSolved={() => setSolved(true)} />
               {(result === 'perfect' || solved) && (
-                <button onClick={close}
-                  className="w-full mt-3 py-3 rounded-xl font-black text-lg transition-all active:scale-95"
-                  style={{ background: 'rgba(163,230,53,0.22)', border: '2px solid #a3e635', color: '#a3e635' }}>
-                  戦場へもどる →
-                </button>
+                <Button variant="success" size="lg" fullWidth className="mt-3" onClick={close}>
+                  戦場へもどる<Icon name="back" size={22} className="rotate-180" />
+                </Button>
               )}
             </div>
           </div>

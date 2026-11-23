@@ -5,6 +5,7 @@ import { familySkillIds } from '../../learn/shards';
 import { UNIT_NAME_BY_KEY, unitsForFamily } from '../../learn/gradePack';
 import { useStudyStore } from '../../store/useStudyStore';
 import { useSkillStore } from '../../store/useSkillStore';
+import { Icon } from '../ui';
 
 /**
  * スキルの画面部品（2026-11-15 CW-4b）。
@@ -70,20 +71,20 @@ export const NewSkillNotice: React.FC = () => {
   useEffect(() => { if (shown.length) markSeen(shown); }, [shown, markSeen]);
   if (shown.length === 0) return null;
   return (
-    <div className="mb-3 rounded-xl p-3 text-left" data-testid="new-skill"
-      style={{ background: 'linear-gradient(135deg, rgba(250,204,21,0.16), rgba(167,139,250,0.14))', border: '1px solid rgba(250,204,21,0.6)' }}>
-      <div className="text-[#facc15] font-black text-sm mb-1">✨ あたらしい スキル！</div>
+    <div className="cw-panel mb-3 rounded-cw-md p-3 text-left" data-testid="new-skill"
+      style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-rare)' }}>
+      <div className="font-black text-cw-14 mb-1 flex items-center gap-1.5" style={{ color: 'var(--cw-rare)' }}><Icon name="star" size={20} />あたらしい スキル！</div>
       {shown.map(id => {
         const s = SKILL_BY_ID[id];
         if (!s) return null;
         const fam = CHARACTER_BY_ID[s.family];
         return (
-          <div key={id} className="text-[11px] leading-snug text-white/90">
+          <div key={id} className="text-cw-12 leading-snug" style={{ color: 'var(--cw-fg)' }}>
             <b style={{ color: fam?.accent }}>{fam?.displayName}</b>「{s.name}」：{s.desc}
           </div>
         );
       })}
-      <div className="text-[10px] text-white/50 mt-1">単元を まちがえずに とけたから ひらいたよ。いつも 自動で 効く</div>
+      <div className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>単元を まちがえずに とけたから ひらいたよ。いつも 自動で 効く</div>
     </div>
   );
 };

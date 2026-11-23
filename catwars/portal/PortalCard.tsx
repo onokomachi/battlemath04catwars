@@ -15,7 +15,6 @@ import { usePortal, sortieLock } from './usePortal';
 import { sortieStamina } from './stamina';
 import { Button, Icon, Panel } from '../components/ui';
 
-const fontMono = { fontFamily: 'Orbitron, monospace' };
 
 /** 開発の画面の確かめで「名乗っている」を差しかえたときも出す */
 const portalOn = (): boolean => isPortalConfigured || !!usePortal.getState().student;
@@ -96,24 +95,24 @@ export const SortieStamina: React.FC<{ formation: readonly string[]; message?: s
   if (!portalOn()) return null;
   if (!student) {
     return (
-      <p className="text-center text-white/50 text-[11px] pb-1.5" data-testid="sortie-otameshi">
+      <p className="text-center text-cw-12 pb-1.5" style={{ color: 'var(--cw-fg-2)' }} data-testid="sortie-otameshi">
         {isTrial() ? 'たいけんばん' : isDemo() ? 'デモ' : 'おためし'}：スタミナは つかわないよ
       </p>
     );
   }
   const st = sortieStamina(formation, status);
   return (
-    <div className="rounded-xl border border-[#fbbf24]/40 px-3 py-2 mb-1.5" style={{ background: 'rgba(251,191,36,0.08)' }} data-testid="sortie-stamina">
-      <div className="flex items-center justify-between gap-2 flex-wrap text-[11px]">
-        <span className="text-[#fde68a] font-bold">⚡スタミナ{st.townName ? `（『${st.townName}』の 町から）` : ''}</span>
-        <span className="text-white/80" style={fontMono}>
+    <Panel pad={false} className="rounded-cw-md px-3 py-2 mb-1.5" data-testid="sortie-stamina" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
+      <div className="flex items-center justify-between gap-2 flex-wrap text-cw-12">
+        <span className="font-bold flex items-center gap-1" style={{ color: 'var(--cw-reward)' }}><Icon name="energy" size={18} />スタミナ{st.townName ? `（『${st.townName}』の 町から）` : ''}</span>
+        <span className="font-cw-num" style={{ color: 'var(--cw-fg)' }}>
           {loaded ? <>町 {st.town}/{SANMON_RULES.townCap} ・ 共通 {st.common}/{SANMON_RULES.maxStamina}</> : '…'}
         </span>
       </div>
-      <div className="text-white/55 text-[10px] mt-0.5">
+      <div className="text-cw-12 mt-0.5" style={{ color: 'var(--cw-fg-2)' }}>
         出撃 1回 {st.cost}{loaded ? `・あと ${st.times}回` : ''}（町 → 共通 の じゅんに つかう。数は サーバが きめる）
       </div>
-      {message && <p className="text-[#fde68a] text-[12px] font-bold mt-1.5 leading-relaxed" role="status" data-testid="sortie-message">{message}</p>}
-    </div>
+      {message && <p className="text-cw-14 font-bold mt-1.5 leading-relaxed" style={{ color: 'var(--cw-reward)' }} role="status" data-testid="sortie-message">{message}</p>}
+    </Panel>
   );
 };
