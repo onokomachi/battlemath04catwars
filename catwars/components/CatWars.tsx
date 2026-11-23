@@ -47,7 +47,7 @@ import { noteLayoutEdited, flushShare } from '../portal/friendSync';
 import { settleFriend, friendBonusFor } from '../utils/settleFriend';
 import { bossSprite } from '../data/enemySprites';
 import {
-  Button, Card, Chip, FacilityImg, Icon, Panel, ProgressBar, ScreenBackdrop, StatPill, TitleBar, useOptionalImage,
+  Button, Card, Chip, FacilityImg, Icon, Panel, ProgressBar, ScreenBackdrop, StatPill, TitleBar, useOptionalImage, RULE_ICON, iconOr,
 } from './ui';
 
 const font = { fontFamily: 'var(--cw-font)' };
@@ -360,7 +360,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         tier="normal"
         quizSubtopics={quizSubtopics}
         expedition={{
-          enemyLevel: su.enemyLevel, ruleIcon: '🏠', ruleName: 'なかまの 基地',
+          enemyLevel: su.enemyLevel, ruleIcon: 'friend', ruleName: 'なかまの 基地',
           label: 'なかまの 基地', kicker: 'FRIEND BASE', winLabel: 'なかまの 基地を せめおとした！', hideBoss: true,
           loseNote: 'まけても ネコたちの けいけんちは 手に入るよ。なかまの 基地は なんかいでも ちょうせん できる。あいてには 何も 伝わらないよ！',
           loot: (win, q) => friendBonusFor(f.day, win, q.perfect),
@@ -395,7 +395,7 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
         quizSubtopics={quizSubtopics}
         tuneConfig={(cfg) => tuneExpeditionConfig(e, cfg)}
         expedition={{
-          enemyLevel: expeditionEnemyLevel(topAvgLevel), ruleIcon: e.rule.icon, ruleName: e.rule.name,
+          enemyLevel: expeditionEnemyLevel(topAvgLevel), ruleIcon: iconOr(RULE_ICON, e.rule.id), ruleName: e.rule.name,
           resultExtra: <ExpeditionResultNote weekStart={e.weekStart} perfect={expeditionPerfect} />,
         }}
         onSettle={handleSettle}
@@ -621,8 +621,9 @@ const HomeEmblem: React.FC = () => {
 };
 
 const Overlay: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
-  <div className="cw-screen fixed inset-0 z-[120] flex flex-col" style={{ background: 'linear-gradient(180deg, var(--cw-bg-0), var(--cw-bg-1))' }}>
+  <div className="fixed inset-0 z-[120] flex flex-col" style={{ fontFamily: 'var(--cw-font)', color: 'var(--cw-fg)', background: 'linear-gradient(180deg, var(--cw-bg-0), var(--cw-bg-1))' }}>
+    <ScreenBackdrop name="home" />
     <TitleBar title={title} onBack={onClose} />
-    <div className="flex-1 overflow-y-auto cw-scroll p-4">{children}</div>
+    <div className="flex-1 overflow-y-auto cw-scroll p-4 cw-enter">{children}</div>
   </div>
 );

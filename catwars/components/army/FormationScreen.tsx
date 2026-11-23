@@ -33,9 +33,9 @@ const isRanged = (id: string) => (CHARACTER_BY_ID[id]?.base.attackRange ?? 0) >=
 /** 5枠と、出てくる敵から、注意を出す（止めはしない） */
 export function formationWarnings(formation: string[], pool: EnemyUnitKind[]): string[] {
   const out: string[] = [];
-  if (pool.includes('flyer') && !formation.some(reachesAir)) out.push('⚠️ 空をとぶ敵に とどく ネコが いないよ（遠距離・魔法・飛行を 入れよう）');
-  if (pool.includes('guard') && !formation.includes('magic')) out.push('⚠️ たて持ちには 魔法が よくきくよ（魔法系を 入れると 楽になる）');
-  if (pool.includes('kamikaze') && !formation.some(isRanged)) out.push('⚠️ ばくだんロボが 施設に つっこんでくる。とどく前に たおせる 遠距離を 入れよう');
+  if (pool.includes('flyer') && !formation.some(reachesAir)) out.push('空をとぶ敵に とどく ネコが いないよ（遠距離・魔法・飛行を 入れよう）');
+  if (pool.includes('guard') && !formation.includes('magic')) out.push('たて持ちには 魔法が よくきくよ（魔法系を 入れると 楽になる）');
+  if (pool.includes('kamikaze') && !formation.some(isRanged)) out.push('ばくだんロボが 施設に つっこんでくる。とどく前に たおせる 遠距離を 入れよう');
   return out;
 }
 
@@ -132,7 +132,7 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
               <div className="cw-panel cw-tone-reward p-3 flex flex-col gap-2" data-testid="formation-warning" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
                 {warnings.map(w => (
                   <p key={w} className="flex items-start gap-2 text-cw-14 leading-snug" style={{ color: 'var(--cw-fg)' }}>
-                    <Icon name="warn" size={22} className="mt-0.5" />{w.replace(/^⚠️\s*/, '')}
+                    <Icon name="warn" size={22} className="mt-0.5" />{w}
                   </p>
                 ))}
               </div>

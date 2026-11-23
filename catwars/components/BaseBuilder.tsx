@@ -12,7 +12,7 @@ import {
 import { BATTLE_MAP_BY_ID, zoneSize } from '../data/battleMaps';
 import { CampaignChapter } from '../data/campaign';
 import { sfx } from '../utils/audioEngine';
-import { Button, Chip, FacilityImg, Icon, StatPill, TitleBar } from './ui';
+import { Button, Chip, FacilityImg, Icon, ScrollFade, StatPill, TitleBar } from './ui';
 
 // 陣地に置ける施設（コアは必須・いつも1つ）／戦場には出ないが、持っていると はたらく施設
 const PLACEABLE: BuildingType[] = PLACEABLE_FACILITIES;
@@ -157,7 +157,7 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
     // 置いてあるものをタップ → もちものにもどす（コアは動かせない扱いにせず、選び直しで移動できる）
     if (existing) {
       if (existing.type === BuildingType.TOWN_HALL) {
-        flash('🏰 コアは、おきたいマスをえらんで動かせるよ');
+        flash('コアは、おきたいマスをえらんで動かせるよ');
         setSelected(BuildingType.TOWN_HALL);
         return;
       }
@@ -166,7 +166,7 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
       return;
     }
     if (!selected) return;
-    if (!canPlaceAt(selected, x, y)) { flash('⛔ ここにはおけないよ'); return; }
+    if (!canPlaceAt(selected, x, y)) { flash('ここにはおけないよ'); return; }
 
     if (selected === BuildingType.TOWN_HALL) {
       save([...layout.filter(d => d.type !== BuildingType.TOWN_HALL), { type: selected, x, y }]);
@@ -174,7 +174,7 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
       return;
     }
 
-    if (spare(selected) <= 0) { flash('🏪 もう おけるものが ないよ。下の「買う」で ふやそう'); return; }
+    if (spare(selected) <= 0) { flash('もう おけるものが ないよ。下の「買う」で ふやそう'); return; }
     save([...layout, { type: selected, x, y }]);
     sfx.tap();
   };
@@ -184,8 +184,8 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
     const have = built[t] ?? 0;
     if (have >= FACILITY_MAX_COUNT[t]) { flash('これ以上は もてないよ'); return; }
     const cost = buyCost(t, have + 1);
-    if (credits < cost) { flash(`💠 クレジットが ${cost - credits} たりない！問題をといて ためよう`); return; }
-    if (base.buy(t, (n) => spendResources(n))) { sfx.correct(); flash(`🏗️ ${BUILDING_STATS[t].name}を 買った！（-${cost}💠）`); }
+    if (credits < cost) { flash(`クレジットが ${cost - credits} たりない！問題をといて ためよう`); return; }
+    if (base.buy(t, (n) => spendResources(n))) { sfx.correct(); flash(`${BUILDING_STATS[t].name}を 買った！（-${cost}💠）`); }
   };
 
   /** レベルを上げる（💠） */
@@ -193,8 +193,8 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
     const lv = base.levelOf(t);
     if (lv >= MAX_FACILITY_LEVEL) return;
     const cost = upgradeCost(t, lv);
-    if (credits < cost) { flash(`💠 クレジットが ${cost - credits} たりない！`); return; }
-    if (base.upgrade(t, (n) => spendResources(n))) { sfx.correct(); flash(`⬆️ ${BUILDING_STATS[t].name} Lv${lv + 1}！（-${cost}💠）`); }
+    if (credits < cost) { flash(`クレジットが ${cost - credits} たりない！`); return; }
+    if (base.upgrade(t, (n) => spendResources(n))) { sfx.correct(); flash(`${BUILDING_STATS[t].name} Lv${lv + 1}！（-${cost}💠）`); }
   };
 
   // 盤面は 28×16 と横長なので、表示領域に合わせてマス目の大きさを決める。
@@ -238,7 +238,7 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
     const canBuy = bCost != null && credits >= bCost;
     const canUp = uCost != null && credits >= uCost;
     return (
-      <div className="flex-shrink-0 flex flex-col gap-1.5 w-[128px]" data-facility={type}>
+      <div className="flex-shrink-0 flex flex-col gap-1.5 w-[128px] min-[900px]:w-[100px] min-[1200px]:w-[128px]" data-facility={type}>
         <button type="button" className={`cw-card cw-press cw-tone-action flex flex-col items-center gap-0.5 px-2 py-2 w-full flex-1 ${sel ? 'cw-card-on' : ''}`}
           aria-pressed={sel} aria-disabled={!placeable || own <= 0 || undefined}
           style={{ background: sel ? 'var(--tone-bg)' : undefined, opacity: own > 0 ? 1 : 0.8 }}
@@ -358,13 +358,13 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
       </div>
 
       {/* 施設のカード・出撃 */}
-      <div className="flex-shrink-0 px-3 pt-2 min-[900px]:flex min-[900px]:gap-3 min-[900px]:items-stretch"
+      <div className="flex-shrink-0 px-3 pt-2 min-[900px]:flex min-[900px]:gap-2 min-[900px]:items-stretch"
         style={{ background: 'var(--cw-surface-strong)', WebkitBackdropFilter: 'blur(14px)', backdropFilter: 'blur(14px)', boxShadow: 'inset 0 1px 0 var(--cw-line-strong)', paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}>
         <div className="min-w-0 flex-1">
-          <div className="flex gap-2 overflow-x-auto pb-2 cw-scroll">
+          <ScrollFade className="flex gap-2 pb-2">
             <FacilityCard type={BuildingType.TOWN_HALL} />
             {[...PLACEABLE, ...SUPPORT].map(type => <FacilityCard key={type} type={type} />)}
-          </div>
+          </ScrollFade>
           <p className="text-cw-12 pb-1.5" style={{ color: 'var(--cw-fg-2)' }}>
             {selected
               ? `青いわくの中をタップして「${BUILDING_STATS[selected].name}」をおく。おいたものをタップすると はずれるよ`
@@ -372,9 +372,9 @@ export const BaseBuilder: React.FC<Props> = ({ chapter, onBack, onProceed, proce
           </p>
         </div>
         {onProceed && (
-          <div className="min-[900px]:w-[260px] flex-shrink-0 flex flex-col justify-end">
+          <div className="min-[900px]:w-[210px] min-[1200px]:w-[260px] flex-shrink-0 flex flex-col justify-end">
             {proceedSlot}
-            <Button variant="primary" size="xl" fullWidth className="mb-1" disabled={proceedBusy} data-testid="sortie-go"
+            <Button variant="primary" size="xl" fullWidth className="mb-1 min-[900px]:max-[1199px]:!text-cw-16 min-[900px]:max-[1199px]:!px-3" disabled={proceedBusy} data-testid="sortie-go"
               onClick={() => { if (proceedBusy) return; sfx.select(); onProceed(); }}>
               <Icon name="sortie" size={30} />{proceedBusy ? 'じゅんびちゅう…' : 'この陣地で 出撃！'}
             </Button>

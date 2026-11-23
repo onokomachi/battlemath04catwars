@@ -1,11 +1,15 @@
 import React from 'react';
 import { Icon, type IconName } from './icons';
 
-export type Tone = 'action' | 'reward' | 'growth' | 'rare' | 'danger' | 'cat' | 'neutral';
+export type Tone = 'action' | 'reward' | 'growth' | 'rare' | 'danger' | 'cat' | 'neutral' | 'opp';
 
 interface CardProps {
   /** 左の絵：アイコン名か 絵（ネコ・施設の img など） */
   icon?: IconName | React.ReactNode;
+  /** 左の大きな 図（下地の枠なし。基地の ちいさな ず など） */
+  media?: React.ReactNode;
+  /** 題・説明の下に ならべる 中身（チップ・ボタン など。押せるカードの中には 入れない） */
+  children?: React.ReactNode;
   title: React.ReactNode;
   sub?: React.ReactNode;
   /** 右がわの 状態（星・数・「New」など） */
@@ -21,11 +25,11 @@ interface CardProps {
 }
 
 /** 押せるカード：左に 絵・まんなかに 題と 説明（2行まで）・右に 状態。ホームの 6枚は これで そろえる */
-export const Card: React.FC<CardProps> = ({ icon, title, sub, right, tone = 'neutral', onClick, locked, lockReason, className = '', ...rest }) => {
+export const Card: React.FC<CardProps> = ({ icon, media, children, title, sub, right, tone = 'neutral', onClick, locked, lockReason, className = '', ...rest }) => {
   const off = !!(locked || lockReason);
   const body = (
     <>
-      <span className="cw-card-icon">{typeof icon === 'string' ? <Icon name={icon as IconName} size={38} /> : icon}</span>
+      {media ?? (icon !== undefined && <span className="cw-card-icon">{typeof icon === 'string' ? <Icon name={icon as IconName} size={38} /> : icon}</span>)}
       <span className="min-w-0 flex-1">
         <span className="block text-cw-16 font-extrabold leading-tight" style={{ color: off ? 'var(--cw-fg-2)' : 'var(--cw-fg)' }}>{title}</span>
         {(sub || lockReason) && (
@@ -33,6 +37,7 @@ export const Card: React.FC<CardProps> = ({ icon, title, sub, right, tone = 'neu
             {lockReason ? <><Icon name="lock" size={14} className="inline-block align-[-2px] mr-1" />{lockReason}</> : sub}
           </span>
         )}
+        {children}
       </span>
       {right && <span className="flex-shrink-0 text-right">{right}</span>}
     </>

@@ -20,6 +20,7 @@ npm run test:versus:balance  # 同時対戦：コンピュータ4段の総あた
 
 ## 構成
 - `catwars/components/ui/` … 共通の部品（Button・Panel・Card・TitleBar・StatPill など）・手描きアイコン（`ui/icons/`）・画面のトークン（`index.css` の `--cw-*`。Tailwind にも `cw-*` で登録）。**新しい画面は ここの部品とトークンだけを使う**（きまり・使い方・よい例わるい例は `docs/UI_STYLE.md`）
+- `scripts/import-art.mjs` … 持ち主の絵（背景・しるし・カプセル）を 差しこみ口の 大きさに して 置く（使い方は `docs/UI_STYLE.md` 第7節）
 - `index.tsx` … 入口（CAT-WARS だけ）
 - `catwars/` … ゲーム本体。`sim/`（決定的な戦闘の計算）・`data/`（キャラ・章・マップ）・`store/`（Zustand）・`components/`
 - `catwars/learn/gradePack.ts` … **学年パック**（単元 → 出せる問題）。ゲーム本体はここだけを見る。5年・6年はパックを足す

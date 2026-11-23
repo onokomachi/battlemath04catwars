@@ -16,11 +16,7 @@ import { useClassExpedition, refreshClassExpedition, flushExpedition, expedition
 import { usePortal } from '../../portal/usePortal';
 import { isPortalConfigured } from '../../portal/config';
 import { isDemo } from '../../portal/demoMode';
-import { Card, Icon, Panel, ProgressBar, ScreenBackdrop, TitleBar } from '../ui';
-
-const fontMono = { fontFamily: 'Orbitron, monospace' };
-const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
-const ACCENT = '#c084fc';
+import { Button, Card, Chip, Disclosure, Icon, Panel, ProgressBar, ScreenBackdrop, SectionTitle, TitleBar, RULE_ICON, TRAIT_ICON, iconOr } from '../ui';
 
 export const StarRow: React.FC<{ n: number | null | undefined; size?: number }> = ({ n, size = 14 }) => (
   <span aria-label={n == null ? 'まだ' : `ほし ${n}`} className="inline-flex gap-0.5 align-middle">
@@ -46,7 +42,7 @@ const ClassGoalBar: React.FC<{ w: ClassWeek; sample?: boolean; compact?: boolean
       <div className="flex items-center justify-between mb-1.5 gap-2">
         <span className="text-cw-12" style={{ color: 'var(--cw-fg-2)' }}>がっきゅうの ほし{sample ? '（デモの みほん）' : ''}</span>
         <span className="text-cw-14 font-bold font-cw-num" style={{ color: w.achieved ? 'var(--cw-growth)' : 'var(--cw-reward)' }}>
-          ★{w.total} / {w.goal}{w.achieved ? ' たっせい！' : ''}
+          <Icon name="star" size={18} className="inline-block align-[-3px] mr-0.5" />{w.total} / {w.goal}{w.achieved ? ' たっせい！' : ''}
         </span>
       </div>
       <ProgressBar value={pct} tone={w.achieved ? 'growth' : 'reward'} />
@@ -104,72 +100,87 @@ export const ExpeditionScreen: React.FC<{
   const lv = expeditionEnemyLevel(avgLevel);
   const last = data?.lastWeek;
   return (
-    <div className="cw-screen min-h-[100dvh] h-[100dvh] flex flex-col" style={font} data-testid="expedition-screen">
+    <div className="cw-screen min-h-[100dvh] h-[100dvh] flex flex-col" data-testid="expedition-screen">
       <ScreenBackdrop name="expedition" />
       <TitleBar title="週がわりの 遠征" onBack={onBack} subtitle={<>{e.weekStart} の 週（月曜 0:00 に かわる）</>} />
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-w-2xl w-full mx-auto">
-        <div className="rounded-2xl border p-4" style={{ borderColor: `${ACCENT}88`, background: 'rgba(124,58,237,0.14)' }}>
-          <div className="flex items-center gap-3">
-            <span className="text-4xl leading-none">{e.rule.icon}</span>
-            <div className="min-w-0">
-              <div className="text-white/50 text-[10px]">今週の ルール</div>
-              <div className="text-white font-black text-lg leading-tight" data-testid="expedition-rule">{e.rule.name}</div>
+      <div className="flex-1 overflow-y-auto cw-scroll px-4 py-3 cw-enter">
+        <div className="max-w-2xl w-full mx-auto space-y-3">
+          {/* 主役：今週の ルール */}
+          <Panel strong className="cw-tone-rare" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-rare)' }}>
+            <div className="flex items-center gap-4">
+              <span className="cw-card-icon flex-shrink-0" style={{ width: 80, height: 80, borderRadius: 'var(--cw-r-lg)' }}>
+                <Icon name={iconOr(RULE_ICON, e.rule.id)} size={56} />
+              </span>
+              <div className="min-w-0">
+                <Chip tone="rare">今週の ルール</Chip>
+                <div className="text-cw-28 font-extrabold leading-tight mt-1" style={{ color: 'var(--cw-fg)' }} data-testid="expedition-rule">{e.rule.name}</div>
+              </div>
             </div>
-          </div>
-          <p className="text-white/85 text-[13px] leading-relaxed mt-2">{e.rule.desc(e.ctx)}</p>
-          <p className="text-[#facc15]/90 text-[12px] leading-relaxed mt-1">💡 {e.rule.hint}</p>
-        </div>
+            <p className="text-cw-16 leading-relaxed mt-3" style={{ color: 'var(--cw-fg)' }}>{e.rule.desc(e.ctx)}</p>
+            <p className="flex items-start gap-2 text-cw-14 leading-snug mt-2" style={{ color: 'var(--cw-reward)' }}>
+              <Icon name="bulb" size={22} className="mt-0.5" /><span>{e.rule.hint}</span>
+            </p>
+          </Panel>
 
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div className="rounded-xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }}>
-            <div className="text-white/50 text-[10px] mb-0.5">戦場</div>
-            <div className="text-white font-bold text-sm">{e.map.name}</div>
-            <div className="text-white/50 text-[11px]">第{e.chapter.no}章の 戦場（{e.chapter.enemyName}の とりで）</div>
-            <div className="mt-2 text-[11px] text-[#f9a8d4]" data-testid="expedition-level">
-              てきの つよさ Lv.{lv}（きみの ネコの レベルに あわせて きまる）
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }} data-testid="expedition-enemies">
-            <div className="text-white/50 text-[10px] mb-1">出てくる 敵</div>
-            <ul className="space-y-1">
-              {d.unitPool.map((k) => {
-                const note = ENEMY_TRAIT_NOTE[k];
-                return (
-                  <li key={k} className="text-[11px] leading-snug text-white/85">
-                    <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
-                    <span className="font-bold">{note ? `${note.icon} ` : ''}{ENEMY_UNIT_STATS[k].label}</span>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Panel>
+              <SectionTitle tone="action">戦場</SectionTitle>
+              <div className="text-cw-20 font-extrabold mt-2" style={{ color: 'var(--cw-fg)' }}>{e.map.name}</div>
+              <div className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>第{e.chapter.no}章の 戦場（{e.chapter.enemyName}の とりで）</div>
+              <div className="flex items-center gap-2 mt-3" data-testid="expedition-level">
+                <Chip tone="danger"><Icon name="enemy" size={18} />てきの つよさ Lv.{lv}</Chip>
+              </div>
+              <div className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>きみの ネコの レベルに あわせて きまる</div>
+            </Panel>
+            <Panel data-testid="expedition-enemies">
+              <SectionTitle tone="danger">出てくる 敵</SectionTitle>
+              <ul className="flex flex-wrap gap-2 mt-2">
+                {d.unitPool.map((k) => (
+                  <li key={k}>
+                    <Chip tone="neutral" className="min-h-[32px]">
+                      <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="w-6 h-6 object-contain" />
+                      {ENEMY_TRAIT_NOTE[k] && <Icon name={iconOr(TRAIT_ICON, k)} size={18} />}
+                      <span style={{ color: 'var(--cw-fg)' }}>{ENEMY_UNIT_STATS[k].label}</span>
+                    </Chip>
                   </li>
-                );
-              })}
-              {d.bossAtSpawnCount != null && <li className="text-[11px] text-[#fde68a]">👑 おやぶん（シールド {d.bossShield ?? 0}まい）</li>}
+                ))}
+                {d.bossAtSpawnCount != null && (
+                  <li><Chip tone="reward" className="min-h-[32px]"><Icon name="crown" size={20} />おやぶん（シールド {d.bossShield ?? 0}まい）</Chip></li>
+                )}
+              </ul>
+            </Panel>
+          </div>
+
+          <Panel className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <SectionTitle tone="reward">今週の きみの いちばん</SectionTitle>
+              <StarRow n={mine ?? null} size={24} />
+            </div>
+            {data && (counts === 'class' || counts === 'demo') && <ClassGoalBar w={data.thisWeek} sample={data.sample} />}
+            {last && counts === 'class' && (
+              <p className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>先週：学級の ほし ★{last.total} / {last.goal}{last.achieved ? '（たっせい）' : ''}</p>
+            )}
+            {counts === 'trial' && <p className="text-cw-14" style={{ color: 'var(--cw-fg-2)' }}>おためしでは 学級の ほしには 入らないよ。</p>}
+          </Panel>
+
+          <Disclosure title="★の きまり" icon="star">
+            <ul className="text-cw-14 leading-relaxed list-disc pl-5 space-y-1" style={{ color: 'var(--cw-fg-2)' }}>
+              <li>今週は なんかいでも ちょうせん できる。のこるのは いちばん よい ★（0〜3）。</li>
+              <li>★は かったうえで、まちがえずに とけた わりあいで きまる（はやさでは きまらない）。</li>
+              <li>だれが なん★かは だれにも 見えない。見えるのは 学級の ごうけい だけ。</li>
             </ul>
-          </div>
+          </Disclosure>
         </div>
-
-        <div className="rounded-xl border border-white/10 p-3 space-y-2" style={{ background: 'rgba(6,10,24,0.55)' }}>
-          <div className="flex items-center justify-between">
-            <span className="text-white/70 text-[12px]">今週の きみの いちばん</span>
-            <StarRow n={mine ?? null} size={18} />
-          </div>
-          {data && (counts === 'class' || counts === 'demo') && <ClassGoalBar w={data.thisWeek} sample={data.sample} />}
-          {last && counts === 'class' && (
-            <p className="text-white/45 text-[10px]">先週：学級の ほし ★{last.total} / {last.goal}{last.achieved ? '（たっせい）' : ''}</p>
-          )}
-          {counts === 'trial' && <p className="text-white/55 text-[11px]">おためしでは 学級の ほしには 入らないよ。</p>}
-          <ul className="text-white/60 text-[11px] leading-relaxed list-disc pl-4">
-            <li>今週は なんかいでも ちょうせん できる。のこるのは いちばん よい ★（0〜3）。</li>
-            <li>★は かったうえで、まちがえずに とけた わりあいで きまる（はやさでは きまらない）。</li>
-            <li>だれが なん★かは だれにも 見えない。見えるのは 学級の ごうけい だけ。</li>
-          </ul>
+      </div>
+      {/* 下の 出撃バー */}
+      <div className="flex-shrink-0 px-4 pt-2 pb-3 relative z-10" style={{ background: 'var(--cw-surface-strong)', boxShadow: 'inset 0 1px 0 var(--cw-line)' }}>
+        <div className="max-w-2xl mx-auto">
+          {locked && <p className="flex items-center justify-center gap-1.5 text-cw-14 font-bold mb-2 text-center" style={{ color: 'var(--cw-danger)' }}><Icon name="lock" size={18} />{locked}</p>}
+          <Button variant="primary" size="xl" fullWidth data-testid="expedition-start" locked={!!locked} onClick={onStart}>
+            <Icon name="sortie" size={32} />遠征に しゅつげき
+          </Button>
+          <p className="text-cw-12 text-center mt-1.5" style={{ color: 'var(--cw-fg-3)' }}>出撃と同じく スタミナを つかうよ（おためしは つかわない）</p>
         </div>
-
-        {locked && <p className="text-[12px] text-[#fca5a5] text-center">🔒 {locked}</p>}
-        <button onClick={onStart} data-testid="expedition-start" aria-disabled={locked ? true : undefined}
-          className={`w-full py-4 rounded-2xl border-2 font-black text-lg text-white transition-all active:scale-95 ${locked ? 'opacity-60 grayscale' : ''}`}
-          style={{ borderColor: '#ef4444', background: 'rgba(239,68,68,0.18)', boxShadow: '0 0 18px rgba(239,68,68,0.45)', ...fontMono }}>
-          ⚔️ 遠征に しゅつげき
-        </button>
-        <p className="text-white/40 text-[10px] text-center pb-4">出撃と同じく スタミナを つかうよ（おためしは つかわない）</p>
       </div>
     </div>
   );

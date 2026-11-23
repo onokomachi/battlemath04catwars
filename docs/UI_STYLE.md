@@ -23,6 +23,7 @@ UI は静かに引き立てる。ネオンの光は「数字・状態・いま�
 | | `--cw-rare` | バイオレット `#a78bfa`：**めずらしい・スキル** |
 | | `--cw-danger` | コーラル `#f87171`：**注意・危険・敵** |
 | | `--cw-cat` | オレンジ `#fb923c`：**ネコの側** |
+| 対戦だけ | `--cw-opp` | ピンク `#f472b6`：**対戦の「あいて」**（自分＝`--cw-action` のシアンと 対。**同時対戦の画面（`VersusParts`）の中だけ**。ほかの画面の色分けには 使わない。`cw-tone-opp`・`--cw-lit-opp`・`Tone` の `'opp'`） |
 | 字の族 | `--cw-font` / `--cw-font-num` | 日本語は **M PLUS Rounded 1c**（`index.html` で 500/700/800 を読みこむ）。**Orbitron は ロゴ・数字・英字の小見出しだけ**（`font-cw-num`） |
 | 字の大きさ | `text-cw-12/14/16/20/28/40` | **6段だけ**。12＝注記（最小）・14＝本文・16＝強めの本文・ボタン・20＝見出し小・28＝見出し・40＝ロゴ・大きな数字。**12px 未満は使わない**。数字は `tabular-nums`（body に設定ずみ） |
 | 角 | `rounded-cw-sm/md/lg/pill` | 8（チップ・小さな札）/ 14（ボタン・カード）/ 22（大きなパネル）/ 999（ピル） |
@@ -44,14 +45,16 @@ UI は静かに引き立てる。ネオンの光は「数字・状態・いま�
 |---|---|
 | `Button` | `variant`＝primary（いま押す）・reward（ごほうび）・danger・secondary・ghost・success。`size`＝sm/md(48)/lg(56)/xl(64)/hero(96)。**最小 44px**。押せないときは `lockReason`（鍵＋わけの文）か `locked`。`disabled` は押せない（onClick を止める） |
 | `Panel` | すりガラスの 1枚（角 22）。`strong` で濃く |
-| `Card` | 押せるカード（角 14）。左に 絵（`icon="cats"` などのアイコン名か 絵）・題・説明（2行まで）・右に 状態（`right`）。`lockReason` で 🔒 |
+| `Card` | 押せるカード（角 14）。左に 絵（`icon="cats"` などのアイコン名か 絵）・題・説明（2行まで）・右に 状態（`right`）。`lockReason` で 🔒。`media`＝下地なしの 大きな 図（基地の ちいさな ず など）・`children`＝題と 説明の 下に ならべる 中身（押せないカードの ときだけ ボタンを 入れてよい） |
 | `TitleBar` | 画面の上の帯。**もどる（44px 以上の的）＋題＋右に数**。全部の画面で これを使う |
 | `StatPill` | 💠⚡🪙🔥 の数。アイコン＋Orbitron の数字 |
 | `Chip` | 小さな札（角 8・12px）。`tone` で 役目の色 |
 | `SectionTitle` | 小見出し（14px）。左に 色のたて線 |
 | `ProgressBar` | 進み具合（太さ 8）。0〜1 |
 | `Segmented` | 横ならびの えらぶボタン（ラジオ。56px 以上） |
-| `Disclosure` | たためる枠。見出し（52px）を押すとひらく。情報が多い画面は これで減らす |
+| `Disclosure` | たためる枠。見出し（52px）を押すとひらく。情報が多い画面は これで減らす。**長い説明文は ここに たたむ** |
+| `Notice` | ひとことの お知らせ（めやす・注意・ひらけない わけ）。左に アイコン・文は 14px いじょう。色は 役目の色（`tone`） |
+| `ScrollFade` | 横に ながす 列。はみだした ぶんが あるあいだ 右はし（左はし）に フェードを 出す（全部 入るときは 出ない）。陣地づくりの 施設カードの 列 |
 | `ConfirmDialog` | 確認モーダル。`variant`＝primary・reward・danger |
 | `ScreenBackdrop` | 画面のうしろの絵の差しこみ口（下を見よ） |
 | `FacilityImg` | 施設の PNG（`public/assets/sprites/`）。施設を出す所は 絵文字でなく これ |
@@ -59,7 +62,9 @@ UI は静かに引き立てる。ネオンの光は「数字・状態・いま�
 
 アイコン（`ICON_NAMES`）：sortie（出撃）・cats（ネコ部隊）・collect（あつめる）・buff（バフ）・expedition（遠征）・friend（なかまの基地）・versus（対戦）・
 credit（💠）・energy（⚡）・coin（🪙）・streak（🔥）・star・lock・back・heal（かいふく）・rage（げきおこ）・settings・check・warn・bulb（ヒント）・crown・
-chevron・dex・medal・capsule・album・ribbon・shard（かけら）・enemy・target。足すときは 32×32・紺のりんかく太さ 2・ベタぬり・右下に影・左上にハイライト。
+chevron・dex・medal・capsule・album・ribbon・shard（かけら）・enemy・target・
+wings・cloud・swarm・wall・shield・tower・bow・power・helmet・boot・orb・dragon・comet・bomb・chartup・home（第3段で 足した。遠征の ルール・出撃バフ・敵の とくちょう の 絵文字の かわり）。
+データの 絵文字（遠征の ルール `rule.icon`・バフ `BUFF_CONFIG.icon`・敵の とくちょう）は 画面に 出さない：`ui/iconMap.ts` の `RULE_ICON`・`BUFF_ICON`・`TRAIT_ICON` で アイコンに 引く（`iconOr(map, key)`）。足すときは 32×32・紺のりんかく太さ 2・ベタぬり・右下に影・左上にハイライト。
 
 ### 背景・エンブレム・カプセルの差しこみ口（絵は あとから 足す）
 
@@ -101,7 +106,7 @@ chevron・dex・medal・capsule・album・ribbon・shard（かけら）・enemy�
 ## 4. 点検（直したら）
 
 - 12px 未満の文字が 0・ボタンやリンクが 44×44px 以上・文字が面の上で 4.5:1 以上（大きい文字は 3:1。押せない表示だけ 例外）。
-  Playwright で DOM を数える（1024×768 と 768×1024 の両方）。第1段の画面（ホーム・範囲えらび・ステージえらび・出撃メンバー・あつめる）・第2段の画面（陣地づくり・戦闘・解答画面の入れもの・結果）は 全部 0（解答画面の白い紙の中＝`apps/` は 数えない）。
+  Playwright で DOM を数える（1024×768 と 768×1024 の両方）。第1段の画面（ホーム・範囲えらび・ステージえらび・出撃メンバー・あつめる）・第2段の画面（陣地づくり・戦闘・解答画面の入れもの・結果）・第3段の画面（遠征・なかまの基地・対戦・ネコ部隊・バフ・なかまをよぶ）は 全部 0（解答画面の白い紙の中＝`apps/` と、盤面の 地形の 絵文字は 数えない）。
 - 背景の絵が無い状態で崩れないこと（いまは 無い）。仮の絵（単色の png）を置いて 差しこみ口が効くことも 確かめる（仮の絵は コミットしない）。
 - `npm run check`。数値は 変えないので balance 系は 流さない（`npm run test:progress` だけ）。
 
@@ -120,8 +125,42 @@ chevron・dex・medal・capsule・album・ribbon・shard（かけら）・enemy�
 - **結果画面**：`Panel` strong の 1枚。上＝章の名前、主役＝星（大）と 💠（40px）、ボタンは 下に 固定（`reward`＝勝ち・`secondary`＝まけ）。勝ちは `cw-reward-pop` とゴールドの光、まけは 責めない（ネコのアイコン・赤を使わない）。
   遠征・なかまの結果の枠（`ExpeditionResultNote`・`FriendResultNote`）・`GainsSummary`・`NewSkillNotice` も `Panel`。
 
-## 6. まだ 古い見た目の画面（第3段で作りかえる）
+## 6. 第3段（2026-11-23）で そろえた画面
 
-遠征の説明（`ExpeditionParts` の `ExpeditionScreen`）・なかまの基地（`FriendParts`）・対戦（`VersusParts`）・ネコ部隊（`ArmyRosterScreen`・`SkillList`）・バフ（`DailyBuffsPanel`）・なかまをよぶ（`ExchangePanel`）。
-上の帯（`TitleBar`）・ホームのカード・背景の地は そろえてある。中身の `text-[10px]`・`text-white/NN`・16進の色・絵文字は 作りかえるときに トークンと部品へ。
-戦場の盤面そのもの（格子・地形・ヒットの光・弾）は ゲームの絵として 今のまま。
+遠征（`ExpeditionScreen`）・なかまの基地（`FriendScreen`）・対戦（`VersusParts` の 全部）・ネコ部隊（`ArmyRosterScreen`・`SkillList`）・出撃バフ（`DailyBuffsPanel`）・なかまを よぶ（`ExchangePanel`）・
+陣地づくりの 施設カードの 列・ErrorBoundary・体験ブロックの 画面（`index.tsx`）。**これで 画面の 見た目の 作りかえは ぜんぶ おわった。** 新しい画面も 同じ 部品で 作る。
+
+- **遠征**：背景 `expedition`。主役は 今週の ルールの `Panel`（ルールの アイコン 56px・名前 28px・ひとこと）。学級の目標は `ClassGoalBar`。出撃ボタンは 下の 固定バー（`Button` xl）。
+- **なかまの基地**：背景 `friend`。A・B・C は `Card`（`media` に 基地の ちいさな ず＝トークンの 色：コア＝action・砲台＝danger・電撃＝reward・かべ＝fg-3・キャンプ＝growth。下に 施設の 絵の `Chip`・敵の `Chip`）。「せめる」は `Button` md（48px）。
+- **対戦**：背景 `versus`。**自分＝シアン（`--cw-action`）・あいて＝ピンク（`--cw-opp`）**。この色は 対戦の 画面の 中だけ（コア・ネコの ふち・スコアバー・「あいて」の 文字）。
+  メニューは「とく → おく → みる」の 3つの `Chip` と 一行の 説明、くわしい あそびかたは `Disclosure`。へやの きごうは Orbitron の 大きな 数字（ホスト 56px）。
+  ラウンドの 表示は 上の帯の 下の `PhaseSteps`（いまの だんかいだけ 光る）。`TitleBar` の もどる は「やめる」（`backLabel`・`backTestId`）。
+  **おく画面の 盤面は 1まいの 面として 押す**（`data-testid="place-surface"`。1ますは 26px 前後で 44px に できないので、ますごとの ボタンには しない。水色の ますは 目印の 絵）。
+  ネコの 札（置く・えらぶ）は 52px いじょう。盤面の 地形（`TerrainLayer`）の 絵文字は ゲームの 絵（12px いじょうには した）。
+- **ネコ部隊**：系統の カードは `cw-card` に 系統色（`accent`）を `--tone` で わたす（字の 色には 使わない＝暗い色は 読めないため）。かけら・スキルの ★は アイコン。しくみの 説明は `Disclosure`。
+- **出撃バフ・なかまを よぶ**：オーバーレイは `fixed inset-0`（`cw-screen` を 付けない。付けると `position: relative` で 流れの 中に 入り 画面の 下に 出る）。
+  バフの 絵文字は `BUFF_ICON`。段の 色の 役目＝T1 ふつう・T2 行動・T3 めずらしい・T4 ごほうび。
+- **陣地づくりの 施設カードの 列**：よこ長（900px〜）は カードを 100px（1200px〜は 128px）・出撃ボタンの 列を 210px（1200px〜は 260px）に して 7枚が 全部 入る。入らない 幅（たて長など）は `ScrollFade` で 右はしに フェード。
+- **残して よい もの**：戦場の 盤面（格子・地形・ヒットの光・弾）・ネコ／敵／施設／シールの 絵の 中の 色・文の 中の 小さな 絵文字（💠⚡🪙 など）。ほかの 16進の 色・`text-[10px]`・`text-white/NN`・gray は 0。
+
+## 7. 絵を とりこむ（背景・しるし・カプセル）
+
+絵は 持ち主が Gemini などで つくって あとから 足す。置く道具は `scripts/import-art.mjs`（`sharp` を 開発用に 足した：WebP への へんかんと ふちからの 白消しに 要る。画面の プログラムには 入らない）。
+
+```bash
+node scripts/import-art.mjs ~/Downloads/bg-home.png bg-home          # 1まい
+node scripts/import-art.mjs ~/Downloads/art/                          # フォルダ（<名前>.png / .jpg が あるものを まとめて）
+node scripts/import-art.mjs ~/x.png capsule-open --dry                # 書かずに 確かめる
+node scripts/import-art.mjs ~/x.png bg-home --as bg-home-2            # すでに ある 絵は 上書きしない → あたらしい 名前で 足す
+```
+
+| 名前 | 置かれる 場所 | へんかん | 画面 |
+|---|---|---|---|
+| `bg-home` `bg-stage` `bg-expedition` `bg-collection` `bg-friend` `bg-versus` | `public/assets/bg/<名前>.webp` | 横 1600px（小さければ そのまま）・品質 82 | `ScreenBackdrop` |
+| `emblem-catwars` | `public/assets/emblem/emblem-catwars.webp` | 512px・白い 背景を 消す | ホームの ロゴの 左 |
+| `capsule-machine` | `public/assets/capsule/capsule-machine.webp` | 512px・白を 消す | あつめる → カプセル（機械の 絵。回すあいだ ゆれる） |
+| `capsule-open` | `public/assets/capsule/capsule-open.webp` | 512px・白を 消す | カプセルを 回して シールが 出る ところの 上（ひらいた カプセル）。無ければ 今までの 演出だけ |
+
+- 白消しは「**ふちから つながっている 白**」だけ（キャラの 中の 白・目・ハイライトは のこる）。入力に もともと 透明が あれば そのまま。消えた わりあいが 2% 未満 / 85% 超 のときは 注意を 出す（`--tol` で ずれの 大きさを 変える。既定 28）。
+- **同じ名前で 上書きしない**（端末に 古い絵が 1年 のこることが ある）。`--as` で 新しい 名前で 足して、`ScreenBackdrop.tsx`（背景）・`HomeEmblem`（`CatWars.tsx`）・`CollectionScreen.tsx`（カプセル）の 名前を 書きかえる。
+- 背景は 下に むかって 暗く 重ねる（字が 読める）ので、明るい 絵でも 読める。置いたら `npm run build` と 画面を 見て 確かめる（絵が 無い 状態でも 崩れない）。
