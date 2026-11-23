@@ -7,6 +7,11 @@
  * まちがえて ヒントが出ると 紙が のびて、「こたえる」が 画面の下に かくれる（iPad 横 1024×768 で見つかった。2026-11-16）。
  * apps/ は直せないので、ここで：1回目の まちがいのあと 紙が のびたら、紙の いちばん下の ボタン（「こたえる」など）が
  * 見えるところまで 入れものを 下へ スクロールする（見えていれば 動かさない。上へは 動かさない）。
+ *
+ * 紙の大きさ（2026-11-23。画面の デザイン刷新 第2段）：筆算（apps/hissan の DivisionSimulator）は「ばんめん 600px ＋ テンキー 400px」を
+ * 横にならべる作りで、紙（672px）では ばんめんの左が切れ、テンキーの下の「チェック」が 画面の下に かくれた（iPad 横 1024×768）。
+ * apps/ は直さず、`index.css` の `.app-paper:has(.simulator-container)` で 紙を 1000px まで ひろげ・テンキーを せばめ・低い画面では ボタンを ひくくし、
+ * 縦（960px より せまい）では ばんめんの 下に テンキーを たてに ならべる。ほかの単元の紙（672px）は そのまま。
  */
 import React, { useCallback, useEffect, useRef } from 'react';
 
@@ -65,7 +70,7 @@ export const AppRoundHost: React.FC<{
   const first = (ok: boolean) => { if (decided.current) return; decided.current = true; onFirstResult(ok); };
   const { Round } = def;
   return (
-    <div ref={paperRef} className="app-paper rounded-2xl text-left">
+    <div ref={paperRef} className="app-paper text-left">
       <Round level={item.skillId} onResult={(perfect) => { first(perfect); onSolved?.(); }}
         onMiss={() => { first(false); if (!missed.current) { missed.current = true; reveal(); } }} />
     </div>

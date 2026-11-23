@@ -6,7 +6,7 @@ import { CHARACTER_BY_ID, getCharacterSprite } from '../../data/characters';
 import { DECOR_BY_ID, TITLE_BY_ID } from '../../collection/titles';
 import { useCollectionStore } from '../../store/useCollectionStore';
 import { CAPSULE_RULES } from '../../collection/stickers';
-import { Button, Icon } from '../ui';
+import { Button, Icon, Panel } from '../ui';
 
 /**
  * 収集の画面部品（2026-11-16 CW-4c）。
@@ -103,7 +103,7 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
   const empty = gains.coins <= 0 && gains.badges.length === 0 && gains.dex.length === 0;
   if (empty) return null;
   return (
-    <div className="cw-panel mb-3 p-3 text-left" data-testid="gains" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
+    <Panel pad={false} className="mb-3 p-3 text-left rounded-cw-md" data-testid="gains" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
       <div className="font-black text-cw-14 mb-1.5" style={{ color: 'var(--cw-reward)' }}>🎁 あたらしく 手に入れたもの</div>
       {gains.badges.map((b) => {
         const def = BADGE_BY_ID[b.id];
@@ -138,7 +138,7 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
           🪙 シールコイン +{gains.coins}（いま {coins}まい{coins >= CAPSULE_RULES.cost ? '。カプセルを まわせるよ' : ''}）
         </div>
       )}
-    </div>
+    </Panel>
   );
 };
 

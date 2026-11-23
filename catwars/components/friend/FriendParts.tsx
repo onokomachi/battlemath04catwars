@@ -17,7 +17,7 @@ import { useFriendStore } from '../../store/useFriendStore';
 import { usePortal } from '../../portal/usePortal';
 import { isDemo } from '../../portal/demoMode';
 import { StarRow } from '../expedition/ExpeditionParts';
-import { Card, ScreenBackdrop, TitleBar } from '../ui';
+import { Card, Panel, ScreenBackdrop, TitleBar } from '../ui';
 
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
@@ -148,14 +148,13 @@ export const FriendResultNote: React.FC<{ day: string; slot: string; label: stri
   const saved = useFriendStore();
   const mine = saved.day === day ? saved.stars[slot] ?? null : null;
   return (
-    <div className="mb-3 p-3 rounded-xl text-left" data-testid="friend-result"
-      style={{ background: 'rgba(56,189,248,0.12)', border: `1px solid ${ACCENT}77` }}>
-      <div className="flex items-center justify-between">
-        <span className="text-white/80 text-[12px] font-bold">きょうの「{label}」</span>
+    <Panel pad={false} className="mb-3 p-3 text-left rounded-cw-md" data-testid="friend-result">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-cw-14 font-bold" style={{ color: 'var(--cw-fg)' }}>きょうの「{label}」</span>
         <StarRow n={mine} size={18} />
       </div>
-      {perfect <= 0 && <p className="text-white/55 text-[11px] mt-1">まちがえずに とけた 問題が ないと 記録に のこらないよ。</p>}
-      <p className="text-white/45 text-[10px] mt-1">せめた ことは なかまには 伝わらないよ。</p>
-    </div>
+      {perfect <= 0 && <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-2)' }}>まちがえずに とけた 問題が ないと 記録に のこらないよ。</p>}
+      <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>せめた ことは なかまには 伝わらないよ。</p>
+    </Panel>
   );
 };

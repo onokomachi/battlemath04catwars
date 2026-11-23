@@ -16,7 +16,7 @@ import { useClassExpedition, refreshClassExpedition, flushExpedition, expedition
 import { usePortal } from '../../portal/usePortal';
 import { isPortalConfigured } from '../../portal/config';
 import { isDemo } from '../../portal/demoMode';
-import { Card, Icon, ScreenBackdrop, TitleBar } from '../ui';
+import { Card, Icon, Panel, ProgressBar, ScreenBackdrop, TitleBar } from '../ui';
 
 const fontMono = { fontFamily: 'Orbitron, monospace' };
 const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
@@ -43,18 +43,15 @@ const ClassGoalBar: React.FC<{ w: ClassWeek; sample?: boolean; compact?: boolean
   const pct = w.goal > 0 ? Math.min(1, w.total / w.goal) : 0;
   return (
     <div data-testid="expedition-class-goal">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-white/70 text-[11px]">がっきゅうの ほし{sample ? '（デモの みほん）' : ''}</span>
-        <span className="text-[11px] font-bold" style={{ color: w.achieved ? '#a3e635' : '#fde68a', ...fontMono }}>
+      <div className="flex items-center justify-between mb-1.5 gap-2">
+        <span className="text-cw-12" style={{ color: 'var(--cw-fg-2)' }}>がっきゅうの ほし{sample ? '（デモの みほん）' : ''}</span>
+        <span className="text-cw-14 font-bold font-cw-num" style={{ color: w.achieved ? 'var(--cw-growth)' : 'var(--cw-reward)' }}>
           ★{w.total} / {w.goal}{w.achieved ? ' たっせい！' : ''}
         </span>
       </div>
-      <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct * 100}%`, background: w.achieved ? 'linear-gradient(90deg,#22c55e,#a3e635)' : 'linear-gradient(90deg,#7c3aed,#facc15)' }} />
-      </div>
+      <ProgressBar value={pct} tone={w.achieved ? 'growth' : 'reward'} />
       {!compact && (
-        <p className="text-white/50 text-[10px] mt-1 leading-snug">
+        <p className="text-cw-12 mt-1.5 leading-snug" style={{ color: 'var(--cw-fg-2)' }}>
           {w.achieved
             ? `🎉 学級の もくひょう たっせい！ 今週 遠征に ちょうせんした みんなに 🪙${EXPEDITION_GOAL_COINS}`
             : `もくひょうは 学級の 人数 × ${EXPEDITION_GOAL_PER_STUDENT}。とどいたら 今週 ちょうせんした みんなに 🪙${EXPEDITION_GOAL_COINS}`}
@@ -185,20 +182,19 @@ export const ExpeditionResultNote: React.FC<{ weekStart: string; perfect: number
   const pending = useExpeditionStore((s) => s.pending);
   const data = useClassExpedition((s) => s.data);
   return (
-    <div className="mb-3 p-3 rounded-xl text-left" data-testid="expedition-result"
-      style={{ background: 'rgba(124,58,237,0.16)', border: `1px solid ${ACCENT}77` }}>
-      <div className="flex items-center justify-between">
-        <span className="text-white/80 text-[12px] font-bold">今週の きみの いちばん</span>
+    <Panel pad={false} className="mb-3 p-3 text-left rounded-cw-md" data-testid="expedition-result">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-cw-14 font-bold" style={{ color: 'var(--cw-fg)' }}>今週の きみの いちばん</span>
         <StarRow n={mine ?? null} size={18} />
       </div>
-      {perfect <= 0 && <p className="text-white/55 text-[11px] mt-1">まちがえずに とけた 問題が ないと 記録に のこらないよ。</p>}
+      {perfect <= 0 && <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-2)' }}>まちがえずに とけた 問題が ないと 記録に のこらないよ。</p>}
       {counts === 'class' && perfect > 0 && (
-        <p className="text-white/60 text-[11px] mt-1">{pending && pending.weekStart === weekStart ? '学級に おくっているよ…' : '学級の ほしに 入ったよ。'}</p>
+        <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-2)' }}>{pending && pending.weekStart === weekStart ? '学級に おくっているよ…' : '学級の ほしに 入ったよ。'}</p>
       )}
-      {counts === 'trial' && <p className="text-white/55 text-[11px] mt-1">おためしでは 学級の ほしには 入らないよ。</p>}
+      {counts === 'trial' && <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-2)' }}>おためしでは 学級の ほしには 入らないよ。</p>}
       {data && (counts === 'class' || counts === 'demo') && data.thisWeek.weekStart === weekStart && (
         <div className="mt-2"><ClassGoalBar w={data.thisWeek} sample={data.sample} compact /></div>
       )}
-    </div>
+    </Panel>
   );
 };
