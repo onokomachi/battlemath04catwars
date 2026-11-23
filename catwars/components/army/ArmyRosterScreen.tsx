@@ -6,6 +6,7 @@ import { familyShards, familyLevelCap, weakestUnitForFamily, nextShardHint, shar
 import { loadPack, packLoaded, UNIT_NAME_BY_KEY, unitsForFamily } from '../../learn/gradePack';
 import { skillsForFamily, unlockedSkillIds } from '../../data/skills';
 import { SkillList, NewSkillNotice } from './SkillParts';
+import { Chip, ScreenBackdrop, TitleBar } from '../ui';
 
 /** 系統の「上限・かけら・つぎにとく単元」 */
 function capInfo(familyId: string, perfect: Record<string, number>) {
@@ -38,14 +39,10 @@ export const ArmyRosterScreen: React.FC<Props> = ({ onBack }) => {
   useEffect(() => { let alive = true; loadPack().then(() => { if (alive) setReady(true); }).catch(() => {}); return () => { alive = false; }; }, []);
 
   return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col bg-[#0a0e1a] overflow-y-auto" style={font}>
-      {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-white/10 sticky top-0 z-10"
-        style={{ background: 'rgba(10,14,26,0.95)' }}>
-        <button onClick={onBack} className="text-white/50 hover:text-white text-sm">← もどる</button>
-        <h2 className="text-[#22d3ee] font-bold text-base" style={fontMono}>ネコ部隊</h2>
-        <span className="text-white/40 text-xs ml-auto">{CHARACTERS.length}系統 / {CHARACTERS.length * 3}フォーム</span>
-      </div>
+    <div className="cw-screen cw-scroll min-h-[100dvh] h-[100dvh] flex flex-col overflow-y-auto">
+      <ScreenBackdrop name="home" />
+      <TitleBar title="ネコ部隊" onBack={onBack} className="sticky top-0"
+        right={<Chip>{CHARACTERS.length}系統 / {CHARACTERS.length * 3}フォーム</Chip>} />
 
       {/* 新しく開いたスキル（1回だけ） */}
       {packLoaded() && <div className="px-3 pt-3"><NewSkillNotice /></div>}

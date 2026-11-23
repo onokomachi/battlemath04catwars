@@ -38,18 +38,21 @@ import { catwarsTrialKeyOf, CATWARS_TRIAL_LABEL, type CatwarsTrialKey } from '..
 import {
   currentExpedition, expeditionForWeek, expeditionChapter, expeditionDifficulty, expeditionEnemyBase, expeditionEnemyLevel, tuneExpeditionConfig,
 } from '../expedition/expedition';
-import { ExpeditionCard, ExpeditionScreen, ExpeditionResultNote } from './expedition/ExpeditionParts';
+import { ExpeditionCard, ExpeditionRewardNote, ExpeditionScreen, ExpeditionResultNote } from './expedition/ExpeditionParts';
 import { settleExpedition } from '../utils/settleExpedition';
 import { FriendCard, FriendScreen, FriendResultNote } from './friend/FriendParts';
 import { VersusCard, VersusScreen } from './versus/VersusParts';
 import { friendSetup, type FriendTarget } from '../friend/friendAttack';
 import { noteLayoutEdited, flushShare } from '../portal/friendSync';
 import { settleFriend, friendBonusFor } from '../utils/settleFriend';
+import { bossSprite } from '../data/enemySprites';
+import {
+  Button, Card, Chip, FacilityImg, Icon, Panel, ProgressBar, ScreenBackdrop, StatPill, TitleBar, useOptionalImage,
+} from './ui';
 
-const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
+const font = { fontFamily: 'var(--cw-font)' };
 /** 体験版で 先生が閉じた項目の ボタンの下の文（押すと kit の TrialLock） */
-const TRIAL_LOCKED_SUB = '🔒 たいけんばんでは つかえないよ';
-const fontMono = { fontFamily: 'Orbitron, monospace' };
+const TRIAL_LOCKED = 'たいけんばんでは つかえないよ';
 
 // 出撃導線: 範囲えらび → ステージえらび → 出撃メンバー（5枠）→ 陣地づくり（施設の買う・レベル上げも ここ）→ 戦闘
 // 陣地はステージごとに組む（ゾーンの広さが章によって変わるため）。
@@ -442,144 +445,149 @@ export const CatWars: React.FC<Props> = ({ onExit, playerName }) => {
   const clearedCount = campaign.clearedChapters.length;
   const nextChapter = CHAPTER_BY_ID[campaign.nextChapterId()];
   const allCleared = clearedCount >= CAMPAIGN.length;
-
-  const StatChip: React.FC<{ icon: string; value: React.ReactNode; color: string }> = ({ icon, value, color }) => (
-    <div className="flex items-center gap-1 border rounded-full px-2.5 py-1"
-      style={{ borderColor: `${color}66`, background: `${color}14` }}>
-      <span className="text-sm">{icon}</span>
-      <span className="font-bold text-xs" style={{ color, ...fontMono }}>{value}</span>
-    </div>
-  );
+  const nextBoss = bossSprite(nextChapter.id);
+  const sortieLocked = !!homeLock || !trialOpen('sortie');
+  const sortieSub = homeLock ?? (!trialOpen('sortie') ? TRIAL_LOCKED : allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`);
 
   return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-y-auto" style={font}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4">
-        {onExit ? <button onClick={onExit} className="text-white/60 hover:text-white text-sm">← メニュー</button>
-          : isTrial() ? (
-            // 体験の入口から来た子が 最初に迷わないよう、小さく しるし（下の kit のしるしで「おわる」もできる）
-            <span className="rounded-full border border-[#fcd34d]/60 bg-[#fcd34d]/10 px-2.5 py-1 text-[11px] font-black text-[#fde68a]" data-testid="trial-chip">たいけんばん</span>
-          ) : <span />}
-        <div className="flex items-center gap-1.5 flex-wrap justify-end">
-          {dailyStreak >= 1 && <StatChip icon="🔥" value={`${dailyStreak}`} color="#fb923c" />}
-          <StatChip icon="💠" value={Math.floor(resources.gold)} color="#38bdf8" />
-          <StatChip icon="⚡" value={dailyStars} color="#facc15" />
-          <StatChip icon="🪙" value={coins} color="#fde68a" />
-        </div>
-      </div>
-
-      {/* Title */}
-      <div className="text-center px-4 mt-1 mb-3">
-        <h1 className="text-3xl sm:text-4xl font-black text-hologram tracking-wide" style={fontMono}>CAT-WARS</h1>
-        <p className="text-[11px] text-[#38bdf8]/80 tracking-[0.3em] mt-1">基地を きずき ネコぐんだんで せめこもう</p>
-        <div className="mt-2"><TitleChip /></div>
-      </div>
-
-      {/* あたらしい バッジ（1回だけ） */}
-      <NewBadgeNotice />
-
-      {/* 学級ポータル：名乗りの入口・スタミナ（つないでいないビルドでは出さない） */}
-      <PortalCard />
-      {homeNotice && (
-        <div className="px-4 pt-3" role="status">
-          <div className="rounded-xl border border-[#fca5a5]/50 p-3 text-center" style={{ background: 'rgba(127,29,29,0.25)' }}>
-            <p className="text-white text-sm font-bold">{homeNotice}</p>
-            <button onClick={() => setHomeNotice(null)} className="mt-1 text-[11px] text-white/60 underline">とじる</button>
+    <div className="cw-screen cw-scroll min-h-[100dvh] h-[100dvh] overflow-y-auto" data-testid="home">
+      <ScreenBackdrop name="home" />
+      <div className="mx-auto w-full max-w-[980px] px-4 pb-8 cw-enter">
+        {/* ロゴ・数 */}
+        <div className="flex items-center justify-between gap-x-4 gap-y-2 flex-wrap pt-4">
+          <div className="flex items-center gap-3 min-w-0">
+            {onExit && <Button variant="secondary" size="sm" onClick={onExit}>メニュー</Button>}
+            <HomeEmblem />
+            <div className="min-w-0">
+              <h1 className="cw-logo text-cw-40 leading-none">CAT-WARS</h1>
+              <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-2)' }}>基地を きずき ネコぐんだんで せめこもう</p>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {dailyStreak >= 1 && <StatPill icon="streak" value={dailyStreak} label="れんぞく" />}
+              <StatPill icon="credit" value={Math.floor(resources.gold)} label="クレジット" data-testid="pill-credit" />
+              <StatPill icon="energy" value={dailyStars} label="エナジー" />
+              <StatPill icon="coin" value={coins} label="シールコイン" />
+            </div>
+            <div className="flex items-center gap-2">
+              {!onExit && isTrial() && (
+                // 体験の入口から来た子が 最初に迷わないよう、小さく しるし（下の kit のしるしで「おわる」もできる）
+                <Chip tone="reward"><span data-testid="trial-chip">たいけんばん</span></Chip>
+              )}
+              <TitleChip />
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Daily goal */}
-      <div className="px-5">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-white/60 text-[11px]">まちがえずに とくと 💠クレジット・⚡エナジー・施設を 動かす力 が たまる</span>
-          <span className="text-[#38bdf8] text-[11px]" style={fontMono}>{todayAnswered}/{dailyGoal}問</span>
-        </div>
-        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${dailyProgress * 100}%`, background: 'linear-gradient(90deg,#2563eb,#ef4444)' }} />
-        </div>
-      </div>
+        {/* あたらしい バッジ（1回だけ） */}
+        <NewBadgeNotice />
 
-      {/* ストーリー進行 */}
-      <div className="px-5 pt-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-white/60 text-[11px]">
-            {allCleared ? '👑 銀河にへいわがもどった' : `つぎの戦い：第${nextChapter.no}章「${nextChapter.title}」`}
-          </span>
-          <span className="text-[#f87171] text-[11px]" style={fontMono}>{clearedCount}/{CAMPAIGN.length}章</span>
-        </div>
-        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${(clearedCount / CAMPAIGN.length) * 100}%`, background: 'linear-gradient(90deg,#f87171,#facc15)' }} />
-        </div>
-      </div>
+        {homeNotice && (
+          <div role="status" className="cw-panel cw-tone-danger cw-enter mt-3 p-3 flex items-center gap-3" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-danger)' }}>
+            <Icon name="warn" size={28} />
+            <p className="flex-1 text-cw-14 font-bold" style={{ color: 'var(--cw-fg)' }}>{homeNotice}</p>
+            <Button variant="secondary" size="sm" onClick={() => setHomeNotice(null)}>とじる</Button>
+          </div>
+        )}
 
-      {/* Big actions */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4 pt-4">
-        <HubButton icon="⚔️" label="出撃！" sub={homeLock ? `🔒 ${homeLock}` : !trialOpen('sortie') ? TRIAL_LOCKED_SUB : allCleared ? '全章クリア！ 好きな章に再挑戦' : `第${nextChapter.no}章「${nextChapter.title}」へ`} color="#ef4444"
-          locked={!!homeLock || !trialOpen('sortie')}
+        {/* 出撃！（いちばん押したい） */}
+        <Button variant="primary" size="hero" fullWidth locked={sortieLocked} className="mt-4 !justify-between gap-4" data-testid="hub-sortie"
           onClick={() => {
+            sfx.select();
             // 閉じていても 押せる形のまま。押すと わけを出す（SANMON と同じ）
             if (homeLock) { setHomeNotice(homeLock); reportSortieLock(); return; }
+            if (!trialOpen('sortie')) return;
             setSortieMsg(null); resetBattleSession(); setExpeditionWeek(null); setFriendPick(null); setView('range');
-          }} big />
-        <HubButton icon="🐱" label="ネコ部隊" sub={trialOpen('army') ? 'レベル・進化・スキル' : TRIAL_LOCKED_SUB} color="#a3e635"
-          locked={!trialOpen('army')}
-          onClick={() => setView('army')} />
-        <HubButton icon="📖" label="あつめる" sub={!trialOpen('collection') ? TRIAL_LOCKED_SUB : coins >= CAPSULE_RULES.cost ? `🪙${coins} カプセルを まわせる！` : '図鑑・バッジ・シール'} color="#7dd3fc"
-          locked={!trialOpen('collection')}
-          onClick={() => setView('collection')} />
-        <HubButton icon="✨" label="出撃バフ" sub={trialOpen('army') ? '⚡エナジーで きょうの 戦力アップ' : TRIAL_LOCKED_SUB} color="#facc15"
-          locked={!trialOpen('army')}
-          onClick={() => setView('buffs')} />
-      </div>
+          }}>
+          <Icon name="sortie" size={64} />
+          <span className="flex-1 text-left min-w-0">
+            <span className="block text-cw-28 font-black leading-tight">出撃！</span>
+            <span className="block text-cw-14 font-bold truncate">
+              {sortieLocked && <Icon name="lock" size={16} className="inline-block align-[-3px] mr-1" />}{sortieSub}
+            </span>
+          </span>
+          {nextBoss && !allCleared && (
+            <img src={nextBoss} alt="" draggable={false} className="w-[76px] h-[76px] object-contain flex-shrink-0"
+              style={{ filter: sortieLocked ? 'grayscale(1) opacity(.6)' : 'drop-shadow(0 4px 6px rgba(6,10,28,.45))' }} />
+          )}
+        </Button>
 
-      {/* 週がわりの遠征（CW-6a）。鍵は 出撃と同じ catwars・体験版の項目も 出撃と同じ */}
-      {trialOpen('sortie') && (
-        <ExpeditionCard expedition={expedition} locked={homeLock}
-          onOpen={() => { setHomeNotice(null); setView('expedition'); }} />
-      )}
-
-      {/* なかまの 基地に いく（CW-6b）。鍵・体験版の項目は 出撃と同じ */}
-      {trialOpen('sortie') && (
-        <FriendCard locked={homeLock} onOpen={() => { setHomeNotice(null); setView('friend'); }} />
-      )}
-
-      {/* 同時対戦（CW-6c）。鍵・体験版の項目は 出撃と同じ（コンピュータとの れんしゅうは 名乗らなくても あそべる） */}
-      {trialOpen('sortie') && (
-        <VersusCard locked={homeLock} onOpen={() => { setHomeNotice(null); setView('versus'); }} />
-      )}
-
-      {/* 基地のようす（施設の買う・レベル上げ・配置は 出撃の中の「陣地づくり」で） */}
-      <div className="px-4 pt-4">
-        <div className="rounded-2xl border border-white/10 p-3" style={{ background: 'rgba(6,10,24,0.55)' }} data-testid="hub-base">
-          <div className="flex items-center justify-between mb-2">
-            <span className="flex items-center gap-2"><DecorFlag size={22} /><span className="text-white/70 text-xs font-bold" style={fontMono}>基地</span></span>
-            <span className="text-[#facc15] text-[11px]">きょう 動かせる施設 {limit}こ まで（コアのほか）</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
-              <span className="text-white/70 text-[11px]">🏰 コア Lv{base.levelOf(BuildingType.TOWN_HALL)}</span>
-            </div>
-            {(Object.entries(owned) as [BuildingType, number][]).filter(([, n]) => (n ?? 0) > 0).map(([type, n]) => (
-              <div key={type} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
-                <span className="text-white/70 text-[11px]">{BUILDING_STATS[type].icon || '🧱'} {BUILDING_STATS[type].name}×{n} Lv{base.levelOf(type)}</span>
-              </div>
-            ))}
-          </div>
-          {Object.values(owned).every(n => !n) && (
-            <p className="text-white/40 text-[11px] mt-2">「出撃！」の 陣地づくりで、💠クレジットで 施設を 買えるよ。施設は ずっと のこる。</p>
+        {/* ふだんの 6枚（同じ形・同じ大きさ。枠は 色分けしない） */}
+        <div className="grid grid-cols-2 min-[900px]:grid-cols-3 gap-3 mt-3">
+          <Card icon="cats" title="ネコ部隊" sub="レベル・進化・スキル" data-testid="hub-army"
+            locked={!trialOpen('army')} lockReason={trialOpen('army') ? undefined : TRIAL_LOCKED}
+            onClick={() => { sfx.select(); setView('army'); }} />
+          <Card icon="collect" title="あつめる" data-testid="hub-collection"
+            sub={coins >= CAPSULE_RULES.cost ? `シールコイン ${coins}まい カプセルを まわせる！` : '図鑑・バッジ・シール'}
+            locked={!trialOpen('collection')} lockReason={trialOpen('collection') ? undefined : TRIAL_LOCKED}
+            right={coins >= CAPSULE_RULES.cost && trialOpen('collection') ? <Chip tone="reward">カプセル</Chip> : undefined}
+            onClick={() => { sfx.select(); setView('collection'); }} />
+          <Card icon="buff" title="出撃バフ" sub="エナジーで きょうの 戦力アップ" data-testid="hub-buffs"
+            locked={!trialOpen('army')} lockReason={trialOpen('army') ? undefined : TRIAL_LOCKED}
+            onClick={() => { sfx.select(); setView('buffs'); }} />
+          {trialOpen('sortie') && (
+            <ExpeditionCard expedition={expedition} locked={homeLock}
+              onOpen={() => { sfx.select(); setHomeNotice(null); setView('expedition'); }} />
+          )}
+          {trialOpen('sortie') && (
+            <FriendCard locked={homeLock} onOpen={() => { sfx.select(); setHomeNotice(null); setView('friend'); }} />
+          )}
+          {trialOpen('sortie') && (
+            <VersusCard locked={homeLock} onOpen={() => { sfx.select(); setHomeNotice(null); setView('versus'); }} />
           )}
         </div>
-      </div>
+        {trialOpen('sortie') && <ExpeditionRewardNote />}
 
-      {/* Mercenaries shortcut */}
-      <div className="px-4 pt-3 pb-8">
-        <button onClick={() => setView('mercs')} aria-disabled={!trialOpen('army') || undefined}
-          className="w-full py-3 rounded-xl border border-[#a3e635]/40 text-[#a3e635] text-sm font-bold hover:bg-[#a3e635]/10 transition-all active:scale-95">
-          💠 なかまを よぶ（💠で ボスの 宇宙ネコを なかまに）
-        </button>
+        {/* 学級ポータル：名乗りの入口・スタミナ（つないでいないビルドでは出さない） */}
+        <PortalCard />
+
+        {/* きょうの がくしゅう・ストーリー ／ 基地のようす */}
+        <div className="grid grid-cols-1 min-[900px]:grid-cols-2 gap-3 mt-3">
+          <Panel className="flex flex-col gap-3">
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="flex items-center gap-2 text-cw-14 font-extrabold" style={{ color: 'var(--cw-fg-2)' }}><Icon name="target" size={22} />きょうの がくしゅう</span>
+                <span className="text-cw-14 font-bold font-cw-num" style={{ color: 'var(--cw-growth)' }}>{todayAnswered}/{dailyGoal}問</span>
+              </div>
+              <ProgressBar value={dailyProgress} tone="growth" label="きょうの がくしゅう" />
+              <p className="text-cw-12 mt-1.5" style={{ color: 'var(--cw-fg-3)' }}>まちがえずに とくと 💠クレジット・⚡エナジー・施設を 動かす力 が たまる</p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="flex items-center gap-2 text-cw-14 font-extrabold min-w-0" style={{ color: 'var(--cw-fg-2)' }}>
+                  <Icon name={allCleared ? 'crown' : 'enemy'} size={22} />
+                  <span className="truncate">{allCleared ? '銀河にへいわがもどった' : `つぎの戦い：第${nextChapter.no}章「${nextChapter.title}」`}</span>
+                </span>
+                <span className="text-cw-14 font-bold font-cw-num flex-shrink-0" style={{ color: 'var(--cw-cat)' }}>{clearedCount}/{CAMPAIGN.length}章</span>
+              </div>
+              <ProgressBar value={clearedCount / CAMPAIGN.length} tone="cat" label="クリアした章" />
+            </div>
+          </Panel>
+
+          {/* 基地のようす（施設の買う・レベル上げ・配置は 出撃の中の「陣地づくり」で） */}
+          <Panel data-testid="hub-base">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="flex items-center gap-2 text-cw-14 font-extrabold" style={{ color: 'var(--cw-fg-2)' }}><DecorFlag size={22} />基地</span>
+              <span className="text-cw-12" style={{ color: 'var(--cw-reward)' }}>きょう 動かせる施設 {limit}こ まで（コアのほか）</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Chip><FacilityImg type={BuildingType.TOWN_HALL} size={22} />コア Lv{base.levelOf(BuildingType.TOWN_HALL)}</Chip>
+              {(Object.entries(owned) as [BuildingType, number][]).filter(([, n]) => (n ?? 0) > 0).map(([type, n]) => (
+                <Chip key={type}><FacilityImg type={type} size={22} />{BUILDING_STATS[type].name}×{n} Lv{base.levelOf(type)}</Chip>
+              ))}
+            </div>
+            {Object.values(owned).every(n => !n) && (
+              <p className="text-cw-12 mt-2" style={{ color: 'var(--cw-fg-3)' }}>「出撃！」の 陣地づくりで、💠クレジットで 施設を 買えるよ。施設は ずっと のこる。</p>
+            )}
+          </Panel>
+        </div>
+
+        {/* なかまを よぶ（傭兵） */}
+        <Button variant="secondary" size="lg" fullWidth className="mt-3" locked={!trialOpen('army')} data-testid="hub-mercs"
+          onClick={() => { sfx.select(); setView('mercs'); }}>
+          <Icon name="credit" size={26} />なかまを よぶ（💠で ボスの 宇宙ネコを なかまに）
+        </Button>
       </div>
 
       {/* Overlay panels */}
@@ -604,24 +612,17 @@ export function topFamiliesAvgLevel(army: Record<string, { level: number }>): nu
   return lv.reduce((a, b) => a + b, 0) / lv.length;
 }
 
-const HubButton: React.FC<{
-  icon: string; label: string; sub: string; color: string; onClick: () => void; big?: boolean; locked?: boolean;
-}> = ({ icon, label, sub, color, onClick, big, locked }) => (
-  <button onClick={() => { sfx.select(); onClick(); }} aria-disabled={locked || undefined}
-    className={`relative overflow-hidden rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${big ? 'col-span-2 md:col-span-3 py-6' : 'py-5'} ${locked ? 'opacity-60 grayscale' : ''}`}
-    style={{ borderColor: `${color}`, background: `${color}18`, boxShadow: big ? `0 0 22px ${color}55` : `0 0 10px ${color}33` }}>
-    <span className={big ? 'text-4xl' : 'text-3xl'}>{icon}</span>
-    <span className="font-black text-white tracking-wide" style={{ ...fontMono, fontSize: big ? 18 : 15 }}>{label}</span>
-    <span className="text-[11px]" style={{ color }}>{sub}</span>
-  </button>
-);
+/** ホームの ロゴの となり：エンブレムの絵（あれば）。無ければ 出撃の アイコン */
+const HomeEmblem: React.FC = () => {
+  const src = useOptionalImage(['/assets/emblem/emblem-catwars.webp', '/assets/emblem/emblem-catwars.png']);
+  return src
+    ? <img src={src} alt="" draggable={false} className="w-14 h-14 object-contain flex-shrink-0" data-testid="home-emblem" />
+    : <Icon name="sortie" size={52} />;
+};
 
 const Overlay: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
-  <div className="fixed inset-0 z-[120] flex flex-col" style={{ background: 'rgba(4,7,18,0.96)', backdropFilter: 'blur(10px)' }}>
-    <div className="flex items-center gap-3 p-4 border-b border-white/10">
-      <button onClick={onClose} className="text-white/60 hover:text-white text-sm">← もどる</button>
-      <h2 className="text-[#38bdf8] font-bold text-base" style={fontMono}>{title}</h2>
-    </div>
-    <div className="flex-1 overflow-y-auto p-4">{children}</div>
+  <div className="cw-screen fixed inset-0 z-[120] flex flex-col" style={{ background: 'linear-gradient(180deg, var(--cw-bg-0), var(--cw-bg-1))' }}>
+    <TitleBar title={title} onBack={onClose} />
+    <div className="flex-1 overflow-y-auto cw-scroll p-4">{children}</div>
   </div>
 );

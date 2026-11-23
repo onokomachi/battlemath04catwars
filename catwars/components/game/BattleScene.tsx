@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { GameState, Troop, BuildingType, BattleEntity, GRID_W, GRID_H } from '../../types';
 import { BUILDING_STATS } from '../../constants';
 import { Button } from '../ui/Button';
-import { Swords, Trophy, Skull, Zap, Heart } from '../ui/Icons';
+import { Swords, Trophy, Skull, Zap, Heart } from '../ui/BattleIcons';
 import { TerrainLayer } from './TerrainLayer';
 // ── 決定論シミュレーション（catwars/sim/）──
 // ゲーム状態はすべてこちらが持つ。このコンポーネントは描画と入力だけを担当する。

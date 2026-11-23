@@ -14,9 +14,8 @@ import { useStudyStore } from '../../store/useStudyStore';
 import { familySkillIds } from '../../learn/shards';
 import { skillsForFamily } from '../../data/skills';
 import { loadPack, packLoaded } from '../../learn/gradePack';
-
-const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
-const fontMono = { fontFamily: 'Orbitron, monospace' };
+import { BuildingType } from '../../types';
+import { Button, Chip, Disclosure, FacilityImg, Icon, Panel, ScreenBackdrop, SectionTitle, TitleBar } from '../ui';
 
 interface Props {
   chapter: CampaignChapter;
@@ -82,116 +81,135 @@ export const FormationScreen: React.FC<Props> = ({ chapter, tier, onBack, onProc
     return '「なかまを よぶ」（💠）で ひらく';
   };
 
-  return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden" style={font} data-testid="formation-screen">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 flex-shrink-0"
-        style={{ background: 'rgba(6,10,24,0.85)', backdropFilter: 'blur(12px)' }}>
-        <button onClick={onBack} className="text-white/60 hover:text-white text-sm">← もどる</button>
-        <div className="min-w-0">
-          <h2 className="text-[#a3e635] font-bold text-sm leading-tight" style={fontMono}>出撃メンバー</h2>
-          <p className="text-white/45 text-[10px] truncate">第{chapter.no}章「{chapter.title}」{tier === 'normal' ? '' : `（${tierInfo.label}）`}</p>
-        </div>
-        <span className="ml-auto text-[#a3e635] font-bold text-sm" style={fontMono}>{formation.length}/{FORMATION_SIZE}</span>
-      </div>
+  const slotLv = (id: string) => army[id]?.level ?? 1;
+  const starsOf = (id: string) => familySkillIds(id, perfect).length;
+  const hasSkills = (id: string) => skillsForFamily(id).length > 0;
 
-      <div className="flex-1 overflow-y-auto px-4 py-3">
-        {/* 出てくる敵と たおし方 */}
-        <div className="p-3 rounded-xl" data-testid="formation-enemies"
-          style={{ background: `${tierInfo.color}12`, border: `1px solid ${tierInfo.color}55` }}>
-          <div className="font-bold text-[11px] mb-1.5" style={{ color: tierInfo.color, ...fontMono }}>▸ 出てくる 敵と たおし方</div>
-          <ul className="space-y-1">
-            {td.unitPool.map(k => {
-              const note = ENEMY_TRAIT_NOTE[k];
+  return (
+    <div className="cw-screen h-[100dvh] flex flex-col overflow-hidden" data-testid="formation-screen">
+      <ScreenBackdrop name="stage" />
+      <TitleBar title="出撃メンバー" onBack={onBack}
+        subtitle={<>第{chapter.no}章「{chapter.title}」{tier === 'normal' ? '' : `（${tierInfo.label}）`}</>}
+        right={<Chip tone="growth"><Icon name="cats" size={18} />{formation.length}/{FORMATION_SIZE}</Chip>} />
+
+      <div className="flex-1 overflow-y-auto cw-scroll px-4 py-3 cw-enter">
+        <div className="mx-auto max-w-[980px] grid gap-3 min-[900px]:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] items-start">
+          {/* 左：5枠・注意・出てくる敵 */}
+          <div className="flex flex-col gap-3">
+            <Panel>
+              <SectionTitle tone="growth" right="下から タップで 入れる・上の枠を タップで はずす">出撃する 5ひき</SectionTitle>
+              <div className="mt-3 grid grid-cols-5 gap-2" data-testid="formation-slots">
+                {Array.from({ length: FORMATION_SIZE }, (_, i) => {
+                  const id = formation[i];
+                  const fam = id ? CHARACTER_BY_ID[id] : null;
+                  return (
+                    <button key={i} type="button" onClick={() => id && toggle(id)} aria-label={fam ? `${fam.displayName}を はずす` : 'あいている枠'}
+                      className="cw-press rounded-cw-md flex flex-col items-center justify-center py-2 min-h-[104px]"
+                      style={{
+                        background: fam ? `${fam.accent}22` : 'rgba(148,170,255,0.06)',
+                        boxShadow: fam ? `0 0 0 2px ${fam.accent}` : 'inset 0 0 0 1px var(--cw-line)',
+                      }}>
+                      {fam ? (
+                        <>
+                          <img src={getCharacterSprite(fam.spriteFamily, stageForLevel(slotLv(fam.id)))} alt={fam.displayName}
+                            style={{ width: 60, height: 60, objectFit: 'contain' }} draggable={false} />
+                          <span className="text-cw-12 font-bold leading-tight mt-0.5" style={{ color: 'var(--cw-fg)' }}>{fam.displayName}</span>
+                          <span className="text-cw-12 font-cw-num leading-tight" style={{ color: 'var(--cw-fg-2)' }}>Lv{slotLv(fam.id)}</span>
+                          {hasSkills(fam.id) && starsOf(fam.id) > 0 && (
+                            <span className="flex gap-0.5 mt-0.5" data-testid="slot-skill-stars" aria-label={`スキル ${starsOf(fam.id)}こ`}>
+                              {Array.from({ length: starsOf(fam.id) }, (_, k) => <Icon key={k} name="star" size={12} />)}
+                            </span>
+                          )}
+                        </>
+                      ) : <span className="text-cw-28 font-bold" style={{ color: 'var(--cw-fg-3)' }}>＋</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </Panel>
+
+            {warnings.length > 0 && (
+              <div className="cw-panel cw-tone-reward p-3 flex flex-col gap-2" data-testid="formation-warning" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
+                {warnings.map(w => (
+                  <p key={w} className="flex items-start gap-2 text-cw-14 leading-snug" style={{ color: 'var(--cw-fg)' }}>
+                    <Icon name="warn" size={22} className="mt-0.5" />{w.replace(/^⚠️\s*/, '')}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {/* 出てくる敵と たおし方 */}
+            <Disclosure title="出てくる 敵と たおし方" icon="enemy" defaultOpen data-testid="formation-enemies">
+              <ul className="flex flex-col gap-2">
+                {td.unitPool.map(k => {
+                  const note = ENEMY_TRAIT_NOTE[k];
+                  return (
+                    <li key={k} className="flex items-center gap-2 text-cw-14">
+                      <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="w-8 h-8 object-contain flex-shrink-0" />
+                      <span><span className="font-bold">{note ? `${note.icon} ` : ''}{ENEMY_UNIT_STATS[k].label}</span>
+                        {note && <span className="text-cw-12 block" style={{ color: 'var(--cw-fg-3)' }}>{note.counter}</span>}</span>
+                    </li>
+                  );
+                })}
+                {td.bossAtSpawnCount != null && (
+                  <li className="flex items-center gap-2 text-cw-14">
+                    <img src={ENEMY_UNIT_SPRITE.boss} alt="" draggable={false} className="w-8 h-8 object-contain flex-shrink-0" />
+                    <span><span className="font-bold" style={{ color: 'var(--cw-reward)' }}>ボス（{ENEMY_UNIT_STATS.boss.label}）</span>
+                      {(td.bossShield ?? 0) > 0 && <span className="text-cw-12 block" style={{ color: 'var(--cw-fg-3)' }}>シールドは ふくしゅうカードで わる</span>}</span>
+                  </li>
+                )}
+              </ul>
+            </Disclosure>
+          </div>
+
+          {/* 右：えらべる系統 */}
+          <div className="grid grid-cols-2 gap-2">
+            {CHARACTERS.map(fam => {
+              const open = unlocked.includes(fam.id);
+              const on = formation.includes(fam.id);
+              const lv = slotLv(fam.id);
+              const tags = [reachesAir(fam.id) ? '空にとどく' : '', fam.id === 'magic' ? 'たてに強い' : ''].filter(Boolean);
               return (
-                <li key={k} className="text-[11px] leading-snug text-white/85">
-                  <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
-                  <span className="font-bold">{note ? `${note.icon} ` : ''}{ENEMY_UNIT_STATS[k].label}</span>
-                  {note && <span className="text-white/65">　{note.counter}</span>}
-                </li>
+                <button key={fam.id} type="button" onClick={() => toggle(fam.id)} disabled={!open}
+                  data-family={fam.id}
+                  className="cw-card cw-press flex items-center gap-2 p-2 min-h-[84px] text-left"
+                  style={{
+                    background: on ? `${fam.accent}26` : undefined,
+                    boxShadow: on ? `var(--cw-shadow-panel), 0 0 0 2px ${fam.accent}` : undefined,
+                    opacity: open ? 1 : 0.8,
+                  }}>
+                  <div className="relative flex-shrink-0">
+                    <img src={getCharacterSprite(fam.spriteFamily, stageForLevel(lv))} alt={fam.displayName}
+                      style={{ width: 56, height: 56, objectFit: 'contain', filter: open ? undefined : 'grayscale(1) brightness(0.6)' }}
+                      draggable={false} />
+                    {!open && <span className="absolute inset-0 flex items-center justify-center"><Icon name="lock" size={26} /></span>}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-cw-14 font-extrabold leading-tight" style={{ color: 'var(--cw-fg)' }}>{fam.displayName}</span>
+                      <span className="text-cw-12 font-cw-num font-bold px-1.5 rounded-cw-sm" style={{ background: `${fam.accent}33`, color: 'var(--cw-fg)' }}>Lv{lv}</span>
+                      {hasSkills(fam.id) && starsOf(fam.id) > 0 && (
+                        <span className="flex gap-0.5" title="ひらいている スキルの数">{Array.from({ length: starsOf(fam.id) }, (_, k) => <Icon key={k} name="star" size={12} />)}</span>
+                      )}
+                    </div>
+                    <div className="text-cw-12 leading-tight" style={{ color: 'var(--cw-fg-3)' }}>{open ? fam.role : lockNote(fam.id)}</div>
+                    {open && tags.length > 0 && <div className="text-cw-12 leading-tight font-bold" style={{ color: 'var(--cw-growth)' }}>{tags.join('・')}</div>}
+                  </div>
+                </button>
               );
             })}
-            {td.bossAtSpawnCount != null && (
-              <li className="text-[11px] leading-snug text-[#fde68a]">
-                <img src={ENEMY_UNIT_SPRITE.boss} alt="" draggable={false} className="inline-block w-5 h-5 object-contain align-middle mr-1" />
-                <span className="font-bold">👑 ボス（{ENEMY_UNIT_STATS.boss.label}）</span>
-                {(td.bossShield ?? 0) > 0 && <span className="text-white/70">　シールドは ふくしゅうカードで わる</span>}
-              </li>
-            )}
-          </ul>
-        </div>
-
-        {warnings.length > 0 && (
-          <div className="mt-2 p-2.5 rounded-xl space-y-1" data-testid="formation-warning"
-            style={{ background: 'rgba(250,204,21,0.10)', border: '1px solid rgba(250,204,21,0.45)' }}>
-            {warnings.map(w => <p key={w} className="text-[11px] text-[#fde68a] leading-snug">{w}</p>)}
           </div>
-        )}
-
-        {/* 5枠 */}
-        <div className="mt-3 grid grid-cols-5 gap-2 max-w-md" data-testid="formation-slots">
-          {Array.from({ length: FORMATION_SIZE }, (_, i) => {
-            const id = formation[i];
-            const fam = id ? CHARACTER_BY_ID[id] : null;
-            const lv = id ? army[id]?.level ?? 1 : 1;
-            return (
-              <button key={i} onClick={() => id && toggle(id)}
-                className="aspect-square rounded-xl border-2 flex flex-col items-center justify-center"
-                style={{ borderColor: fam ? fam.accent : 'rgba(255,255,255,0.15)', background: fam ? `${fam.accent}18` : 'rgba(255,255,255,0.03)' }}>
-                {fam ? (
-                  <>
-                    <img src={getCharacterSprite(fam.spriteFamily, stageForLevel(lv))} alt={fam.displayName}
-                      style={{ width: 36, height: 36, objectFit: 'contain' }} draggable={false} />
-                    <span className="text-[9px] text-white/80 leading-none mt-0.5">{fam.displayName}</span>
-                    {skillStars(fam.id) && <span className="text-[8px] text-[#facc15] leading-none" data-testid="slot-skill-stars">{skillStars(fam.id)}</span>}
-                  </>
-                ) : <span className="text-white/25 text-lg">＋</span>}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-white/40 text-[10px] mt-1">下から タップで 入れる・上の枠を タップで はずす（5つまで）</p>
-
-        {/* えらべる系統 */}
-        <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {CHARACTERS.map(fam => {
-            const open = unlocked.includes(fam.id);
-            const on = formation.includes(fam.id);
-            const lv = army[fam.id]?.level ?? 1;
-            const tags = [reachesAir(fam.id) ? '🪽空にとどく' : '', fam.id === 'magic' ? '🛡️たてに強い' : ''].filter(Boolean);
-            return (
-              <button key={fam.id} onClick={() => toggle(fam.id)} disabled={!open}
-                data-family={fam.id}
-                className="flex items-center gap-2 p-2 rounded-xl border-2 text-left transition-all active:scale-95"
-                style={{
-                  borderColor: on ? fam.accent : 'rgba(255,255,255,0.1)',
-                  background: on ? `${fam.accent}22` : 'rgba(255,255,255,0.03)',
-                  opacity: open ? 1 : 0.5,
-                }}>
-                <div className="relative flex-shrink-0">
-                  <img src={getCharacterSprite(fam.spriteFamily, stageForLevel(lv))} alt={fam.displayName}
-                    style={{ width: 40, height: 40, objectFit: 'contain', filter: open ? undefined : 'grayscale(1) brightness(0.6)' }}
-                    draggable={false} />
-                  {!open && <span className="absolute inset-0 flex items-center justify-center text-lg">🔒</span>}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-white text-xs font-bold leading-tight">{fam.displayName} <span style={{ color: fam.accent, ...fontMono }}>Lv{lv}</span>{skillStars(fam.id) && <span className="text-[#facc15] text-[10px]" title="ひらいている スキルの数"> {skillStars(fam.id)}</span>}</div>
-                  <div className="text-white/50 text-[10px] leading-tight truncate">{open ? fam.role : lockNote(fam.id)}</div>
-                  {open && tags.length > 0 && <div className="text-[9px] text-[#a3e635] leading-tight">{tags.join(' ')}</div>}
-                </div>
-              </button>
-            );
-          })}
         </div>
       </div>
 
-      <div className="border-t border-white/10 px-4 pt-3 flex-shrink-0"
-        style={{ background: 'rgba(6,10,24,0.92)', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
-        <button onClick={() => { if (formation.length > 0) { setFormation(formation); sfx.select(); onProceed(); } }}
-          disabled={formation.length === 0}
-          className="w-full py-3.5 rounded-xl font-bold text-base transition-all active:scale-95 disabled:opacity-40"
-          style={{ ...fontMono, background: 'rgba(163,230,53,0.16)', border: '2px solid #a3e635', color: '#d9f99d' }}>
-          🏰 このメンバーで 陣地づくりへ →
-        </button>
+      <div className="flex-shrink-0 px-4 pt-3 relative z-10"
+        style={{ background: 'var(--cw-surface-strong)', boxShadow: 'inset 0 1px 0 var(--cw-line)', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
+        <div className="mx-auto max-w-[980px]">
+          <Button variant="primary" size="xl" fullWidth disabled={formation.length === 0} data-testid="formation-proceed"
+            onClick={() => { if (formation.length > 0) { setFormation(formation); sfx.select(); onProceed(); } }}>
+            <FacilityImg type={BuildingType.TOWN_HALL} size={34} />このメンバーで 陣地づくりへ<span aria-hidden>→</span>
+          </Button>
+        </div>
       </div>
     </div>
   );

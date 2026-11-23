@@ -6,6 +6,7 @@ import { CHARACTER_BY_ID, getCharacterSprite } from '../../data/characters';
 import { DECOR_BY_ID, TITLE_BY_ID } from '../../collection/titles';
 import { useCollectionStore } from '../../store/useCollectionStore';
 import { CAPSULE_RULES } from '../../collection/stickers';
+import { Button, Icon } from '../ui';
 
 /**
  * 収集の画面部品（2026-11-16 CW-4c）。
@@ -38,10 +39,10 @@ export const StickerView: React.FC<{ s: StickerDef; size?: number; owned?: boole
         <ArtImg src={s.image} alt={s.name} size={size * 0.84}
           fallback={<span style={{ fontSize: size * 0.5, lineHeight: 1 }}>{s.emoji}</span>} />
       ) : (
-        <span className="text-white/25 font-black" style={{ fontSize: size * 0.4 }}>？</span>
+        <span className="font-black" style={{ fontSize: size * 0.4, color: 'var(--cw-fg-3)' }}>？</span>
       )}
       {count != null && count > 1 && (
-        <span className="absolute -bottom-1 -right-1 text-[10px] font-black px-1.5 rounded-full bg-black/80 text-white border border-white/30">×{count}</span>
+        <span className="absolute -bottom-1.5 -right-1.5 text-cw-12 font-black px-1.5 rounded-full" style={{ background: 'var(--cw-bg-0)', color: 'var(--cw-fg)', boxShadow: 'inset 0 0 0 1px var(--cw-line-strong)' }}>×{count}</span>
       )}
     </div>
   );
@@ -61,14 +62,14 @@ export const BadgeMedal: React.FC<{ id: string; tier: number; size?: number; loc
   );
   return (
     <div className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }} data-medal={got ? 'on' : 'off'}>
-      <span className="absolute inset-0" style={{ filter: got ? undefined : 'grayscale(1)', opacity: got ? 1 : 0.4 }}>
+      <span className="absolute inset-0" style={{ filter: got ? undefined : 'grayscale(1) brightness(1.3)', opacity: got ? 1 : 0.8 }}>
         <ArtImg src={badgeFrame(def, tier)} size={size} fallback={plain} />
       </span>
       <span className="relative flex items-center justify-center" style={{ width: motif, height: motif }}>
         {locked
-          ? <span className="font-black text-white/60" style={{ fontSize: size * 0.4, lineHeight: 1 }}>？</span>
-          : <ArtImg src={def.image} size={motif} fallback={<span style={{ filter: got ? undefined : 'grayscale(1)', opacity: got ? 1 : 0.55 }}>{emoji}</span>}
-              style={got ? undefined : { filter: 'brightness(0) invert(0.75)', opacity: 0.5 }} />}
+          ? <span className="font-black" style={{ fontSize: size * 0.4, lineHeight: 1, color: '#1e1b4b' }}>？</span>
+          : <ArtImg src={def.image} size={motif} fallback={<span style={{ filter: got ? undefined : 'grayscale(1)', opacity: got ? 1 : 0.75 }}>{emoji}</span>}
+              style={got ? undefined : { filter: 'brightness(0) invert(0.85)', opacity: 0.75 }} />}
       </span>
     </div>
   );
@@ -102,16 +103,15 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
   const empty = gains.coins <= 0 && gains.badges.length === 0 && gains.dex.length === 0;
   if (empty) return null;
   return (
-    <div className="mb-3 rounded-xl p-3 text-left" data-testid="gains"
-      style={{ background: 'linear-gradient(135deg, rgba(56,189,248,0.14), rgba(250,204,21,0.12))', border: '1px solid rgba(56,189,248,0.55)' }}>
-      <div className="text-[#7dd3fc] font-black text-sm mb-1.5">🎁 あたらしく 手に入れたもの</div>
+    <div className="cw-panel mb-3 p-3 text-left" data-testid="gains" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
+      <div className="font-black text-cw-14 mb-1.5" style={{ color: 'var(--cw-reward)' }}>🎁 あたらしく 手に入れたもの</div>
       {gains.badges.map((b) => {
         const def = BADGE_BY_ID[b.id];
         if (!def) return null;
         return (
           <div key={b.id} className="flex items-center gap-2 mb-1">
             <BadgeMedal id={b.id} tier={b.tier} size={30} />
-            <div className="text-[12px] text-white leading-tight">
+            <div className="text-cw-12 leading-tight" style={{ color: 'var(--cw-fg)' }}>
               バッジ「{def.name}」{tierLabel(def, b.tier) && <b style={{ color: tierColor(def, b.tier) }}> {tierLabel(def, b.tier)}</b>}
             </div>
           </div>
@@ -119,11 +119,11 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
       })}
       {gains.dex.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 mt-1">
-          <span className="text-[11px] text-white/70">📖 図鑑に のった：</span>
+          <span className="text-cw-12" style={{ color: 'var(--cw-fg-2)' }}>📖 図鑑に のった：</span>
           {gains.dex.map((k) => {
             const d = dexLabel(k);
             return (
-              <span key={k} className="flex items-center gap-1 text-[11px] text-white bg-white/10 rounded-full pl-0.5 pr-2 py-0.5">
+              <span key={k} className="flex items-center gap-1 text-cw-12 rounded-full pl-0.5 pr-2 py-0.5" style={{ background: 'rgba(148,170,255,0.14)', color: 'var(--cw-fg)' }}>
                 {d.img
                   ? <img src={d.img} alt="" style={{ width: 18, height: 18, objectFit: 'contain' }} />
                   : <span>{d.emoji}</span>}
@@ -134,7 +134,7 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
         </div>
       )}
       {gains.coins > 0 && (
-        <div className="text-[12px] text-[#fde68a] mt-1.5">
+        <div className="text-cw-12 mt-1.5" style={{ color: 'var(--cw-reward)' }}>
           🪙 シールコイン +{gains.coins}（いま {coins}まい{coins >= CAPSULE_RULES.cost ? '。カプセルを まわせるよ' : ''}）
         </div>
       )}
@@ -157,20 +157,19 @@ export const NewBadgeNotice: React.FC = () => {
   }, [badges, seen, markSeen]);
   if (shown.length === 0) return null;
   return (
-    <div className="mx-4 mt-3 rounded-xl p-3" data-testid="new-badge"
-      style={{ background: 'linear-gradient(135deg, rgba(250,204,21,0.16), rgba(56,189,248,0.12))', border: '1px solid rgba(250,204,21,0.6)' }}>
-      <div className="flex items-center justify-between">
-        <span className="text-[#facc15] font-black text-sm">🏅 あたらしい バッジ！</span>
-        <button onClick={() => setShown([])} className="text-white/50 text-xs px-2">とじる</button>
+    <div className="cw-panel cw-enter cw-reward-pop mt-3 p-3" data-testid="new-badge" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-cw-14 font-extrabold" style={{ color: 'var(--cw-reward)' }}><Icon name="medal" size={24} />あたらしい バッジ！</span>
+        <Button variant="secondary" size="sm" onClick={() => setShown([])}>とじる</Button>
       </div>
-      <div className="flex flex-wrap gap-2 mt-1.5">
+      <div className="flex flex-wrap gap-3 mt-1.5">
         {shown.map((b) => {
           const def = BADGE_BY_ID[b.id];
           if (!def) return null;
           return (
-            <div key={b.id} className="flex items-center gap-1.5">
-              <BadgeMedal id={b.id} tier={b.tier} size={28} />
-              <span className="text-[12px] text-white">{def.name}{tierLabel(def, b.tier) && ` ${tierLabel(def, b.tier)}`}</span>
+            <div key={b.id} className="flex items-center gap-2">
+              <BadgeMedal id={b.id} tier={b.tier} size={36} />
+              <span className="text-cw-14" style={{ color: 'var(--cw-fg)' }}>{def.name}{tierLabel(def, b.tier) && ` ${tierLabel(def, b.tier)}`}</span>
             </div>
           );
         })}
@@ -184,9 +183,8 @@ export const TitleChip: React.FC = () => {
   const title = useCollectionStore((s) => s.title);
   const t = TITLE_BY_ID[title] ?? TITLE_BY_ID.rookie;
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full" data-testid="title-chip"
-      style={{ background: 'rgba(250,204,21,0.12)', border: '1px solid rgba(250,204,21,0.5)', color: '#fde68a' }}>
-      🎖️ {t.name}
+    <span className="cw-chip cw-tone-reward" data-testid="title-chip">
+      <Icon name="ribbon" size={18} />{t.name}
     </span>
   );
 };
