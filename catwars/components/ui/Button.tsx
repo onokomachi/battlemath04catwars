@@ -2,12 +2,12 @@ import React from 'react';
 import { Icon } from './icons';
 
 export type ButtonVariant = 'primary' | 'reward' | 'danger' | 'secondary' | 'ghost' | 'success';
-export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'hero';
+export type ButtonSize = 'sm' | 'md' | 'lg' | 'xl' | 'hero';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   /** primary＝いま押す（シアン）／reward＝ごほうびを もらう（ゴールド）／danger＝やめる・あぶない／secondary＝ふつう／ghost＝ひかえめ／success＝せいこう（ミント） */
   variant?: ButtonVariant;
-  /** 高さの最小：xs・sm＝44／md＝48／lg＝56／xl＝64／hero＝96（いちばん押したい 1つだけ） */
+  /** 高さの最小：sm＝44／md＝48／lg＝56／xl＝64／hero＝96（いちばん押したい 1つだけ） */
   size?: ButtonSize;
   /**
    * 押せない見た目（面を暗く・鍵・わけの文）。わけを 文で出す。
@@ -20,7 +20,6 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const SIZE: Record<ButtonSize, string> = {
-  xs: 'min-h-[44px] px-4 text-cw-14',
   sm: 'min-h-[44px] px-4 text-cw-14',
   md: 'min-h-[48px] px-5 text-cw-16',
   lg: 'min-h-[56px] px-6 text-cw-16',

@@ -9,8 +9,6 @@ interface Props {
   cancelLabel?: string;
   /** 決める ボタンの 役目：reward（ごほうび・お金）／primary／danger */
   variant?: 'reward' | 'primary' | 'danger';
-  /** 古い呼び出しの色の指定（いまは 使わない。variant で えらぶ） */
-  accent?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }

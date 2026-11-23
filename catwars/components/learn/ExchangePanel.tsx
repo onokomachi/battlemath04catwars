@@ -98,7 +98,7 @@ export const ExchangePanel: React.FC = () => {
 
       <ConfirmDialog
         open={pending !== null}
-        accent="#38bdf8"
+        variant="primary"
         title="クレジットを つかう？"
         message={pending ? (
           <>💠 <b style={{ color: '#38bdf8' }}>{pending.cost}</b> をつかって<br />
