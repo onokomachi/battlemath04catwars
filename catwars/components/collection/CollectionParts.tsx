@@ -104,7 +104,7 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
   if (empty) return null;
   return (
     <Panel pad={false} className="mb-3 p-3 text-left rounded-cw-md" data-testid="gains" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' }}>
-      <div className="font-black text-cw-14 mb-1.5" style={{ color: 'var(--cw-reward)' }}>🎁 あたらしく 手に入れたもの</div>
+      <div className="font-black text-cw-14 mb-1.5" style={{ color: 'var(--cw-reward)' }}>あたらしく 手に入れたもの</div>
       {gains.badges.map((b) => {
         const def = BADGE_BY_ID[b.id];
         if (!def) return null;
@@ -119,7 +119,7 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
       })}
       {gains.dex.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 mt-1">
-          <span className="text-cw-12" style={{ color: 'var(--cw-fg-2)' }}>📖 図鑑に のった：</span>
+          <span className="text-cw-12 inline-flex items-center gap-1" style={{ color: 'var(--cw-fg-2)' }}><Icon name="dex" size={18} />図鑑に のった：</span>
           {gains.dex.map((k) => {
             const d = dexLabel(k);
             return (
@@ -135,7 +135,7 @@ export const GainsSummary: React.FC<{ gains: Gains | null }> = ({ gains }) => {
       )}
       {gains.coins > 0 && (
         <div className="text-cw-12 mt-1.5" style={{ color: 'var(--cw-reward)' }}>
-          🪙 シールコイン +{gains.coins}（いま {coins}まい{coins >= CAPSULE_RULES.cost ? '。カプセルを まわせるよ' : ''}）
+          <Icon name="coin" size={18} className="inline-block align-[-4px] mr-1" />シールコイン +{gains.coins}（いま {coins}まい{coins >= CAPSULE_RULES.cost ? '。カプセルを まわせるよ' : ''}）
         </div>
       )}
     </Panel>

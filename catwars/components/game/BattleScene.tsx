@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { GameState, Troop, BuildingType, BattleEntity, GRID_W, GRID_H } from '../../types';
 import { BUILDING_STATS } from '../../constants';
-import { Button, Chip, FacilityImg, Icon, Panel, StatPill, TitleBar } from '../ui';
+import { Button, Chip, FacilityImg, Icon, Panel, StatPill, TitleBar, type IconName } from '../ui';
 import { TerrainLayer } from './TerrainLayer';
 // ── 決定論シミュレーション（catwars/sim/）──
 // ゲーム状態はすべてこちらが持つ。このコンポーネントは描画と入力だけを担当する。
@@ -253,7 +253,7 @@ interface Props {
    * enemyLevel＝「てきの つよさ Lv.n」。resultExtra＝結果画面に足すもの（今週の自分の星・学級の合計）。
    */
   expedition?: {
-    enemyLevel: number; ruleIcon: string; ruleName: string; resultExtra?: React.ReactNode;
+    enemyLevel: number; ruleIcon: IconName; ruleName: string; resultExtra?: React.ReactNode;
     /**
      * なかまの 基地を 攻める（CW-6b）：同じ「特別な戦い」の 枠を 文だけ かえて つかう。
      * label＝上の帯の 名前（既定「遠征」）・kicker＝はじめの説明の 小さな字・winLabel＝勝ったときの 小さな字・loseNote＝負けたときの 1行・
@@ -658,9 +658,9 @@ export const BattleScene: React.FC<Props> = ({
 
     if (buildMode !== null) {
       const cost = IN_BATTLE_BUILD_COSTS[buildMode] ?? 999;
-      if (Math.floor(gold) < cost) { showMessage('⚡ エナジーがたりない！', 1400); setBuildMode(null); return; }
+      if (Math.floor(gold) < cost) { showMessage('エナジーがたりない！', 1400); setBuildMode(null); return; }
       if (!canDeployAt(r.state, r.statics, localPlayer, x, y)) {
-        showMessage('⛔ ここには たてられない！ コアの ちかくに おこう', 1600); setBuildMode(null); return;
+        showMessage('ここには たてられない！ コアの ちかくに おこう', 1600); setBuildMode(null); return;
       }
       issue({ type: 'BUILD', player: localPlayer, building: buildMode, x, y });
       setBuildMode(null);
@@ -685,12 +685,12 @@ export const BattleScene: React.FC<Props> = ({
     if (!selectedTroopId) return;
     if (isBlockedCell(r.state, r.statics, x, y)) return;
     if (!canDeployAt(r.state, r.statics, localPlayer, x, y)) {
-      showMessage('⛔ ここには 出せないよ！ コアや キャンプの ちかくから 出そう', 1800);
+      showMessage('ここには 出せないよ！ コアや キャンプの ちかくから 出そう', 1800);
       return;
     }
     const line = r.cfg.unitStats[localPlayer][selectedTroopId];
     if (line && gold < Math.round(line.cost * r.cfg.costMult[localPlayer])) {
-      showMessage('⚡ エナジーが たりない！ 問題カードを といて ためよう', 1600);
+      showMessage('エナジーが たりない！ 問題カードを といて ためよう', 1600);
       return;
     }
     issue({ type: 'DEPLOY', player: localPlayer, troopId: selectedTroopId, x, y });
@@ -861,7 +861,7 @@ export const BattleScene: React.FC<Props> = ({
 
        {/* 上の帯：章・段・脅威・⚡・たいきゃく */}
        <TitleBar
-         title={expedition ? `${expedition.ruleIcon} ${expedition.label ?? '遠征'}` : `第${chapter.no}章`}
+         title={expedition ? <span className="inline-flex items-center gap-2"><Icon name={expedition.ruleIcon} size={28} />{expedition.label ?? '遠征'}</span> : `第${chapter.no}章`}
          subtitle={chapter.title}
          className="!z-50"
          data-testid="battle-topbar"
@@ -1586,7 +1586,7 @@ export const BattleScene: React.FC<Props> = ({
                    <h2 className="text-cw-28 font-extrabold mb-2" style={{ color: 'var(--cw-fg)' }}>たいきゃく...</h2>
                    <p className="text-cw-14 mb-2 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>{chapter.defeatLine}</p>
                    <p className="text-cw-14 mb-3 leading-relaxed" style={{ color: 'var(--cw-action)' }}>
-                     💡 {chapter.hint}
+                     <Icon name="bulb" size={20} className="inline-block align-[-4px] mr-1" />{chapter.hint}
                    </p>
                    {/* 連敗時は次回サポートが入ることを先に伝える（隠れた調整はしない） */}
                    <div className="text-cw-14 mb-3 leading-relaxed" style={{ color: 'var(--cw-growth)' }}>
@@ -1774,7 +1774,7 @@ export const BattleScene: React.FC<Props> = ({
                  {bossSprite(chapter.id) && !expedition?.hideBoss
                    ? <img src={bossSprite(chapter.id)} alt="" draggable={false} data-testid="briefing-boss"
                        style={{ width: 72, height: 72, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(248,113,113,0.6))' }} />
-                   : <span className="text-4xl leading-none">{expedition?.hideBoss ? expedition.ruleIcon : '😼'}</span>}
+                   : <Icon name={expedition?.hideBoss ? expedition.ruleIcon : 'enemy'} size={56} />}
                  <div className="min-w-0">
                    <div className="font-extrabold text-cw-16" style={{ color: 'var(--cw-danger)' }}>{chapter.enemyName}</div>
                    <div className="text-cw-12 mb-1" style={{ color: 'var(--cw-fg-3)' }}>{chapter.enemyTitle}</div>
@@ -1783,18 +1783,18 @@ export const BattleScene: React.FC<Props> = ({
                </div>
 
                <p className="text-cw-14 leading-relaxed mb-2" style={{ color: 'var(--cw-fg)' }}>▸ {chapter.briefing}</p>
-               <p className="text-cw-14 leading-relaxed mb-3" style={{ color: 'var(--cw-reward)' }}>💡 {chapter.hint}</p>
+               <p className="text-cw-14 leading-relaxed mb-3" style={{ color: 'var(--cw-reward)' }}><Icon name="bulb" size={20} className="inline-block align-[-4px] mr-1" />{chapter.hint}</p>
                {!isPvp && cardLimitFor(chapter, tier, assistLevel) != null && (
                  <p className="cw-tone-danger text-cw-14 leading-relaxed mb-3 p-3 rounded-cw-md" data-testid="briefing-card-limit"
                    style={{ background: 'var(--tone-bg)', boxShadow: 'inset 0 0 0 1px var(--cw-line-strong)', color: 'var(--cw-fg)' }}>
-                   🃏 この たたかいの カードは {cardLimitFor(chapter, tier, assistLevel)} まいまで。まちがえずに とくほど ⚡ が ふえて、たくさん 出撃できるよ
+                   この たたかいの カードは {cardLimitFor(chapter, tier, assistLevel)} まいまで。まちがえずに とくほど ⚡ が ふえて、たくさん 出撃できるよ
                  </p>
                )}
 
                {assistLevel > 0 && (
                  <div className="cw-tone-growth p-3 rounded-cw-md mb-1 text-cw-14 leading-relaxed"
                    style={{ background: 'var(--tone-bg)', boxShadow: 'inset 0 0 0 1px var(--cw-line-strong)', color: 'var(--cw-growth)' }}>
-                   🛟 <strong>{ASSIST_LEVELS[assistLevel].label}</strong>：{ASSIST_LEVELS[assistLevel].description}
+                   <strong>{ASSIST_LEVELS[assistLevel].label}</strong>：{ASSIST_LEVELS[assistLevel].description}
                  </div>
                )}
              </div>

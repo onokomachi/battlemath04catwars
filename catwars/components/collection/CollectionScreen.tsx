@@ -269,6 +269,8 @@ const CapsuleTab: React.FC<{ onAlbum: () => void }> = ({ onAlbum }) => {
   const [msg, setMsg] = useState<string | null>(null);
   // カプセルの機械の絵（あれば）。無ければ アイコンの カプセル
   const machine = useOptionalImage(['/assets/capsule/capsule-machine.webp', '/assets/capsule/capsule-machine.png']);
+  // 回したとき（シールが出る ところ）に 上に 見せる ひらいた カプセルの絵（あれば）。無ければ 今までの 演出だけ
+  const openPic = useOptionalImage(['/assets/capsule/capsule-open.webp', '/assets/capsule/capsule-open.png']);
   const left = CAPSULE_RULES.pity - cap.sinceUp;
   const can = coins >= CAPSULE_RULES.cost && !opening;
   const unowned = STICKERS.filter((s) => !(cap.stickers[s.id] > 0));
@@ -300,6 +302,7 @@ const CapsuleTab: React.FC<{ onAlbum: () => void }> = ({ onAlbum }) => {
         <div className="flex flex-col items-center justify-center rounded-cw-lg py-4 mb-3" style={{ minHeight: 220, background: 'radial-gradient(circle, rgba(56,189,248,0.14), transparent 70%)' }}>
           {opening ? capsulePic : last ? (
             <div className="flex flex-col items-center gap-1.5 cw-enter cw-reward-pop rounded-cw-lg p-2" data-testid="pull-result">
+              {openPic && <img src={openPic} alt="" draggable={false} data-testid="capsule-open" className="h-[72px] w-auto object-contain" />}
               <StickerView s={last.sticker} size={104} />
               <div className="text-cw-16 font-extrabold" style={{ color: 'var(--cw-fg)' }}>{last.sticker.name}</div>
               <div className="text-cw-14 font-black" style={{ color: RARITY_INFO[last.sticker.rarity].color }}>

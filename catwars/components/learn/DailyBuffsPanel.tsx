@@ -2,6 +2,7 @@ import React from 'react';
 import { useProgressStore, BUFF_CONFIG, BUFF_TIERS, BUFF_LEVEL_INFO, buffTierUnlocked } from '../../store/useProgressStore';
 import { BuffType, BuffTier } from '../../types';
 import { sfx } from '../../utils/audioEngine';
+import { Button, Chip, Icon, Notice, Panel, SectionTitle, BUFF_ICON, iconOr, type Tone } from '../ui';
 
 const TIER_ORDER: BuffTier[] = [1, 2, 3, 4];
 const BUFFS_BY_TIER: Record<BuffTier, BuffType[]> = {
@@ -11,7 +12,10 @@ const BUFFS_BY_TIER: Record<BuffTier, BuffType[]> = {
   4: ['DRAGON_SUMMON', 'ARMAGEDDON', 'GENIUS_COMMANDER'],
 };
 const LEVEL_LABELS: Record<1 | 2 | 3, string> = { 1: '小', 2: '中', 3: '大' };
-const LEVEL_COLORS: Record<1 | 2 | 3, string> = { 1: '#94a3b8', 2: '#22d3ee', 3: '#facc15' };
+/** 小＝ふつう・中＝行動・大＝ごほうび（役目の色） */
+const LEVEL_TONE: Record<1 | 2 | 3, Tone> = { 1: 'neutral', 2: 'action', 3: 'reward' };
+/** 段（ブロンズ…でんせつ）の 色の役目 */
+const TIER_TONE: Record<BuffTier, Tone> = { 1: 'neutral', 2: 'action', 3: 'rare', 4: 'reward' };
 
 interface Props { compact?: boolean; }
 
@@ -48,50 +52,43 @@ export const DailyBuffsPanel: React.FC<Props> = ({ compact }) => {
     return `${info.values[lv - 1]}${info.unit}`;
   };
 
-  // ── compact view ──
+  // ── compact view（ステージえらびの下） ──
   if (compact) {
     const buyable = TIER_ORDER
       .filter(t => buffTierUnlocked(t, todayCount, loginStreak))
       .flatMap(t => BUFFS_BY_TIER[t]);
     return (
-      <div className="w-full" style={{ fontFamily: '"M PLUS Rounded 1c", sans-serif' }}>
+      <div className="w-full">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold" style={{ color: '#22d3ee', fontFamily: 'Orbitron, monospace' }}>きょうのバフ</span>
-          <div className="flex items-center gap-1">
-            <span className="text-sm">⚡</span>
-            <span className="text-[#facc15] font-bold text-sm" style={{ fontFamily: 'Orbitron, monospace' }}>{currentDS}</span>
-            <span className="text-white/40 text-xs">デイリー</span>
+          <SectionTitle tone="action">きょうのバフ</SectionTitle>
+          <div className="flex items-center gap-1.5">
+            <Icon name="energy" size={22} />
+            <span className="font-cw-num font-bold text-cw-16" style={{ color: 'var(--cw-reward)' }}>{currentDS}</span>
+            <span className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>デイリー</span>
           </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto cw-scroll pb-1">
           {buyable.map(type => {
             const cfg = BUFF_CONFIG[type];
             const lv = getBuffLevel(type);
             const nextCost = getNextCost(type);
             const canUpgrade = lv < 3 && currentDS >= nextCost;
-            const tierColor = BUFF_TIERS[cfg.tier].color;
             return (
               <button
                 key={type}
+                type="button"
                 onClick={() => lv < 3 && handleBuy(type)}
                 disabled={lv >= 3 || !canUpgrade}
-                className="flex-shrink-0 flex flex-col items-center gap-0.5 p-2 rounded-xl border transition-all active:scale-95"
-                style={{
-                  minWidth: 64,
-                  borderColor: lv >= 3 ? '#facc15' : lv > 0 ? LEVEL_COLORS[lv as 1|2|3] : canUpgrade ? tierColor : 'rgba(255,255,255,0.1)',
-                  background: lv > 0 ? `${LEVEL_COLORS[lv as 1|2|3]}1a` : 'rgba(255,255,255,0.03)',
-                  opacity: (!canUpgrade && lv === 0) ? 0.4 : 1,
-                }}
+                className={`cw-seg cw-press cw-tone-${lv > 0 ? LEVEL_TONE[lv as 1 | 2 | 3] : TIER_TONE[cfg.tier]} flex-shrink-0 flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-h-[88px] ${lv > 0 ? 'is-on' : ''}`}
+                style={{ minWidth: 96 }}
               >
-                <span className="text-lg">{cfg.icon}</span>
-                <span className="text-[9px] font-bold text-white/80 text-center leading-tight">{cfg.label}</span>
+                <Icon name={iconOr(BUFF_ICON, type)} size={30} />
+                <span className="text-cw-12 font-bold text-center leading-tight" style={{ color: 'var(--cw-fg)' }}>{cfg.label}</span>
                 {lv >= 3
-                  ? <span className="text-[9px] text-[#facc15] font-bold">大✓最強</span>
+                  ? <span className="text-cw-12 font-bold" style={{ color: 'var(--cw-reward)' }}>大 最強</span>
                   : lv > 0
-                    ? <span className="text-[9px] font-bold" style={{ color: LEVEL_COLORS[lv as 1|2|3] }}>
-                        {LEVEL_LABELS[lv as 1|2|3]}✓ → {LEVEL_LABELS[(lv+1) as 1|2|3] ?? ''}({nextCost}⚡)
-                      </span>
-                    : <span className="text-[9px] font-bold" style={{ color: tierColor }}>{nextCost}⚡(小)</span>
+                    ? <span className="text-cw-12 font-bold font-cw-num" style={{ color: 'var(--cw-fg-2)' }}>{LEVEL_LABELS[lv as 1 | 2 | 3]}→{LEVEL_LABELS[(lv + 1) as 1 | 2 | 3]}・{nextCost}</span>
+                    : <span className="text-cw-12 font-bold font-cw-num" style={{ color: 'var(--cw-reward)' }}>小・{nextCost}</span>
                 }
               </button>
             );
@@ -103,116 +100,92 @@ export const DailyBuffsPanel: React.FC<Props> = ({ compact }) => {
 
   // ── full view ──
   return (
-    <div className="w-full" style={{ fontFamily: '"M PLUS Rounded 1c", sans-serif' }}>
-      <div className="flex items-center gap-2 mb-3 p-3 rounded-xl"
-        style={{ background: 'rgba(250,204,21,0.08)', border: '1px solid rgba(250,204,21,0.2)' }}>
-        <span className="text-2xl">⚡</span>
-        <div className="flex-1">
-          <div className="text-[#facc15] font-bold text-lg" style={{ fontFamily: 'Orbitron, monospace' }}>{currentDS}</div>
-          <div className="text-white/50 text-xs">エナジー（きょうかぎり）</div>
+    <div className="w-full max-w-2xl mx-auto space-y-4">
+      <Panel className="cw-tone-reward">
+        <div className="flex items-center gap-3">
+          <Icon name="energy" size={48} />
+          <div className="flex-1 min-w-0">
+            <div className="font-cw-num font-black text-cw-40 leading-none" style={{ color: 'var(--cw-reward)' }}>{currentDS}</div>
+            <div className="text-cw-14 mt-1" style={{ color: 'var(--cw-fg-2)' }}>エナジー（きょうかぎり）</div>
+          </div>
+          <div className="text-right text-cw-14 space-y-1" style={{ color: 'var(--cw-fg-2)' }}>
+            <div>きょう <b className="font-cw-num text-cw-16" style={{ color: 'var(--cw-growth)' }}>{todayCount}</b>問</div>
+            <div className="flex items-center justify-end gap-1"><Icon name="streak" size={20} />連続 <b className="font-cw-num text-cw-16" style={{ color: 'var(--cw-cat)' }}>{loginStreak}</b>日</div>
+          </div>
         </div>
-        <div className="text-right">
-          <div className="text-white/70 text-xs">きょう <span className="text-[#a3e635] font-bold">{todayCount}</span>問</div>
-          <div className="text-white/70 text-xs">連続 <span className="text-[#fb923c] font-bold">{loginStreak}</span>日</div>
+      </Panel>
+
+      <div>
+        <p className="text-cw-14 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>
+          バフは 小→中→大 の3段階で パワーアップできるよ。強化するたびに エナジーが 必要！
+        </p>
+        <div className="flex gap-2 mt-2">
+          {([1, 2, 3] as (1 | 2 | 3)[]).map(lv => (
+            <Chip key={lv} tone={LEVEL_TONE[lv]} className="font-cw-num">{LEVEL_LABELS[lv]} {lv === 1 ? '×0.6' : lv === 2 ? '×1.0' : '×1.6'}</Chip>
+          ))}
         </div>
       </div>
 
-      <p className="text-white/40 text-[11px] mb-1 leading-relaxed">
-        バフは 小→中→大 の3段階でパワーアップできるよ。強化するたびにスターが必要！
-      </p>
-      <div className="flex gap-2 mb-3 text-[10px]">
-        {([1,2,3] as (1|2|3)[]).map(lv => (
-          <span key={lv} className="px-2 py-0.5 rounded-full font-bold" style={{ background: `${LEVEL_COLORS[lv]}22`, color: LEVEL_COLORS[lv], border: `1px solid ${LEVEL_COLORS[lv]}55` }}>
-            {LEVEL_LABELS[lv]} {lv === 1 ? '×0.6' : lv === 2 ? '×1.0' : '×1.6'}
-          </span>
-        ))}
-      </div>
-
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {TIER_ORDER.map(tier => {
           const info = BUFF_TIERS[tier];
           const unlocked = buffTierUnlocked(tier, todayCount, loginStreak);
           return (
-            <div key={tier}>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-black px-2 py-0.5 rounded-full"
-                  style={{ color: '#0a0e1a', background: info.color, fontFamily: 'Orbitron, monospace' }}>T{tier}</span>
-                <span className="text-sm font-bold" style={{ color: info.color }}>{info.name}</span>
-                {!unlocked && <span className="text-[10px] text-white/40">🔒 {info.unlockLabel}で解放</span>}
-              </div>
-              <div className="flex flex-col gap-2" style={{ opacity: unlocked ? 1 : 0.55 }}>
+            <section key={tier} data-tier={tier}>
+              <SectionTitle tone={TIER_TONE[tier]}
+                right={!unlocked ? <span className="inline-flex items-center gap-1"><Icon name="lock" size={16} />{info.unlockLabel}で ひらく</span> : undefined}>
+                <span className="font-cw-num">T{tier}</span> {info.name}
+              </SectionTitle>
+              <div className="flex flex-col gap-2 mt-2">
                 {BUFFS_BY_TIER[tier].map(type => {
                   const cfg = BUFF_CONFIG[type];
                   const lv = getBuffLevel(type);
                   const nextCost = getNextCost(type);
                   const canUpgrade = unlocked && lv < 3 && currentDS >= nextCost;
                   return (
-                    <div key={type}
-                      className="flex items-center gap-3 p-2.5 rounded-xl"
-                      style={{
-                        border: `1px solid ${lv >= 3 ? '#facc1566' : lv > 0 ? `${LEVEL_COLORS[lv as 1|2|3]}55` : `${info.color}33`}`,
-                        background: lv >= 3 ? 'rgba(250,204,21,0.08)' : lv > 0 ? `${LEVEL_COLORS[lv as 1|2|3]}11` : 'rgba(255,255,255,0.03)',
-                      }}>
-                      <span className="text-2xl flex-shrink-0">{cfg.icon}</span>
+                    <div key={type} className={`cw-card cw-tone-${lv > 0 ? LEVEL_TONE[lv as 1 | 2 | 3] : TIER_TONE[tier]} flex items-center gap-3 p-3`}
+                      aria-disabled={!unlocked || undefined}
+                      style={lv >= 3 ? { boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-reward)' } : undefined}>
+                      <span className="cw-card-icon"><Icon name={iconOr(BUFF_ICON, type)} size={34} /></span>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-white/90 font-bold text-sm truncate">{cfg.label}</span>
-                          {lv > 0 && (
-                            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0"
-                              style={{ background: LEVEL_COLORS[lv as 1|2|3], color: '#0a0e1a' }}>
-                              {LEVEL_LABELS[lv as 1|2|3]}
-                            </span>
-                          )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-extrabold text-cw-14" style={{ color: unlocked ? 'var(--cw-fg)' : 'var(--cw-fg-2)' }}>{cfg.label}</span>
+                          {lv > 0 && <Chip tone={LEVEL_TONE[lv as 1 | 2 | 3]}>{LEVEL_LABELS[lv as 1 | 2 | 3]}</Chip>}
                         </div>
-                        <div className="text-white/50 text-xs mt-0.5 leading-tight">{cfg.description}</div>
-                        <div className="flex gap-1 mt-1">
-                          {([1,2,3] as (1|2|3)[]).map(l => (
-                            <span key={l} className="text-[9px] px-1.5 py-0.5 rounded font-bold"
-                              style={{
-                                background: lv === l ? LEVEL_COLORS[l] : `${LEVEL_COLORS[l]}22`,
-                                color: lv === l ? '#0a0e1a' : LEVEL_COLORS[l],
-                                opacity: lv >= l ? 1 : 0.5,
-                              }}>
-                              {LEVEL_LABELS[l]} {effectText(type, l)}
-                            </span>
+                        <div className="text-cw-12 mt-0.5 leading-tight" style={{ color: 'var(--cw-fg-2)' }}>{cfg.description}</div>
+                        <div className="flex gap-1 mt-1.5 flex-wrap">
+                          {([1, 2, 3] as (1 | 2 | 3)[]).map(l => (
+                            <Chip key={l} tone={lv >= l ? LEVEL_TONE[l] : 'neutral'} className="font-cw-num">
+                              <span style={lv >= l ? undefined : { color: 'var(--cw-fg-3)' }}>{LEVEL_LABELS[l]} {effectText(type, l)}</span>
+                            </Chip>
                           ))}
                         </div>
                       </div>
                       {lv >= 3 ? (
-                        <div className="flex-shrink-0 flex flex-col items-center">
-                          <span className="text-[#facc15] text-lg">★</span>
-                          <span className="text-[#facc15] text-[10px] font-bold">最強</span>
-                        </div>
+                        <Chip tone="reward" className="flex-shrink-0"><Icon name="star" size={18} />最強</Chip>
                       ) : !unlocked ? (
-                        <span className="flex-shrink-0 text-white/30 text-lg">🔒</span>
+                        <Icon name="lock" size={30} className="flex-shrink-0" />
                       ) : (
-                        <button
-                          onClick={() => handleBuy(type)}
-                          disabled={!canUpgrade}
-                          className="flex-shrink-0 flex flex-col items-center px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{
-                            border: `1.5px solid ${canUpgrade ? '#facc15' : 'rgba(255,255,255,0.2)'}`,
-                            background: canUpgrade ? 'rgba(250,204,21,0.12)' : 'transparent',
-                          }}>
-                          <span className="text-[9px] text-white/60 leading-none">{lv > 0 ? `${LEVEL_LABELS[lv as 1|2|3]}→${LEVEL_LABELS[(lv+1) as 1|2|3]}` : '小から'}</span>
-                          <span className="text-[#facc15] font-bold text-sm" style={{ fontFamily: 'Orbitron, monospace' }}>{nextCost}</span>
-                          <span className="text-sm leading-none">⚡</span>
-                        </button>
+                        <Button variant={canUpgrade ? 'reward' : 'secondary'} size="md" onClick={() => handleBuy(type)} disabled={!canUpgrade}
+                          data-testid={`buff-buy-${type}`} className="flex-shrink-0 !flex-col !gap-0 !px-3 !py-1 min-w-[88px]">
+                          <span className="text-cw-12 font-bold leading-tight">{lv > 0 ? `${LEVEL_LABELS[lv as 1 | 2 | 3]}→${LEVEL_LABELS[(lv + 1) as 1 | 2 | 3]}` : '小から'}</span>
+                          <span className="flex items-center gap-0.5 font-cw-num font-black text-cw-16 leading-tight"><Icon name="energy" size={18} />{nextCost}</span>
+                        </Button>
                       )}
                     </div>
                   );
                 })}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>
 
-      <p className="text-center text-xs mt-3" style={{ color: activeBuffs.length ? '#a3e635' : 'rgba(255,255,255,0.4)' }}>
+      <Notice tone={activeBuffs.length ? 'growth' : 'neutral'} icon={activeBuffs.length ? 'check' : 'energy'}>
         {activeBuffs.length > 0
-          ? `✅ ${activeBuffs.length}つのバフが有効 — きょうの戦闘に反映されます`
-          : '⚡ を使ってバフを有効にしよう！'}
-      </p>
+          ? `${activeBuffs.length}つのバフが 有効 ー きょうの 戦闘に 反映されます`
+          : 'エナジーを 使って バフを 有効にしよう！'}
+      </Notice>
     </div>
   );
 };

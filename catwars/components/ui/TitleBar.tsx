@@ -9,6 +9,8 @@ interface TitleBarProps {
   /** 「もどる」。無ければ 出さない */
   onBack?: () => void;
   backLabel?: string;
+  /** 「もどる」ボタンの data-testid（画面の確かめ用） */
+  backTestId?: string;
   /** 右がわ（💠などの 数・ボタン） */
   right?: React.ReactNode;
   className?: string;
@@ -16,12 +18,12 @@ interface TitleBarProps {
 }
 
 /** 画面の上の帯：もどる（44px いじょうの的）＋ 題 ＋ 右に 数。全部の画面で これを使う */
-export const TitleBar: React.FC<TitleBarProps> = ({ title, subtitle, onBack, backLabel = 'もどる', right, className = '', ...rest }) => (
+export const TitleBar: React.FC<TitleBarProps> = ({ title, subtitle, onBack, backLabel = 'もどる', backTestId = 'title-back', right, className = '', ...rest }) => (
   <header className={`flex items-center gap-3 px-4 py-2 flex-shrink-0 min-h-[64px] relative z-10 ${className}`}
     style={{ background: 'var(--cw-surface-strong)', WebkitBackdropFilter: 'blur(14px)', backdropFilter: 'blur(14px)', boxShadow: 'inset 0 -1px 0 var(--cw-line), inset 0 1px 0 var(--cw-top-light)' }} {...rest}>
     {onBack && (
       <button type="button" onClick={() => { sfx.tap(); onBack(); }} aria-label={backLabel}
-        className="cw-btn cw-press cw-btn-secondary min-h-[44px] min-w-[44px] px-3 text-cw-14 flex-shrink-0" data-testid="title-back">
+        className="cw-btn cw-press cw-btn-secondary min-h-[44px] min-w-[44px] px-3 text-cw-14 flex-shrink-0" data-testid={backTestId}>
         <Icon name="back" size={22} /><span>{backLabel}</span>
       </button>
     )}

@@ -337,6 +337,160 @@ const ART = {
       <circle cx="16" cy="16" r="4.2" fill="#f87171" />
     </>
   ),
+  /** はね（空をとぶ） */
+  wings: (
+    <>
+      <path d="M16 24 C12 24 5 21 2.6 8 C8 9 12 11.4 16 16.4Z" fill="#7dd3fc" />
+      <path d="M16 24 C20 24 27 21 29.4 8 C24 9 20 11.4 16 16.4Z" fill="#38bdf8" />
+      <path d="M16 24 C20 24 27 21 29.4 8 C27 14 22 18 16 19.6Z" fill="#0284c7" stroke="none" opacity=".45" />
+      <path d="M6 12.6 Q10 14 13 18 M26 12.6 Q22 14 19 18" fill="none" strokeWidth="1.4" />
+      <ellipse cx="9.4" cy="12" rx=".9" ry="2.4" fill={HI} stroke="none" opacity=".8" transform="rotate(-50 9.4 12)" />
+    </>
+  ),
+  /** くも・きり */
+  cloud: (
+    <>
+      <path d="M8.4 25 A6.2 6.2 0 0 1 8.6 12.8 A7.6 7.6 0 0 1 22.8 11.4 A6.8 6.8 0 0 1 24 25Z" fill="#e0e7ff" />
+      <path d="M24 25 A6.8 6.8 0 0 0 27 15.6 Q27 22 20 22.4 Q14 23 12 25Z" fill="#a5b4fc" stroke="none" opacity=".7" />
+      <ellipse cx="12.6" cy="14.6" rx="1" ry="2.2" fill={HI} stroke="none" opacity=".85" transform="rotate(30 12.6 14.6)" />
+    </>
+  ),
+  /** てきが いっぱい（ちいさな 3つ） */
+  swarm: (
+    <>
+      <circle cx="10" cy="20.6" r="6.2" fill="#c084fc" />
+      <circle cx="22.4" cy="20.6" r="6.2" fill="#a855f7" />
+      <circle cx="16.2" cy="10.4" r="6.2" fill="#d8b4fe" />
+      <circle cx="14" cy="9.4" r="1.2" fill={O} stroke="none" /><circle cx="18.6" cy="9.4" r="1.2" fill={O} stroke="none" />
+      <circle cx="7.8" cy="19.6" r="1.2" fill={O} stroke="none" /><circle cx="12.4" cy="19.6" r="1.2" fill={O} stroke="none" />
+      <circle cx="20.2" cy="19.6" r="1.2" fill={O} stroke="none" /><circle cx="24.8" cy="19.6" r="1.2" fill={O} stroke="none" />
+    </>
+  ),
+  /** かべ（レンガ） */
+  wall: (
+    <>
+      <rect x="3.4" y="6" width="25.2" height="20" rx="2.6" fill="#fb923c" />
+      <path d="M28.6 9 V23.4 Q28.6 26 26 26 H8 Q20 25 24 17 Q27 14 28.6 9Z" fill="#c2410c" stroke="none" opacity=".5" />
+      <path d="M3.4 12.6 H28.6 M3.4 19.2 H28.6 M11 6 V12.6 M21 6 V12.6 M16 12.6 V19.2 M8 19.2 V26 M24 19.2 V26" fill="none" strokeWidth="1.6" />
+    </>
+  ),
+  /** たて */
+  shield: (
+    <>
+      <path d="M16 3 L27 6.6 V15 Q27 24.4 16 29.4 Q5 24.4 5 15 V6.6Z" fill="#60a5fa" />
+      <path d="M16 3 L27 6.6 V15 Q27 24.4 16 29.4Z" fill="#2563eb" stroke="none" opacity=".55" />
+      <path d="M16 9.4 L18 14 L23 14.4 L19.2 17.6 L20.4 22.4 L16 19.8 L11.6 22.4 L12.8 17.6 L9 14.4 L14 14Z" fill="#fde047" strokeWidth="1.3" />
+    </>
+  ),
+  /** とう（ほうだい） */
+  tower: (
+    <>
+      <path d="M9 28.6 L11 12 H21 L23 28.6Z" fill="#cbd5e1" />
+      <path d="M23 28.6 L21 12 H16 L17.4 28.6Z" fill="#94a3b8" stroke="none" opacity=".7" />
+      <path d="M7.4 12 V6 H11 V8.4 H14.4 V6 H17.6 V8.4 H21 V6 H24.6 V12Z" fill="#e2e8f0" />
+      <rect x="13.4" y="17" width="5.2" height="11.6" rx="2.6" fill="#475569" />
+    </>
+  ),
+  /** ゆみ */
+  bow: (
+    <>
+      <path d="M8 3.6 Q30 16 8 28.4" fill="none" stroke={O} strokeWidth="6" />
+      <path d="M8 3.6 Q30 16 8 28.4" fill="none" stroke="#fb923c" strokeWidth="2.6" />
+      <path d="M8 3.6 V28.4" fill="none" strokeWidth="1.2" />
+      <path d="M3.4 16 H24" fill="none" strokeWidth="2.2" />
+      <path d="M24 16 L19.6 12.4 V19.6Z" fill="#e2e8f0" strokeWidth="1.4" />
+      <path d="M3.4 16 L6.4 13 M3.4 16 L6.4 19" fill="none" strokeWidth="1.6" />
+    </>
+  ),
+  /** パワー（にぎりこぶし） */
+  power: (
+    <>
+      <path d="M7 14 Q7 6 15 6 H21 Q26.4 6 26.4 12 V21 Q26.4 28 19 28 H13 Q7 28 7 21Z" fill="#fbbf24" />
+      <path d="M26.4 12 V21 Q26.4 28 19 28 H13 Q22 26 22 17 Q26 15 26.4 12Z" fill="#d97706" stroke="none" opacity=".55" />
+      <path d="M7 14 H21 M12 6.2 V14 M16.6 6 V14 M21.4 6.2 V14" fill="none" strokeWidth="1.6" />
+      <path d="M9 21 Q13 24 18 21" fill="none" strokeWidth="1.6" />
+    </>
+  ),
+  /** ヘルメット */
+  helmet: (
+    <>
+      <path d="M4.6 22 Q4.6 6 16 6 Q27.4 6 27.4 22Z" fill="#4ade80" />
+      <path d="M27.4 22 Q27.4 6 16 6 Q22 10 21 22Z" fill="#16a34a" stroke="none" opacity=".55" />
+      <rect x="3" y="21.6" width="26" height="5" rx="2.5" fill="#cbd5e1" />
+      <path d="M16 6 V15.6" fill="none" strokeWidth="2.4" />
+      <ellipse cx="10.4" cy="12.4" rx=".9" ry="2.6" fill={HI} stroke="none" opacity=".8" transform="rotate(30 10.4 12.4)" />
+    </>
+  ),
+  /** くつ（はやあし） */
+  boot: (
+    <>
+      <path d="M9 4.4 H18 V16 Q18 18 21 19 Q28 21 28 25 V27.4 H5.4 V4.4Z" fill="#60a5fa" />
+      <path d="M28 25 V27.4 H5.4 H18 Q24 26 24 21 Q28 22 28 25Z" fill="#2563eb" stroke="none" opacity=".5" />
+      <rect x="4.4" y="25" width="24.6" height="4" rx="2" fill="#f1f5f9" />
+      <path d="M5.4 9 H18" fill="none" strokeWidth="1.8" />
+      <path d="M1.6 12 H5 M1.2 17 H5 M2.4 22 H5" fill="none" strokeWidth="1.6" />
+    </>
+  ),
+  /** まほうの たま */
+  orb: (
+    <>
+      <circle cx="16" cy="17" r="11.4" fill="#c4b5fd" />
+      <path d="M16 28.4 A11.4 11.4 0 0 0 27.4 17 Q24 26 16 28.4Z" fill="#6d28d9" stroke="none" opacity=".55" />
+      <ellipse cx="11.6" cy="11.8" rx="1.6" ry="3.6" fill={HI} stroke="none" opacity=".85" transform="rotate(40 11.6 11.8)" />
+      <Sparkle x={21} y={20} r={4.2} fill="#fde047" />
+      <Sparkle x={26} y={5.6} r={2.6} fill="#fff" />
+    </>
+  ),
+  /** ドラゴンの たまご */
+  dragon: (
+    <>
+      <path d="M16 3.4 C23.6 3.4 27.4 12 27.4 19 C27.4 25.2 22.4 29 16 29 C9.6 29 4.6 25.2 4.6 19 C4.6 12 8.4 3.4 16 3.4Z" fill="#86efac" />
+      <path d="M27.4 19 C27.4 25.2 22.4 29 16 29 C22 26 22.6 20 21.6 14 Q26 12 27.4 19Z" fill="#16a34a" stroke="none" opacity=".5" />
+      <path d="M8 17 L11.6 13.4 L15 17 L18.6 13.4 L22.2 17 L25.6 13.4" fill="none" strokeWidth="1.8" />
+      <circle cx="12" cy="23" r="1.8" fill="#fde047" strokeWidth="1.2" /><circle cx="20" cy="22" r="1.4" fill="#fde047" strokeWidth="1.2" />
+      <ellipse cx="10.4" cy="10.4" rx="1" ry="2.4" fill={HI} stroke="none" opacity=".8" transform="rotate(25 10.4 10.4)" />
+    </>
+  ),
+  /** すいせい（アルマゲドン） */
+  comet: (
+    <>
+      <path d="M21 11 L3 5 L12 15 L4 22 L16 20Z" fill="#fb923c" />
+      <path d="M18 14 L6 7 L13 15 L8 20 L16 18Z" fill="#fde047" stroke="none" />
+      <circle cx="21" cy="19" r="8.4" fill="#fcd34d" />
+      <path d="M21 27.4 A8.4 8.4 0 0 0 29.4 19 Q27 25.6 21 27.4Z" fill="#d97706" stroke="none" opacity=".6" />
+      <ellipse cx="17.6" cy="15.8" rx="1.1" ry="2.4" fill={HI} stroke="none" opacity=".85" transform="rotate(40 17.6 15.8)" />
+    </>
+  ),
+  /** ばくだん */
+  bomb: (
+    <>
+      <circle cx="14" cy="19" r="10" fill="#64748b" />
+      <path d="M14 29 A10 10 0 0 0 24 19 Q21 27 14 29Z" fill="#1e293b" stroke="none" opacity=".6" />
+      <rect x="11" y="6.4" width="6" height="4.2" rx="1.4" fill="#cbd5e1" />
+      <path d="M17 7 Q22 4 24.6 7.6" fill="none" strokeWidth="2" />
+      <Sparkle x={26} y={6} r={3.6} fill="#fde047" />
+      <ellipse cx="10.4" cy="14.6" rx="1.2" ry="3" fill={HI} stroke="none" opacity=".75" transform="rotate(35 10.4 14.6)" />
+    </>
+  ),
+  /** のびる（グラフ） */
+  chartup: (
+    <>
+      <rect x="3.6" y="19" width="6" height="9.4" rx="1.4" fill="#93c5fd" />
+      <rect x="12.6" y="13" width="6" height="15.4" rx="1.4" fill="#60a5fa" />
+      <rect x="21.6" y="6.4" width="6" height="22" rx="1.4" fill="#3b82f6" />
+      <path d="M4 14 L13 8.4 L18 11 L27 3.6" fill="none" stroke="#4ade80" strokeWidth="2.6" />
+      <path d="M27.6 2.8 L22.6 3.4 L26.6 8Z" fill="#4ade80" strokeWidth="1.2" />
+    </>
+  ),
+  /** 基地の かんばん（家） */
+  home: (
+    <>
+      <path d="M3.4 15.4 L16 4.4 L28.6 15.4 V27.6 H3.4Z" fill="#fde68a" />
+      <path d="M28.6 15.4 V27.6 H3.4 H16 Q24 26 24 17Z" fill="#f59e0b" stroke="none" opacity=".5" />
+      <path d="M2 16.6 L16 4 L30 16.6" fill="none" stroke="#f87171" strokeWidth="4" />
+      <rect x="12.6" y="17.6" width="6.8" height="10" rx="1.6" fill="#92400e" />
+    </>
+  ),
 } satisfies Record<string, React.ReactNode>;
 
 export type IconName = keyof typeof ART;

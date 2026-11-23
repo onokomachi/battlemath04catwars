@@ -29,6 +29,8 @@
   --cw-danger: #f87171;   /* 注意・危険・敵 */
   --cw-cat: #fb923c;      /* ネコの側 */
   --cw-on-color: #0b1230; /* 役目の色の上に のせる字 */
+  /* 対戦の「あいて」（この画面だけの役目。自分＝action と対にする。docs/UI_STYLE.md） */
+  --cw-opp: #f472b6;
   /* 字 */
   --cw-font: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif;
   --cw-font-num: Orbitron, "M PLUS Rounded 1c", system-ui, sans-serif;
@@ -45,6 +47,7 @@
   --cw-lit-rare: 0 0 0 1px var(--cw-rare), 0 0 24px -8px var(--cw-rare);
   --cw-lit-danger: 0 0 0 1px var(--cw-danger), 0 0 24px -8px var(--cw-danger);
   --cw-lit-cat: 0 0 0 1px var(--cw-cat), 0 0 24px -8px var(--cw-cat);
+  --cw-lit-opp: 0 0 0 1px var(--cw-opp), 0 0 24px -8px var(--cw-opp);
   /* 動き */
   --cw-ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -110,6 +113,7 @@ body::after {
 .cw-tone-rare { --tone: var(--cw-rare); --tone-bg: rgba(167, 139, 250, 0.16); --tone-lit: var(--cw-lit-rare); }
 .cw-tone-danger { --tone: var(--cw-danger); --tone-bg: rgba(248, 113, 113, 0.14); --tone-lit: var(--cw-lit-danger); }
 .cw-tone-cat { --tone: var(--cw-cat); --tone-bg: rgba(251, 146, 60, 0.14); --tone-lit: var(--cw-lit-cat); }
+.cw-tone-opp { --tone: var(--cw-opp); --tone-bg: rgba(244, 114, 182, 0.14); --tone-lit: 0 0 0 1px var(--cw-opp), 0 0 24px -8px var(--cw-opp); }
 .cw-tone-neutral { --tone: var(--cw-fg-2); --tone-bg: rgba(148, 170, 255, 0.1); --tone-lit: 0 0 0 1px var(--cw-line-strong); }
 
 /* カード（押せる札）：面は パネルと 同じ・角は 14 */

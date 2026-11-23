@@ -46,10 +46,10 @@ export const TerrainLayer: React.FC<Props> = ({ terrain, cellSize = 40 }) => {
                 : isLava ? 'inset 0 0 10px rgba(0,0,0,0.55), 0 0 10px rgba(251,146,60,0.45)' : undefined,
             }}
           >
-            {isWater && <span style={{ fontSize: cellSize * 0.42, opacity: 0.75, lineHeight: 1 }}>🌊</span>}
-            {isRock && <span style={{ fontSize: cellSize * 0.4, lineHeight: 1 }}>🪨</span>}
-            {isSwamp && <span style={{ fontSize: cellSize * 0.4, opacity: 0.6, lineHeight: 1 }}>🌿</span>}
-            {isLava && <span style={{ fontSize: cellSize * 0.42, opacity: 0.85, lineHeight: 1 }}>🔥</span>}
+            {isWater && <span style={{ fontSize: Math.max(12, cellSize * 0.42), opacity: 0.75, lineHeight: 1 }}>🌊</span>}
+            {isRock && <span style={{ fontSize: Math.max(12, cellSize * 0.4), lineHeight: 1 }}>🪨</span>}
+            {isSwamp && <span style={{ fontSize: Math.max(12, cellSize * 0.4), opacity: 0.6, lineHeight: 1 }}>🌿</span>}
+            {isLava && <span style={{ fontSize: Math.max(12, cellSize * 0.42), opacity: 0.85, lineHeight: 1 }}>🔥</span>}
             {isBridge && (
               <div style={{
                 width: '100%',

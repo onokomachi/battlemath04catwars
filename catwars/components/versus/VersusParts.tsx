@@ -34,15 +34,13 @@ import { BOT_LEVELS, createPractice, smartPlacement, type BotLevel } from '../..
 import { rewardWeight } from '../../learn/gradePack';
 import { startSortie, usePortal } from '../../portal/usePortal';
 import { SortieStamina } from '../../portal/PortalCard';
-import { Card, TitleBar } from '../ui';
+import {
+  Button, Card, Chip, Disclosure, FacilityImg, Icon, Notice, Panel, ProgressBar, ScreenBackdrop, SectionTitle, Segmented, StatPill, TitleBar,
+} from '../ui';
 import {
   createRoom, joinRoom, roomState, markReady, leaveRoom, versusNamed, type VersusRoom, type VersusErrorKind,
 } from '../../portal/versusSync';
 import { openLink, type LinkHandle } from '../../net/broadcastLink';
-
-const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
-const fontMono = { fontFamily: 'Orbitron, monospace' };
-const ACCENT = '#f472b6';
 
 // ── ホームの カード ───────────────────────────────────────────────
 export const VersusCard: React.FC<{ locked?: string | null; onOpen: () => void }> = ({ locked, onOpen }) => (
@@ -64,12 +62,14 @@ const ERROR_TEXT: Record<VersusErrorKind, string> = {
 };
 
 const cardLabel = (d: number) => (d <= 2 ? 'やさしい' : d === 3 ? 'ふつう' : 'むずかしい');
-const cardColor = (d: number) => (d <= 2 ? '#34d399' : d === 3 ? '#38bdf8' : '#f472b6');
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const spriteOf = (id: string): string => `${getCharacterSprite(spriteFamilyForSubType(id) ?? id, stageForLevel(VERSUS_LEVEL))}`;
 
 // ── 戦場の 絵（おく・みる で 同じもの）────────────────────────────────
-const MINE = '#38bdf8', THEIRS = '#fb7185';
+/** 自分＝シアン（行動）・あいて＝ピンク（この画面だけの役目。--cw-opp） */
+const MINE = 'var(--cw-action)', THEIRS = 'var(--cw-opp)';
+const mix = (c: string, p: number) => `color-mix(in srgb, ${c} ${p}%, transparent)`;
+const mixOn = (c: string, p: number) => `color-mix(in srgb, ${c} ${p}%, var(--cw-bg-1))`;
 
 /** 自分が いつも 左がわに 見えるよう、右がわに 立つ回は 左右を ひっくりかえして 描く */
 const Board: React.FC<{
@@ -80,18 +80,28 @@ const Board: React.FC<{
 }> = ({ map, cell, mirror, entities, localPl, placement, zone, onCell }) => {
   const fx = (x: number, w = 1) => (mirror ? GRID_W - x - w : x);
   const cells = useMemo(() => (zone ? placeableCells(map) : []), [map, zone]);
+  const cellSet = useMemo(() => new Set(cells.map((c) => `${c.x},${c.y}`)), [cells]);
   const full = (e: BattleEntity) => (e.type === 'BUILDING' ? 2 : 1);
+  /** 盤面は 1まいの 面として 押す（1ますは 44px より 小さいので、ますごとの ボタンには しない） */
+  const onZoneClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / cell), y = Math.floor((e.clientY - r.top) / cell);
+    if (cellSet.has(`${x},${y}`)) onCell?.(x, y);
+  };
   return (
-    <div className="relative rounded-xl overflow-hidden flex-shrink-0 select-none" data-testid="versus-board"
-      style={{ width: GRID_W * cell, height: GRID_H * cell, background: 'linear-gradient(90deg,#0f2a1f,#14301f 48%,#2a1722 52%,#2e1524)', border: '1px solid rgba(255,255,255,0.18)' }}>
+    <div className="relative rounded-cw-md overflow-hidden flex-shrink-0 select-none" data-testid="versus-board"
+      style={{ width: GRID_W * cell, height: GRID_H * cell, background: `linear-gradient(90deg, ${mixOn(MINE, 14)} 48%, ${mixOn(THEIRS, 14)} 52%)`, outline: '1px solid var(--cw-line-strong)', outlineOffset: -1 }}>
       <TerrainLayer terrain={map.terrain.map((t) => ({ ...t, x: fx(t.x) }))} cellSize={cell} />
       {/* まんなかの線 */}
-      <div className="absolute top-0 bottom-0" style={{ left: (GRID_W / 2) * cell - 1, width: 2, background: 'rgba(255,255,255,0.12)' }} />
+      <div className="absolute top-0 bottom-0" style={{ left: (GRID_W / 2) * cell - 1, width: 2, background: 'var(--cw-line-strong)' }} />
       {zone && cells.map((c) => (
-        <button key={`${c.x},${c.y}`} onClick={() => onCell?.(c.x, c.y)} aria-label={`${c.x},${c.y}`} data-cell={`${c.x},${c.y}`}
-          className="absolute"
-          style={{ left: c.x * cell, top: c.y * cell, width: cell, height: cell, background: 'rgba(56,189,248,0.10)', border: '1px solid rgba(56,189,248,0.22)', zIndex: 1 }} />
+        <div key={`${c.x},${c.y}`} aria-hidden data-cell={`${c.x},${c.y}`} className="absolute pointer-events-none"
+          style={{ left: c.x * cell, top: c.y * cell, width: cell, height: cell, background: mix(MINE, 12), boxShadow: `inset 0 0 0 1px ${mix(MINE, 28)}`, zIndex: 1 }} />
       ))}
+      {zone && (
+        <div role="application" aria-label="ネコを おく ばんめん（水色の ますを おす）" data-testid="place-surface"
+          className="absolute inset-0 cursor-pointer" style={{ zIndex: 6 }} onClick={onZoneClick} />
+      )}
       {/* おく画面の コア（自分＝左・あいて＝右） */}
       {placement && (
         <>
@@ -115,12 +125,12 @@ const Board: React.FC<{
         const sprite = spriteFamilyForSubType(e.subType);
         return (
           <div key={e.id} className="absolute pointer-events-none"
-            style={{ left: (fx(e.x, 1) - 0 + 0) * cell, top: e.y * cell, width: cell, height: cell, zIndex: 4 }}>
+            style={{ left: fx(e.x, 1) * cell, top: e.y * cell, width: cell, height: cell, zIndex: 4 }}>
             {sprite
               ? <img src={getCharacterSprite(sprite, stageForLevel(VERSUS_LEVEL))} alt="" draggable={false}
                 style={{ width: '100%', height: '100%', objectFit: 'contain', filter: `drop-shadow(0 0 3px ${color})` }} />
               : <div style={{ width: '70%', height: '70%', margin: '15%', borderRadius: '50%', background: color }} />}
-            <div className="absolute left-1 right-1 bottom-0 h-[3px] rounded bg-black/60"><div className="h-full rounded" style={{ width: `${hp * 100}%`, background: color }} /></div>
+            <div className="absolute left-1 right-1 bottom-0 h-[3px] rounded" style={{ background: 'var(--cw-bg-0)' }}><div className="h-full rounded" style={{ width: `${hp * 100}%`, background: color }} /></div>
           </div>
         );
       })}
@@ -130,18 +140,20 @@ const Board: React.FC<{
 
 const Core: React.FC<{ x: number; y: number; cell: number; color: string; hp?: number }> = ({ x, y, cell, color, hp }) => (
   <div className="absolute flex items-center justify-center pointer-events-none"
-    style={{ left: x * cell, top: y * cell, width: 2 * cell, height: 2 * cell, zIndex: 2, borderRadius: 8, background: `${color}33`, border: `2px solid ${color}`, boxShadow: `0 0 12px ${color}88`, fontSize: cell * 1.1 }}>
-    🏰
+    style={{ left: x * cell, top: y * cell, width: 2 * cell, height: 2 * cell, zIndex: 2, borderRadius: 8, background: mix(color, 22), border: `2px solid ${color}`, boxShadow: `0 0 12px ${mix(color, 55)}` }}>
+    <FacilityImg type={BuildingType.TOWN_HALL} size={Math.round(cell * 1.5)} />
     {hp !== undefined && (
-      <div className="absolute left-1 right-1 -bottom-2 h-1.5 rounded bg-black/70"><div className="h-full rounded" style={{ width: `${hp * 100}%`, background: color }} /></div>
+      <div className="absolute left-1 right-1 -bottom-2 h-1.5 rounded" style={{ background: 'var(--cw-bg-0)' }}><div className="h-full rounded" style={{ width: `${hp * 100}%`, background: color }} /></div>
     )}
   </div>
 );
 
+/** 1ますの 大きさ。よこ長（lg 以上）は 右に 操作の 列（sideW）が ならぶ。たて長は 盤面が 上・操作が 下で 横いっぱい */
 function useCellSize(sideW: number): number {
   const [w, setW] = useState(typeof window === 'undefined' ? 1024 : window.innerWidth);
   useEffect(() => { const f = () => setW(window.innerWidth); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
-  return Math.max(12, Math.min(30, Math.floor((w - sideW - 24) / GRID_W)));
+  const side = w >= 1024 ? sideW : 0;
+  return Math.max(12, Math.min(30, Math.floor((w - side - 24) / GRID_W)));
 }
 
 // ── 画面の 本体 ───────────────────────────────────────────────────
@@ -327,106 +339,121 @@ export const VersusScreen: React.FC<Props> = ({ formation: savedFormation, unloc
     const m = session.match;
     const link = session.link?.status();
     return (
-      <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-y-auto" style={font} data-testid="versus-lobby">
-        <TopBar title="たいせんの へや" onBack={toMenu} />
-        <div className="max-w-xl w-full mx-auto px-4 py-4 space-y-3">
-          {session.room?.role === 'host' && (
-            <div className="rounded-2xl border-2 p-4 text-center" style={{ borderColor: ACCENT, background: 'rgba(244,114,182,0.10)' }}>
-              <div className="text-white/60 text-xs">この きごうを となりの 子に つたえてね（同じ学級の 子だけ はいれるよ）</div>
-              <div className="text-white font-black tracking-[0.4em] mt-1" style={{ fontSize: 44, ...fontMono }} data-testid="room-code">{session.room.code}</div>
-            </div>
-          )}
-          {session.room?.role === 'guest' && (
-            <div className="rounded-2xl border p-3 text-center" style={{ borderColor: `${ACCENT}88`, background: 'rgba(244,114,182,0.08)' }}>
-              <div className="text-white/70 text-sm">へや <b className="tracking-widest" style={fontMono}>{session.room.code}</b> に はいったよ</div>
-            </div>
-          )}
-          <div className="rounded-2xl border border-white/15 p-3 text-center" style={{ background: 'rgba(6,10,24,0.6)' }} data-testid="lobby-opp">
-            {m.opponentPresent
-              ? <p className="text-[#a3e635] font-black">{m.remoteReady() ? '✓ あいては じゅんびが できたよ' : '✓ あいてが きたよ！'}</p>
-              : <p className="text-white/70 text-sm">あいてが くるのを まっているよ…</p>}
-            {link === 'closed' && <p className="text-[#fde68a] text-[11px] mt-1" data-testid="link-closed">つうしんが つながらないよ。学校の ネットでは たいせんが できないことが あるよ（コンピュータと れんしゅうは できる）。</p>}
-          </div>
-          <FormationPicker usable={usable} form={form} onChange={setForm} disabled={m.localReady()} />
-          <SortieStamina formation={form} message={msg} />
-          <button onClick={() => void fight()} disabled={busy || !m.opponentPresent || m.localReady()} data-testid="versus-fight"
-            className="w-full py-4 rounded-2xl font-black text-lg text-white transition-all active:scale-95 disabled:opacity-40"
-            style={{ border: '2px solid #ef4444', background: 'rgba(239,68,68,0.2)', ...fontMono }}>
-            {m.localReady() ? 'あいてを まっているよ…' : busy ? '…' : '⚔️ たたかう！'}
-          </button>
-          <p className="text-white/45 text-[11px] leading-relaxed">「たたかう」を おすと スタミナを 1回ぶん つかうよ（出撃と おなじ）。ふたりとも おしたら はじまる。</p>
-        </div>
-      </div>
+      <VsShell title="たいせんの へや" onBack={toMenu} testid="versus-lobby">
+        {session.room?.role === 'host' && (
+          <Panel strong className="cw-tone-opp text-center" style={{ boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-opp)' }}>
+            <div className="text-cw-14" style={{ color: 'var(--cw-fg-2)' }}>この きごうを となりの 子に つたえてね（同じ学級の 子だけ はいれるよ）</div>
+            <div className="font-cw-num font-black mt-2 leading-none" style={{ fontSize: 56, letterSpacing: '0.3em', paddingLeft: '0.3em', color: 'var(--cw-fg)' }} data-testid="room-code">{session.room.code}</div>
+          </Panel>
+        )}
+        {session.room?.role === 'guest' && (
+          <Panel className="cw-tone-opp text-center">
+            <div className="text-cw-14" style={{ color: 'var(--cw-fg-2)' }}>へや の きごう</div>
+            <div className="font-cw-num font-black leading-none mt-1" style={{ fontSize: 40, letterSpacing: '0.3em', paddingLeft: '0.3em', color: 'var(--cw-fg)' }}>{session.room.code}</div>
+            <div className="text-cw-14 mt-1" style={{ color: 'var(--cw-fg-2)' }}>に はいったよ</div>
+          </Panel>
+        )}
+        <Panel className="text-center" data-testid="lobby-opp">
+          {m.opponentPresent
+            ? <p className="flex items-center justify-center gap-2 text-cw-16 font-extrabold" style={{ color: 'var(--cw-growth)' }}><Icon name="check" size={26} />{m.remoteReady() ? 'あいては じゅんびが できたよ' : 'あいてが きたよ！'}</p>
+            : <p className="text-cw-16 cw-nudge" style={{ color: 'var(--cw-fg-2)' }}>あいてが くるのを まっているよ…</p>}
+          {link === 'closed' && <p className="text-cw-14 mt-2" style={{ color: 'var(--cw-reward)' }} data-testid="link-closed">つうしんが つながらないよ。学校の ネットでは たいせんが できないことが あるよ（コンピュータと れんしゅうは できる）。</p>}
+        </Panel>
+        <FormationPicker usable={usable} form={form} onChange={setForm} disabled={m.localReady()} />
+        <SortieStamina formation={form} message={msg} />
+        <Button variant="primary" size="xl" fullWidth onClick={() => void fight()} disabled={busy || !m.opponentPresent || m.localReady()} data-testid="versus-fight">
+          {m.localReady() ? 'あいてを まっているよ…' : busy ? '…' : <><Icon name="sortie" size={32} />たたかう！</>}
+        </Button>
+        <p className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>「たたかう」を おすと スタミナを 1回ぶん つかうよ（出撃と おなじ）。ふたりとも おしたら はじまる。</p>
+      </VsShell>
     );
   }
 
   // メニュー
   return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-y-auto" style={font} data-testid="versus-menu">
-      <TopBar title="となりの 子と たいせん" onBack={back} />
-      <div className="max-w-xl w-full mx-auto px-4 py-4 space-y-3">
-        <div className="rounded-2xl border border-white/15 p-3 text-white/70 text-[12px] leading-relaxed" style={{ background: 'rgba(6,10,24,0.6)' }}>
-          <p className="font-black text-white text-sm mb-1">あそびかた（3ラウンド）</p>
-          <ol className="list-decimal pl-4 space-y-0.5">
-            <li><b className="text-[#34d399]">とく</b>：2人に 同じ しゅるいの もんだい 3まい。まちがえずに とけた ぶんだけ ⚡。（はやさは かんけいなし）</li>
-            <li><b className="text-[#38bdf8]">おく</b>：ためた ⚡ で ネコを じぶんの じんちに おく。おわるまで あいてには 見えないよ。</li>
-            <li><b className="text-[#f472b6]">みる</b>：2人の おきかたで たたかう。ひだりと みぎを いれかえて 2回。</li>
-          </ol>
-          <p className="mt-1">3ラウンドで あいての コアを おおく けずった ほうが かち。ひきわけも あるよ。</p>
-          <p className="mt-1 text-white/50">ネコの レベルは みんな同じ（Lv{VERSUS_LEVEL}）。かち・まけの 数は どこにも のこらないよ。ごほうびは「まちがえずに とけた もんだい」の ぶんだけ。</p>
+    <VsShell title="となりの 子と たいせん" onBack={back} testid="versus-menu">
+      <Panel>
+        <SectionTitle tone="opp">あそびかた（3ラウンド）</SectionTitle>
+        <div className="flex items-center gap-1.5 flex-wrap mt-3">
+          {HOW.map((h, i) => (
+            <React.Fragment key={h.key}>
+              {i > 0 && <Icon name="chevron" size={18} style={{ transform: 'rotate(-90deg)', opacity: 0.7 }} />}
+              <Chip tone={h.tone} className="min-h-[36px] text-cw-14"><Icon name={h.icon} size={22} />{h.label}</Chip>
+            </React.Fragment>
+          ))}
         </div>
+        <p className="text-cw-14 mt-3 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>3ラウンドで あいての コアを おおく けずった ほうが かち。ひきわけも あるよ。</p>
+      </Panel>
+      <Disclosure title="くわしい あそびかた" icon="bulb">
+        <ol className="space-y-2">
+          {HOW.map((h) => (
+            <li key={h.key} className="flex gap-2.5 items-start">
+              <Chip tone={h.tone} className="flex-shrink-0">{h.label}</Chip>
+              <span className="text-cw-14 leading-snug" style={{ color: 'var(--cw-fg-2)' }}>{h.text}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="text-cw-14 mt-3 leading-snug" style={{ color: 'var(--cw-fg-3)' }}>ネコの レベルは みんな同じ（Lv{VERSUS_LEVEL}）。かち・まけの 数は どこにも のこらないよ。ごほうびは「まちがえずに とけた もんだい」の ぶんだけ。</p>
+      </Disclosure>
 
-        <FormationPicker usable={usable} form={form} onChange={setForm} />
+      <FormationPicker usable={usable} form={form} onChange={setForm} />
 
-        {named ? (
-          <>
-            {locked && <p className="text-[#fca5a5] text-sm font-bold text-center" data-testid="versus-lock">🔒 {locked}</p>}
-            <button onClick={() => { if (locked) { setMsg(locked); return; } setIntent('host'); setStep('range'); }} disabled={busy} data-testid="versus-make"
-              className="w-full py-3.5 rounded-2xl border-2 font-black text-white active:scale-95 disabled:opacity-40" style={{ borderColor: ACCENT, background: 'rgba(244,114,182,0.15)', ...fontMono }}>
-              🏠 へやを つくる（きごうを おしえる）
-            </button>
-            <div className="rounded-2xl border border-white/15 p-3" style={{ background: 'rgba(6,10,24,0.6)' }}>
-              <div className="text-white/70 text-xs mb-1.5">となりの 子の きごう（4けた）で はいる</div>
-              <div className="flex gap-2">
-                <input value={code} onChange={(e) => setCode(normalizeRoomCode(e.target.value))} inputMode="numeric" maxLength={4} placeholder="0000" data-testid="room-code-input"
-                  className="flex-1 min-w-0 rounded-xl px-3 py-2 text-center text-2xl font-black tracking-[0.4em] bg-black/40 border border-white/25 text-white" style={fontMono} />
-                <button onClick={() => { if (locked) { setMsg(locked); return; } void enterRoom(); }} disabled={busy || code.length !== 4} data-testid="versus-enter"
-                  className="px-4 rounded-xl border-2 font-black text-white disabled:opacity-40 active:scale-95" style={{ borderColor: '#38bdf8', background: 'rgba(56,189,248,0.15)', ...fontMono }}>はいる</button>
-              </div>
+      {named ? (
+        <>
+          {locked && <p className="flex items-center justify-center gap-1.5 text-cw-14 font-bold text-center" style={{ color: 'var(--cw-danger)' }} data-testid="versus-lock"><Icon name="lock" size={18} />{locked}</p>}
+          <Button variant="primary" size="lg" fullWidth disabled={busy} data-testid="versus-make"
+            onClick={() => { if (locked) { setMsg(locked); return; } setIntent('host'); setStep('range'); }}>
+            <Icon name="home" size={30} />へやを つくる（きごうを おしえる）
+          </Button>
+          <Panel>
+            <SectionTitle tone="action">となりの 子の きごう（4けた）で はいる</SectionTitle>
+            <div className="flex gap-2 mt-3">
+              <input value={code} onChange={(e) => setCode(normalizeRoomCode(e.target.value))} inputMode="numeric" maxLength={4} placeholder="0000" data-testid="room-code-input" aria-label="へやの きごう（4けた）"
+                className="flex-1 min-w-0 min-h-[56px] rounded-cw-md px-3 text-center font-cw-num font-black text-cw-28"
+                style={{ letterSpacing: '0.3em', paddingLeft: '0.6em', background: 'var(--cw-surface-strong)', color: 'var(--cw-fg)', boxShadow: 'inset 0 0 0 1px var(--cw-line-strong)', border: 0 }} />
+              <Button variant="secondary" size="lg" disabled={busy || code.length !== 4} data-testid="versus-enter"
+                onClick={() => { if (locked) { setMsg(locked); return; } void enterRoom(); }}>はいる</Button>
             </div>
-          </>
-        ) : (
-          <p className="text-white/60 text-[11px] leading-relaxed rounded-xl border border-white/10 p-2.5" data-testid="versus-unnamed-note" style={{ background: 'rgba(6,10,24,0.55)' }}>
-            おためしでは コンピュータが あいての「れんしゅう試合」で あそべるよ（なにも おくられない）。がっきゅうコードを 入れると、同じ学級の 子と たいせんできる。
-          </p>
-        )}
+          </Panel>
+        </>
+      ) : (
+        <Notice tone="action" icon="bulb" data-testid="versus-unnamed-note">
+          おためしでは コンピュータが あいての「れんしゅう試合」で あそべるよ（なにも おくられない）。がっきゅうコードを 入れると、同じ学級の 子と たいせんできる。
+        </Notice>
+      )}
 
-        <div className="rounded-2xl border border-white/15 p-3" style={{ background: 'rgba(6,10,24,0.6)' }}>
-          <div className="text-white/70 text-xs mb-1.5">🤖 コンピュータと れんしゅう{named ? '（スタミナを 1回ぶん つかうよ）' : ''}</div>
-          <div className="flex gap-1.5 mb-2">
-            {(Object.keys(BOT_LEVELS) as BotLevel[]).map((l) => (
-              <button key={l} onClick={() => setLevel(l)} data-testid={`bot-${l}`}
-                className="flex-1 py-1.5 rounded-lg border text-[12px] font-black"
-                style={{ borderColor: level === l ? '#a3e635' : 'rgba(255,255,255,0.2)', background: level === l ? 'rgba(163,230,53,0.15)' : 'transparent', color: level === l ? '#d9f99d' : 'rgba(255,255,255,0.7)' }}>
-                {BOT_LEVELS[l].label}
-              </button>
-            ))}
-          </div>
-          <p className="text-white/45 text-[10px] mb-2">{BOT_LEVELS[level].blurb}</p>
-          <button onClick={() => { if (locked) { setMsg(locked); return; } setIntent('practice'); setStep('range'); }} disabled={busy} data-testid="versus-practice"
-            className="w-full py-3 rounded-xl border-2 font-black text-white active:scale-95 disabled:opacity-40" style={{ borderColor: '#a3e635', background: 'rgba(163,230,53,0.12)', ...fontMono }}>
-            れんしゅう試合を はじめる
-          </button>
-        </div>
-        {named && <SortieStamina formation={form} message={null} />}
-        {msg && <p className="text-[#fde68a] text-sm font-bold text-center" role="status" data-testid="versus-msg">{msg}</p>}
-      </div>
-    </div>
+      <Panel>
+        <SectionTitle tone="growth" right={named ? 'スタミナを 1回ぶん つかうよ' : undefined}>コンピュータと れんしゅう</SectionTitle>
+        <Segmented<BotLevel> className="mt-3" label="コンピュータの つよさ" value={level} onChange={setLevel}
+          options={(Object.keys(BOT_LEVELS) as BotLevel[]).map((l) => ({ value: l, label: BOT_LEVELS[l].label, tone: 'growth' as const, attrs: { 'data-testid': `bot-${l}` } }))} />
+        <p className="text-cw-14 mt-2 leading-snug" style={{ color: 'var(--cw-fg-2)' }}>{BOT_LEVELS[level].blurb}</p>
+        <Button variant="success" size="lg" fullWidth className="mt-3" disabled={busy} data-testid="versus-practice"
+          onClick={() => { if (locked) { setMsg(locked); return; } setIntent('practice'); setStep('range'); }}>
+          れんしゅう試合を はじめる
+        </Button>
+      </Panel>
+      {named && <SortieStamina formation={form} message={null} />}
+      {msg && <Notice tone="reward" icon="warn" role="status" data-testid="versus-msg"><span className="font-bold" style={{ color: 'var(--cw-reward)' }}>{msg}</span></Notice>}
+    </VsShell>
   );
 };
 
-const TopBar: React.FC<{ title: string; onBack: () => void }> = ({ title, onBack }) => (
-  <TitleBar title={title} onBack={onBack} className="sticky top-0 z-20" data-testid="versus-topbar" />
+/** あそびかたの 3つ（メニューの ならび・くわしい 説明） */
+const HOW: { key: string; label: string; tone: 'growth' | 'action' | 'opp'; icon: 'bulb' | 'cats' | 'versus'; text: string }[] = [
+  { key: 'solve', label: 'とく', tone: 'growth', icon: 'bulb', text: '2人に 同じ しゅるいの もんだい 3まい。まちがえずに とけた ぶんだけ ⚡。（はやさは かんけいなし）' },
+  { key: 'place', label: 'おく', tone: 'action', icon: 'cats', text: 'ためた ⚡ で ネコを じぶんの じんちに おく。おわるまで あいてには 見えないよ。' },
+  { key: 'watch', label: 'みる', tone: 'opp', icon: 'versus', text: '2人の おきかたで たたかう。ひだりと みぎを いれかえて 2回。' },
+];
+
+/** 対戦の 画面の 枠：背景・上の帯・中身（1まいの 縦の 列） */
+const VsShell: React.FC<{ title: React.ReactNode; onBack: () => void; testid: string; children: React.ReactNode }> = ({ title, onBack, testid, children }) => (
+  <div className="cw-screen min-h-[100dvh] h-[100dvh] flex flex-col" data-testid={testid}>
+    <ScreenBackdrop name="versus" />
+    <TitleBar title={title} onBack={onBack} data-testid="versus-topbar" />
+    <div className="flex-1 overflow-y-auto cw-scroll px-4 py-3">
+      <div className="max-w-xl w-full mx-auto space-y-3 pb-4 cw-enter">{children}</div>
+    </div>
+  </div>
 );
 
 /** 出撃の5枠（対戦で つれていく ネコ）。ボスの ネコは つれてこない */
@@ -437,29 +464,52 @@ const FormationPicker: React.FC<{ usable: string[]; form: string[]; onChange: (f
     else if (form.length < 5) onChange([...form, id]);
   };
   return (
-    <div className="rounded-2xl border border-white/15 p-3" style={{ background: 'rgba(6,10,24,0.6)' }} data-testid="versus-formation">
-      <div className="text-white/70 text-xs mb-1.5">つれていく ネコ（5まで・{form.length}/5）。レベルは みんな Lv{VERSUS_LEVEL}</div>
-      <div className="flex flex-wrap gap-1.5">
+    <Panel data-testid="versus-formation">
+      <SectionTitle tone="cat" right={<span className="font-cw-num">{form.length}/5</span>}>つれていく ネコ（5まで）</SectionTitle>
+      <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>レベルは みんな Lv{VERSUS_LEVEL}</p>
+      <div className="grid grid-cols-2 gap-2 mt-2">
         {usable.map((id) => {
           const on = form.includes(id);
           return (
-            <button key={id} onClick={() => toggle(id)} aria-pressed={on} data-testid={`pick-${id}`}
-              className="flex items-center gap-1 rounded-lg border px-1.5 py-1 text-[11px] font-bold transition-all active:scale-95"
-              style={{ borderColor: on ? '#a3e635' : 'rgba(255,255,255,0.2)', background: on ? 'rgba(163,230,53,0.14)' : 'rgba(255,255,255,0.03)', color: on ? '#d9f99d' : 'rgba(255,255,255,0.55)', opacity: disabled ? 0.6 : 1 }}>
-              <img src={spriteOf(id)} alt="" className="w-6 h-6 object-contain" draggable={false} />
-              <span>{CHARACTER_BY_ID[id]?.displayName}</span>
-              <span className="text-[#facc15]" style={fontMono}>{troopCost(id)}⚡</span>
+            <button key={id} type="button" onClick={() => toggle(id)} aria-pressed={on} data-testid={`pick-${id}`}
+              className={`cw-seg cw-press cw-tone-action min-h-[56px] px-2 flex items-center gap-2 text-left ${on ? 'is-on' : ''}`}
+              style={{ opacity: disabled ? 0.6 : 1 }}>
+              <img src={spriteOf(id)} alt="" className="w-10 h-10 object-contain flex-shrink-0" draggable={false} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-cw-14 font-extrabold truncate" style={{ color: on ? 'var(--cw-fg)' : 'var(--cw-fg-2)' }}>{CHARACTER_BY_ID[id]?.displayName}</span>
+                <span className="flex items-center gap-0.5 text-cw-12 font-cw-num font-bold" style={{ color: 'var(--cw-reward)' }}><Icon name="energy" size={14} />{troopCost(id)}</span>
+              </span>
+              {on && <Icon name="check" size={20} />}
             </button>
           );
         })}
       </div>
-    </div>
+    </Panel>
   );
 };
 
 // ── 対戦中の 画面 ─────────────────────────────────────────────────
 const PHASE_LABEL: Record<Phase, string> = { lobby: 'じゅんび', solve: 'とく', place: 'おく', watch: 'みる', check: 'くらべる', done: 'けっか' };
-const PHASE_COLOR: Record<Phase, string> = { lobby: '#94a3b8', solve: '#34d399', place: '#38bdf8', watch: '#f472b6', check: '#facc15', done: '#facc15' };
+/** 「とく → おく → みる」の ならび（くらべるは みるの つづき） */
+const STEP_OF: Partial<Record<Phase, number>> = { solve: 0, place: 1, watch: 2, check: 2 };
+
+const PhaseSteps: React.FC<{ phase: Phase }> = ({ phase }) => {
+  const cur = STEP_OF[phase];
+  if (cur === undefined) return null;
+  return (
+    <div className="flex items-center justify-center gap-1.5 px-4 py-2 flex-shrink-0 relative z-10" aria-label="いまの だんかい" data-testid="phase-steps">
+      {HOW.map((h, i) => (
+        <React.Fragment key={h.key}>
+          {i > 0 && <Icon name="chevron" size={16} style={{ transform: 'rotate(-90deg)', opacity: 0.6 }} />}
+          <span className={`cw-chip cw-tone-${h.tone} min-h-[32px] text-cw-14`} aria-current={i === cur ? 'step' : undefined}
+            style={i === cur ? { fontSize: 14, boxShadow: 'var(--tone-lit)', background: 'var(--tone-bg)' } : { fontSize: 14, color: 'var(--cw-fg-3)', background: 'var(--cw-surface)' }}>
+            {i < cur ? <Icon name="check" size={16} /> : <Icon name={h.icon} size={20} />}{h.label}
+          </span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
 
 const PlayView: React.FC<{ session: Session; formation: string[]; onExit: () => void; onAgain: () => void }> = ({ session, formation, onExit, onAgain }) => {
   const m = session.match;
@@ -490,39 +540,36 @@ const PlayView: React.FC<{ session: Session; formation: string[]; onExit: () => 
   const [askLeave, setAskLeave] = useState(false);
 
   return (
-    <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden" style={font} data-testid="versus-play" data-phase={m.phase} data-round={m.round}>
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10 flex-wrap" style={{ background: 'rgba(6,10,24,0.85)' }}>
-        <button onClick={() => (m.phase === 'done' ? onExit() : setAskLeave(true))} className="text-white/60 hover:text-white text-xs px-2 py-1 rounded border border-white/15" data-testid="versus-leave">やめる</button>
-        <span className="text-white/60 text-[11px]">あいて：<b className="text-white">{session.oppLabel}</b></span>
-        <span className="font-black text-xs px-2 py-0.5 rounded-full border" style={{ color: PHASE_COLOR[m.phase], borderColor: `${PHASE_COLOR[m.phase]}88`, ...fontMono }} data-testid="phase-chip">
-          {m.phase === 'done' || m.phase === 'lobby' ? PHASE_LABEL[m.phase] : `ラウンド ${m.round + 1}/${VERSUS_ROUNDS}・${PHASE_LABEL[m.phase]}`}
-        </span>
-        <span className="ml-auto flex items-center gap-2 text-[11px]">
-          <span className="text-[#facc15] font-black" style={fontMono} data-testid="energy">⚡ {m.localEnergy()}</span>
-          <TimeLeft match={m} />
-        </span>
-      </div>
+    <div className="cw-screen min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden" data-testid="versus-play" data-phase={m.phase} data-round={m.round}>
+      <ScreenBackdrop name="versus" />
+      <TitleBar
+        onBack={() => (m.phase === 'done' ? onExit() : setAskLeave(true))} backLabel="やめる" backTestId="versus-leave"
+        title={<span data-testid="phase-chip">{m.phase === 'done' || m.phase === 'lobby' ? PHASE_LABEL[m.phase] : `ラウンド ${m.round + 1}/${VERSUS_ROUNDS}・${PHASE_LABEL[m.phase]}`}</span>}
+        subtitle={<>あいて：<b style={{ color: 'var(--cw-opp)' }}>{session.oppLabel}</b></>}
+        right={<><StatPill icon="energy" value={m.localEnergy()} label="エナジー" data-testid="energy" /><TimeLeft match={m} /></>}
+      />
+      <PhaseSteps phase={m.phase} />
 
-      <div className="flex-1 overflow-y-auto">
-        {m.phase === 'lobby' && <div className="p-6 text-center text-white/70 text-sm" data-testid="play-wait">あいての じゅんびを まっているよ…</div>}
+      <div className="flex-1 overflow-y-auto cw-scroll">
+        {m.phase === 'lobby' && <div className="p-6 text-center text-cw-16" style={{ color: 'var(--cw-fg-2)' }} data-testid="play-wait">あいての じゅんびを まっているよ…</div>}
         {m.phase === 'solve' && pack && <SolvePanel match={m} pack={pack} onCard={onCard} />}
-        {m.phase === 'solve' && !pack && <div className="p-6 text-center text-white/60 text-sm">よみこみ中…</div>}
+        {m.phase === 'solve' && !pack && <div className="p-6 text-center text-cw-16" style={{ color: 'var(--cw-fg-2)' }}>よみこみ中…</div>}
         {m.phase === 'place' && <PlacePanel match={m} oppLabel={session.oppLabel} />}
         {m.phase === 'watch' && <WatchPanel key={`${m.round}-${m.half}`} match={m} />}
-        {m.phase === 'check' && <div className="p-6 text-center text-white/70 text-sm" data-testid="play-check">けっかを くらべているよ…</div>}
+        {m.phase === 'check' && <div className="p-6 text-center text-cw-16" style={{ color: 'var(--cw-fg-2)' }} data-testid="play-check">けっかを くらべているよ…</div>}
         {m.phase === 'done' && <EndPanel match={m} stats={stats} oppLabel={session.oppLabel} onExit={onExit} onAgain={onAgain} />}
       </div>
 
       {askLeave && (
-        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" style={{ background: 'rgba(3,6,16,0.8)' }} data-testid="leave-confirm">
-          <div className="w-full max-w-sm rounded-2xl border-2 p-4 text-center" style={{ borderColor: '#fca5a5', background: 'rgba(8,12,28,0.98)' }}>
-            <p className="text-white font-black mb-1">たいせんを やめる？</p>
-            <p className="text-white/60 text-[12px] mb-3">{session.kind === 'room' ? 'あいてには「でた」と つたわるよ。使った スタミナは もどらないよ。' : '使った スタミナは もどらないよ。'}</p>
+        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" style={{ background: 'rgba(6,10,28,0.78)' }} data-testid="leave-confirm">
+          <Panel strong className="cw-enter w-full max-w-sm text-center">
+            <p className="text-cw-20 font-extrabold mb-1" style={{ color: 'var(--cw-fg)' }}>たいせんを やめる？</p>
+            <p className="text-cw-14 mb-4 leading-snug" style={{ color: 'var(--cw-fg-2)' }}>{session.kind === 'room' ? 'あいてには「でた」と つたわるよ。使った スタミナは もどらないよ。' : '使った スタミナは もどらないよ。'}</p>
             <div className="flex gap-2">
-              <button onClick={() => setAskLeave(false)} className="flex-1 py-2.5 rounded-xl border-2 font-black text-white" style={{ borderColor: '#a3e635', background: 'rgba(163,230,53,0.15)' }} data-testid="leave-no">つづける</button>
-              <button onClick={onExit} className="flex-1 py-2.5 rounded-xl border-2 font-black text-white" style={{ borderColor: '#ef4444', background: 'rgba(239,68,68,0.15)' }} data-testid="leave-yes">やめる</button>
+              <Button variant="primary" className="flex-1" onClick={() => setAskLeave(false)} data-testid="leave-no">つづける</Button>
+              <Button variant="danger" className="flex-1" onClick={onExit} data-testid="leave-yes">やめる</Button>
             </div>
-          </div>
+          </Panel>
         </div>
       )}
       {showResult && (
@@ -536,10 +583,12 @@ const TimeLeft: React.FC<{ match: VersusMatch }> = ({ match }) => {
   const ms = match.msLeft();
   if (ms === null) return null;
   const s = Math.ceil(ms / 1000);
-  return <span className="text-white/60" style={fontMono} data-testid="time-left">のこり {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}</span>;
+  return <Chip className="min-h-[36px] font-cw-num text-cw-14" data-testid="time-left"><span style={{ color: 'var(--cw-fg-2)' }}>のこり</span> {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}</Chip>;
 };
 
 // ── とく ─────────────────────────────────────────────────────────
+const DIFF_TONE = (d: number) => (d <= 2 ? 'growth' : d === 3 ? 'action' : 'rare') as 'growth' | 'action' | 'rare';
+
 const SolvePanel: React.FC<{
   match: VersusMatch; pack: { registry: RoundRegistry; rounds: PackRound[] };
   onCard: (item: PackRound, i: number, perfect: boolean) => void;
@@ -568,59 +617,61 @@ const SolvePanel: React.FC<{
   const item = open === null ? null : itemOf(hand[open]);
 
   return (
-    <div className="max-w-2xl w-full mx-auto p-4 space-y-3" data-testid="solve-panel">
-      <div className="rounded-xl border border-[#34d399]/40 p-3 text-[12px] text-white/80 leading-relaxed" style={{ background: 'rgba(52,211,153,0.08)' }}>
-        もんだいを とこう。<b className="text-[#34d399]">まちがえずに とけた</b> ぶんだけ ⚡。まちがえても ばつは ないよ（ヒントで さいごまで とけるよ）。
-        <b className="text-white"> はやく とけても トクは しないよ</b>（おくのは 2人が そろってから）。
-      </div>
+    <div className="max-w-2xl w-full mx-auto p-4 space-y-3 cw-enter" data-testid="solve-panel">
+      <Notice tone="growth" icon="bulb">
+        <b style={{ color: 'var(--cw-growth)' }}>まちがえずに とけた</b> ぶんだけ ⚡ が もらえるよ。まちがえても ばつは ないよ。
+      </Notice>
+      <Disclosure title="くわしく" icon="bulb">
+        <p className="text-cw-14 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>
+          ヒントで さいごまで とけるよ（まちがえた カードの ⚡ は なし）。<b style={{ color: 'var(--cw-fg)' }}>はやく とけても トクは しないよ</b>（おくのは 2人が そろってから）。
+        </p>
+      </Disclosure>
       <div className="grid gap-2">
         {hand.map((c, i) => {
           const st = state[keyOf(i)];
           const it = itemOf(c);
+          const tone = st === 'ok' ? 'growth' : st === 'ng' ? 'reward' : DIFF_TONE(c.difficulty);
           return (
-            <button key={i} onClick={() => openCard(i)} disabled={!!st || finished} data-testid={`card-${i}`} data-state={st ?? 'new'}
-              className="text-left rounded-xl px-3 py-2.5 transition-all active:scale-[0.98] disabled:opacity-60"
-              style={{ background: 'rgba(8,12,24,0.92)', border: `2px solid ${st === 'ok' ? '#a3e635' : st === 'ng' ? '#fbbf24' : cardColor(c.difficulty)}` }}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-black" style={{ color: cardColor(c.difficulty) }}>{cardLabel(c.difficulty)}</span>
-                <span className="text-[13px] font-black text-[#facc15]" style={fontMono}>
-                  {st === 'ok' ? '✓ ' : ''}+{cardReward(c.difficulty, rewardWeight)}⚡
-                </span>
-              </div>
-              <div className="text-sm font-bold text-white leading-tight">{it?.label ?? c.skillId}</div>
-              <div className="text-[10px] text-white/50">{UNIT_NAME_BY_KEY[c.unitKey] ?? ''}{st === 'ng' ? '　ざんねん（⚡は なし）' : ''}</div>
-            </button>
+            <Card key={i} tone={tone} data-testid={`card-${i}`} data-state={st ?? 'new'} onClick={() => openCard(i)} locked={!!st || finished}
+              icon={st === 'ok' ? <Icon name="check" size={34} /> : <Icon name={c.difficulty <= 2 ? 'bulb' : c.difficulty === 3 ? 'target' : 'crown'} size={34} />}
+              title={<span className="flex items-center gap-2 flex-wrap"><Chip tone={DIFF_TONE(c.difficulty)}>{cardLabel(c.difficulty)}</Chip>{it?.label ?? c.skillId}</span>}
+              sub={<>{UNIT_NAME_BY_KEY[c.unitKey] ?? ''}{st === 'ng' ? '　ざんねん（⚡は なし）' : ''}</>}
+              right={<span className="flex items-center gap-1 font-cw-num font-bold text-cw-16" style={{ color: 'var(--cw-reward)' }}><Icon name="energy" size={22} />+{cardReward(c.difficulty, rewardWeight)}</span>} />
           );
         })}
       </div>
       {finished ? (
-        <p className="text-center text-white/70 text-sm py-3" data-testid="solve-waiting">
+        <p className="text-center text-cw-16 py-3" style={{ color: 'var(--cw-fg-2)' }} data-testid="solve-waiting">
           {match.remoteDoneSolving() ? 'つぎは おく じかん…' : 'あいてが とくのを まっているよ（ゆっくり まっててね）'}
         </p>
       ) : (
-        <button onClick={() => match.finishSolving()} data-testid="solve-finish"
-          className="w-full py-3 rounded-xl border-2 font-black text-white active:scale-95" style={{ borderColor: '#38bdf8', background: 'rgba(56,189,248,0.15)', ...fontMono }}>
+        <Button variant="primary" size="lg" fullWidth onClick={() => match.finishSolving()} data-testid="solve-finish">
           {done >= hand.length ? 'おく へ すすむ →' : 'ここまでで おく へ すすむ →'}
-        </button>
+        </Button>
       )}
-      {!finished && match.remoteDoneSolving() && <p className="text-center text-[#a3e635] text-[12px]" data-testid="opp-solved">あいては もう おわったよ。ゆっくりで いいよ。</p>}
+      {!finished && match.remoteDoneSolving() && <p className="text-center text-cw-14" style={{ color: 'var(--cw-growth)' }} data-testid="opp-solved">あいては もう おわったよ。ゆっくりで いいよ。</p>}
 
       {open !== null && item && (
-        <div className="fixed inset-0 z-[140] flex flex-col" style={{ background: 'rgba(3,6,16,0.5)', backdropFilter: 'blur(1.5px)' }} data-testid="solve-modal">
-          <div className="flex items-center gap-3 p-3 border-b border-[#facc15]/25 flex-wrap" style={{ background: 'rgba(3,6,16,0.92)' }}>
-            <span className="text-[#facc15] font-bold text-sm" style={fontMono}>⚡ エナジーチャージ</span>
-            <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-sky-400/10 border border-sky-400/40 text-sky-300">{item.label}　+{cardReward(hand[open].difficulty, rewardWeight)}⚡</span>
-            <button onClick={() => { setOpen(null); }} className="ml-auto text-white/70 hover:text-white text-sm px-3 py-1 rounded-lg border border-white/15" data-testid="solve-close">
-              {result === null ? 'やめて もどる ✕' : 'もどる ✕'}
-            </button>
+        <div className="fixed inset-0 z-[140] flex flex-col" style={{ background: 'rgba(6,10,28,0.62)' }} data-testid="solve-modal">
+          <div className="flex items-center gap-3 px-4 py-2 flex-wrap relative z-10" style={{ background: 'var(--cw-surface-strong)', boxShadow: 'inset 0 -1px 0 var(--cw-line)' }}>
+            <span className="flex items-center gap-1.5 text-cw-14 font-extrabold" style={{ color: 'var(--cw-reward)' }}><Icon name="energy" size={24} />エナジーチャージ</span>
+            <Chip tone="action">{item.label}</Chip>
+            <Chip tone="reward" className="font-cw-num">+{cardReward(hand[open].difficulty, rewardWeight)}</Chip>
+            <Button variant="secondary" size="sm" className="ml-auto" onClick={() => { setOpen(null); }} data-testid="solve-close">
+              {result === null ? 'やめて もどる' : 'もどる'}
+            </Button>
           </div>
           <div className="flex-1 overflow-y-auto p-3 flex flex-col items-center">
             <div className="w-full max-w-2xl">
-              {result === 'perfect' && <div className="text-center mb-2 rounded-xl py-2 font-black text-[#a3e635] border border-[#a3e635]/50" style={{ background: 'rgba(8,12,22,0.95)' }}>✓ せいかい！ +{cardReward(hand[open].difficulty, rewardWeight)}⚡</div>}
+              {result === 'perfect' && (
+                <Panel strong pad={false} className="cw-tone-growth mb-2 py-2 px-3 flex items-center justify-center gap-2 text-cw-16 font-extrabold" style={{ color: 'var(--cw-growth)', boxShadow: 'var(--cw-shadow-panel), var(--cw-lit-growth)' }}>
+                  <Icon name="check" size={26} />せいかい！ <span className="font-cw-num">+{cardReward(hand[open].difficulty, rewardWeight)}</span><Icon name="energy" size={22} />
+                </Panel>
+              )}
               {result === 'missed' && (
-                <div className="text-center mb-2 rounded-xl py-2 text-sm font-bold text-amber-200 border border-amber-300/40" style={{ background: 'rgba(8,12,22,0.95)' }}>
+                <Notice tone="reward" icon="bulb" className="mb-2">
                   {solved ? 'さいごまで とけたね。つぎの カードで ⚡ を とろう！' : 'ヒントを見て、さいごまで といてみよう（この カードの ⚡ は なし）'}
-                </div>
+                </Notice>
               )}
               <AppRoundHost key={serial} registry={pack.registry} item={item}
                 onFirstResult={(perfect) => {
@@ -631,10 +682,7 @@ const SolvePanel: React.FC<{
                 }}
                 onSolved={() => setSolved(true)} />
               {(result === 'perfect' || solved) && (
-                <button onClick={() => setOpen(null)} data-testid="solve-back"
-                  className="w-full mt-3 py-3 rounded-xl font-black text-lg active:scale-95" style={{ background: 'rgba(163,230,53,0.22)', border: '2px solid #a3e635', color: '#a3e635' }}>
-                  もどる →
-                </button>
+                <Button variant="success" size="lg" fullWidth className="mt-3" onClick={() => setOpen(null)} data-testid="solve-back">もどる →</Button>
               )}
             </div>
           </div>
@@ -647,7 +695,7 @@ const SolvePanel: React.FC<{
 // ── おく ─────────────────────────────────────────────────────────
 const PlacePanel: React.FC<{ match: VersusMatch; oppLabel: string }> = ({ match, oppLabel }) => {
   const map = versusMap(match.seed, match.round);
-  const cell = useCellSize(250);
+  const cell = useCellSize(290);
   const energy = match.localEnergy();
   const draft = match.draft;
   const used = draft.reduce((s, u) => s + troopCost(u.id), 0);
@@ -669,45 +717,50 @@ const PlacePanel: React.FC<{ match: VersusMatch; oppLabel: string }> = ({ match,
   };
 
   return (
-    <div className="p-3 flex flex-col lg:flex-row gap-3 items-start justify-center" data-testid="place-panel">
+    <div className="p-3 flex flex-col lg:flex-row gap-3 items-center lg:items-start justify-center cw-enter" data-testid="place-panel">
       <div>
         <Board map={map} cell={cell} mirror={false} placement={draft} zone onCell={tap} />
-        <p className="text-white/50 text-[10px] mt-1">水色の ますに おけるよ（タップで おく・もういちど タップで けす）。右がわの 🏰 が あいての コア。</p>
+        <p className="text-cw-12 mt-1.5 flex items-center gap-1.5" style={{ color: 'var(--cw-fg-3)' }}>
+          <span aria-hidden className="inline-block w-3 h-3 rounded-sm" style={{ background: mix(MINE, 35), boxShadow: `inset 0 0 0 1px ${MINE}` }} />
+          水色の ますを おすと ネコを おくよ（もういちど おすと けす）。右がわが あいての コア。
+        </p>
       </div>
-      <div className="w-full lg:w-[230px] space-y-2">
-        <div className="rounded-xl border border-[#facc15]/40 p-2.5" style={{ background: 'rgba(250,204,21,0.07)' }}>
+      <div className="w-full lg:w-[270px] space-y-2.5">
+        <Panel pad={false} className="p-3">
           <div className="flex items-center justify-between">
-            <span className="text-white/70 text-[11px]">のこりの ⚡</span>
-            <span className="text-[#facc15] font-black text-lg" style={fontMono} data-testid="energy-left">{left}</span>
+            <span className="flex items-center gap-1.5 text-cw-14 font-bold" style={{ color: 'var(--cw-fg-2)' }}><Icon name="energy" size={24} />のこりの エナジー</span>
+            <span className="font-cw-num font-black text-cw-28 leading-none" style={{ color: 'var(--cw-reward)' }} data-testid="energy-left">{left}</span>
           </div>
-          <div className="text-white/45 text-[10px]">おいた ネコ {draft.length}/{MAX_PLACED}・同じ ネコは {MAX_PER_FAMILY}ひきまで</div>
-          {energy === 0 && <p className="text-[#fde68a] text-[11px] mt-1" data-testid="no-energy">⚡ が 0 だよ。もんだいを とくと ネコが おけるよ（つぎの ラウンドで がんばろう）。</p>}
-        </div>
-        <div className="grid grid-cols-1 gap-1">
+          <div className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>おいた ネコ {draft.length}/{MAX_PLACED}・同じ ネコは {MAX_PER_FAMILY}ひきまで</div>
+          {energy === 0 && <p className="text-cw-14 mt-1.5 leading-snug" style={{ color: 'var(--cw-reward)' }} data-testid="no-energy">⚡ が 0 だよ。もんだいを とくと ネコが おけるよ（つぎの ラウンドで がんばろう）。</p>}
+        </Panel>
+        <div className="grid grid-cols-1 gap-1.5">
           {match.formation.map((id) => {
             const c = troopCost(id);
             const can = c <= left && count(id) < MAX_PER_FAMILY;
             return (
-              <button key={id} onClick={() => setSel(id)} disabled={done} data-testid={`unit-${id}`} aria-pressed={sel === id}
-                className="flex items-center gap-2 rounded-lg border px-2 py-1 text-left transition-all active:scale-95"
-                style={{ borderColor: sel === id ? '#38bdf8' : 'rgba(255,255,255,0.15)', background: sel === id ? 'rgba(56,189,248,0.15)' : 'rgba(255,255,255,0.03)', opacity: can || sel === id ? 1 : 0.5 }}>
-                <img src={spriteOf(id)} alt="" className="w-8 h-8 object-contain" draggable={false} />
-                <span className="flex-1 min-w-0 text-[12px] font-bold text-white truncate">{CHARACTER_BY_ID[id]?.displayName}</span>
-                <span className="text-[#facc15] text-[11px] font-black" style={fontMono}>{c}⚡</span>
-                <span className="text-white/50 text-[10px] w-6 text-right">×{count(id)}</span>
+              <button key={id} type="button" onClick={() => setSel(id)} disabled={done} data-testid={`unit-${id}`} aria-pressed={sel === id}
+                className={`cw-seg cw-press cw-tone-action min-h-[52px] px-2 flex items-center gap-2 text-left ${sel === id ? 'is-on' : ''}`}
+                style={{ opacity: done || can || sel === id ? 1 : 0.6 }}>
+                <img src={spriteOf(id)} alt="" className="w-9 h-9 object-contain flex-shrink-0" draggable={false} />
+                <span className="flex-1 min-w-0 text-cw-14 font-extrabold truncate" style={{ color: 'var(--cw-fg)' }}>{CHARACTER_BY_ID[id]?.displayName}</span>
+                <span className="flex items-center gap-0.5 font-cw-num font-bold text-cw-14" style={{ color: 'var(--cw-reward)' }}><Icon name="energy" size={16} />{c}</span>
+                <span className="font-cw-num text-cw-14 w-8 text-right" style={{ color: 'var(--cw-fg-2)' }}>×{count(id)}</span>
               </button>
             );
           })}
         </div>
-        <div className="flex gap-1.5">
-          <button onClick={auto} disabled={done} data-testid="place-auto" className="flex-1 py-2 rounded-lg border border-[#a3e635]/50 text-[#d9f99d] text-[12px] font-black disabled:opacity-40">おまかせ</button>
-          <button onClick={() => match.setDraft([])} disabled={done} data-testid="place-clear" className="flex-1 py-2 rounded-lg border border-white/25 text-white/70 text-[12px] font-black disabled:opacity-40">ぜんぶ けす</button>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="md" className="flex-1" onClick={auto} disabled={done} data-testid="place-auto">おまかせ</Button>
+          <Button variant="ghost" size="md" className="flex-1" onClick={() => match.setDraft([])} disabled={done} data-testid="place-clear">ぜんぶ けす</Button>
         </div>
-        <button onClick={() => match.submit()} disabled={done} data-testid="place-done"
-          className="w-full py-3 rounded-xl border-2 font-black text-white active:scale-95 disabled:opacity-60" style={{ borderColor: '#f472b6', background: 'rgba(244,114,182,0.18)', ...fontMono }}>
+        <Button variant="primary" size="lg" fullWidth onClick={() => match.submit()} disabled={done} data-testid="place-done">
           {done ? 'できた！ あいてを まっているよ…' : 'できた！'}
-        </button>
-        <p className="text-[11px] text-white/55" data-testid="opp-place">{oppLabel}：{match.remoteDonePlacing() ? '✓ おきおわったよ' : 'おいているよ…'}</p>
+        </Button>
+        <p className="text-cw-14 leading-snug" style={{ color: 'var(--cw-fg-2)' }} data-testid="opp-place">
+          <span style={{ color: 'var(--cw-opp)' }} className="font-bold">{oppLabel}</span>：{match.remoteDonePlacing() ? 'おきおわったよ' : 'おいているよ…'}
+          {match.remoteDonePlacing() && <Icon name="check" size={18} className="inline-block align-[-4px] ml-1" />}
+        </p>
       </div>
     </div>
   );
@@ -754,7 +807,7 @@ const WatchPanel: React.FC<{ match: VersusMatch }> = ({ match }) => {
     return () => clearTimeout(t);
   }, [finished, match]);
 
-  /** ⏩ スキップ：さいごまで 一気に 計算（ゆっくり 見ても 同じ けっか） */
+  /** スキップ：さいごまで 一気に 計算（ゆっくり 見ても 同じ けっか） */
   const skip = () => {
     const runner = runnerRef.current; if (!runner || !setup || reported.current) return;
     const prov = new ScheduledProvider(setup.commands);
@@ -773,28 +826,32 @@ const WatchPanel: React.FC<{ match: VersusMatch }> = ({ match }) => {
   const mirror = localPl === 'P2';
   const secs = Math.max(0, Math.ceil((HALF_TICKS - (runner?.tick ?? 0)) * TICK_MS / 1000));
 
-  if (!setup) return <div className="p-6 text-center text-white/60 text-sm">じゅんび中…</div>;
+  if (!setup) return <div className="p-6 text-center text-cw-16" style={{ color: 'var(--cw-fg-2)' }}>じゅんび中…</div>;
   return (
-    <div className="p-3 flex flex-col items-center gap-2" data-testid="watch-panel">
+    <div className="p-3 flex flex-col items-center gap-2.5 cw-enter" data-testid="watch-panel">
       <div className="flex items-center gap-2 flex-wrap justify-center">
-        <span className="text-[12px] font-black px-3 py-1 rounded-full border" data-testid="half-chip"
-          style={{ borderColor: '#f472b6', color: '#f9a8d4' }}>
-          {match.half === 0 ? 'ぜんはん' : 'こうはん'}：{match.half === 0 ? '' : 'ひだりと みぎを いれかえて もういちど！ '}あと {secs}びょう
-        </span>
-        <div className="flex gap-1">
+        <Chip tone="opp" className="min-h-[36px] text-cw-14" data-testid="half-chip">
+          {match.half === 0 ? 'ぜんはん' : 'こうはん'}：{match.half === 0 ? '' : 'ひだりと みぎを いれかえて もういちど！ '}あと <span className="font-cw-num">{secs}</span>びょう
+        </Chip>
+        <div className="flex gap-1.5">
           {[1, 3].map((s) => (
-            <button key={s} onClick={() => setSpeed(s)} className="px-2 py-0.5 rounded border text-[11px] font-black" data-testid={`speed-${s}`}
-              style={{ borderColor: speed === s ? '#38bdf8' : 'rgba(255,255,255,0.2)', color: speed === s ? '#7dd3fc' : 'rgba(255,255,255,0.6)' }}>×{s}</button>
+            <Button key={s} variant={speed === s ? 'primary' : 'secondary'} size="sm" onClick={() => setSpeed(s)} data-testid={`speed-${s}`} className="font-cw-num">×{s}</Button>
           ))}
-          <button onClick={skip} disabled={reported.current} className="px-2 py-0.5 rounded border border-white/25 text-white/70 text-[11px] font-black" data-testid="watch-skip">⏩ スキップ</button>
+          <Button variant="secondary" size="sm" onClick={skip} disabled={reported.current} data-testid="watch-skip">スキップ</Button>
         </div>
       </div>
-      <div className="flex items-center gap-3 text-[11px] font-black w-full max-w-[880px] justify-between px-1">
-        <span style={{ color: MINE }}>きみの コア {pct(myLeft)}</span>
-        <span style={{ color: THEIRS }}>あいての コア {pct(oppLeft)}</span>
+      <div className="grid grid-cols-2 gap-4 w-full" style={{ maxWidth: GRID_W * cell }}>
+        <div>
+          <div className="flex justify-between items-baseline text-cw-14 font-bold"><span style={{ color: 'var(--cw-action)' }}>きみの コア</span><span className="font-cw-num">{pct(myLeft)}</span></div>
+          <ProgressBar value={myLeft} tone="action" label="きみの コア" />
+        </div>
+        <div>
+          <div className="flex justify-between items-baseline text-cw-14 font-bold"><span style={{ color: 'var(--cw-opp)' }}>あいての コア</span><span className="font-cw-num">{pct(oppLeft)}</span></div>
+          <ProgressBar value={oppLeft} tone="opp" label="あいての コア" />
+        </div>
       </div>
       <Board map={map} cell={cell} mirror={mirror} entities={ents} localPl={localPl} />
-      {finished && <p className="text-white/70 text-sm" data-testid="half-done">{runner?.state.result ? 'コアが おちた！' : 'じかんぎれ！'}</p>}
+      {finished && <p className="text-cw-16 font-bold" style={{ color: 'var(--cw-fg)' }} data-testid="half-done">{runner?.state.result ? 'コアが おちた！' : 'じかんぎれ！'}</p>}
     </div>
   );
 };
@@ -805,26 +862,24 @@ const RoundResultOverlay: React.FC<{ match: VersusMatch; round: number; side: Si
   if (!r) return null;
   const mine = r.score[side], theirs = r.score[oppSide];
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" style={{ background: 'rgba(3,6,16,0.82)' }} data-testid="round-result">
-      <div className="w-full max-w-md rounded-2xl border-2 p-4" style={{ borderColor: ACCENT, background: 'rgba(8,12,28,0.98)' }}>
-        <h3 className="text-center font-black text-white mb-2" style={fontMono}>ラウンド {round + 1} の けっか</h3>
-        <ScoreBar label="きみが あいての コアを けずった" v={mine} color={MINE} />
-        <ScoreBar label="あいてが きみの コアを けずった" v={theirs} color={THEIRS} />
-        <div className="mt-2 text-white/55 text-[11px] leading-relaxed">
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" style={{ background: 'rgba(6,10,28,0.78)' }} data-testid="round-result">
+      <Panel strong className="cw-enter w-full max-w-md cw-tone-opp">
+        <h3 className="text-center text-cw-20 font-extrabold mb-3 font-cw-num" style={{ color: 'var(--cw-fg)' }}>ラウンド {round + 1} の けっか</h3>
+        <ScoreBar label="きみが あいての コアを けずった" v={mine} tone="action" />
+        <ScoreBar label="あいてが きみの コアを けずった" v={theirs} tone="opp" />
+        <div className="mt-2 text-cw-12 leading-relaxed" style={{ color: 'var(--cw-fg-2)' }}>
           {[0, 1].map((h) => `${h === 0 ? 'ぜんはん' : 'こうはん'}：きみ ${pct(r.halves[h][side])}・あいて ${pct(r.halves[h][oppSide])}`).join('　／　')}
         </div>
-        <p className="text-white/45 text-[10px] mt-1">ひだりと みぎを いれかえた 2回の へいきんだよ。</p>
-        <button onClick={onNext} data-testid="round-next" className="w-full mt-3 py-3 rounded-xl border-2 font-black text-white active:scale-95" style={{ borderColor: '#a3e635', background: 'rgba(163,230,53,0.15)', ...fontMono }}>
-          つぎへ ▶
-        </button>
-      </div>
+        <p className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>ひだりと みぎを いれかえた 2回の へいきんだよ。</p>
+        <Button variant="success" size="lg" fullWidth className="mt-4" onClick={onNext} data-testid="round-next">つぎへ ▶</Button>
+      </Panel>
     </div>
   );
 };
-const ScoreBar: React.FC<{ label: string; v: number; color: string }> = ({ label, v, color }) => (
-  <div className="mb-1.5">
-    <div className="flex justify-between text-[11px]"><span className="text-white/75">{label}</span><span className="font-black" style={{ color, ...fontMono }}>{pct(v)}</span></div>
-    <div className="h-2.5 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full" style={{ width: pct(Math.min(1, v)), background: color }} /></div>
+const ScoreBar: React.FC<{ label: string; v: number; tone: 'action' | 'opp' }> = ({ label, v, tone }) => (
+  <div className="mb-2.5">
+    <div className="flex justify-between items-baseline gap-2 text-cw-14 mb-1"><span style={{ color: 'var(--cw-fg-2)' }}>{label}</span><span className="font-cw-num font-bold" style={{ color: tone === 'opp' ? 'var(--cw-opp)' : 'var(--cw-action)' }}>{pct(v)}</span></div>
+    <ProgressBar value={Math.min(1, v)} tone={tone} label={label} />
   </div>
 );
 
@@ -837,10 +892,10 @@ const EndPanel: React.FC<{
   const out = end?.outcome;
   const result: 'win' | 'lose' | 'draw' | null = !out ? null : out === 'draw' ? 'draw' : out === me ? 'win' : 'lose';
   const TEXT = {
-    win: { big: 'きみの かち！', sub: 'よく かんがえて おけたね。', color: '#a3e635' },
-    lose: { big: 'こんかいは ざんねん', sub: 'でも ぜんぶ まなびに なったよ。もういちど やってみよう！', color: '#7dd3fc' },
-    draw: { big: 'ひきわけ！', sub: 'いい しょうぶだったね。', color: '#fde68a' },
-  };
+    win: { big: 'きみの かち！', sub: 'よく かんがえて おけたね。', tone: 'growth', icon: 'crown' },
+    lose: { big: 'こんかいは ざんねん', sub: 'でも ぜんぶ まなびに なったよ。もういちど やってみよう！', tone: 'action', icon: 'cats' },
+    draw: { big: 'ひきわけ！', sub: 'いい しょうぶだったね。', tone: 'reward', icon: 'medal' },
+  } as const;
   const info = result ? TEXT[result] : null;
   const reason: Record<string, string> = {
     left: `${oppLabel}が いなくなったよ。（かち・まけは つけないよ）`,
@@ -849,27 +904,32 @@ const EndPanel: React.FC<{
     cancel: 'たいせんを おわったよ。',
   };
   const totals = match.totals;
+  const tone = info?.tone ?? 'neutral';
   return (
-    <div className="max-w-md w-full mx-auto p-4 space-y-3" data-testid="end-panel" data-result={result ?? end?.kind}>
-      <div className="rounded-2xl border-2 p-4 text-center" style={{ borderColor: info?.color ?? '#94a3b8', background: 'rgba(8,12,28,0.9)' }}>
-        <div className="font-black text-2xl" style={{ color: info?.color ?? '#e2e8f0', ...font }} data-testid="end-big">{info ? info.big : (end?.kind === 'desync' ? 'ひきわけ' : 'おしまい')}</div>
-        <div className="text-white/75 text-sm mt-1">{info ? info.sub : reason[end?.kind ?? 'cancel']}</div>
-        {end?.kind === 'desync' && <div className="text-white/55 text-[11px] mt-1">{reason.desync}</div>}
-      </div>
+    <div className="max-w-md w-full mx-auto p-4 space-y-3 cw-enter" data-testid="end-panel" data-result={result ?? end?.kind}>
+      <Panel strong className={`cw-tone-${tone} text-center ${result === 'win' ? 'cw-reward-pop' : ''}`} style={{ boxShadow: 'var(--cw-shadow-panel), var(--tone-lit)' }}>
+        <div className="flex justify-center"><Icon name={info?.icon ?? 'check'} size={64} /></div>
+        <div className="font-extrabold text-cw-28 mt-1" style={{ color: 'var(--tone)' }} data-testid="end-big">{info ? info.big : (end?.kind === 'desync' ? 'ひきわけ' : 'おしまい')}</div>
+        <div className="text-cw-14 mt-1" style={{ color: 'var(--cw-fg-2)' }}>{info ? info.sub : reason[end?.kind ?? 'cancel']}</div>
+        {end?.kind === 'desync' && <div className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>{reason.desync}</div>}
+      </Panel>
       {end?.kind === 'finished' && (
-        <div className="rounded-xl border border-white/15 p-3" style={{ background: 'rgba(6,10,24,0.6)' }}>
-          <div className="text-white/70 text-xs mb-1.5">3ラウンドの あわせて（あいての コアを けずった わりあい）</div>
-          <ScoreBar label="きみ" v={totals[me] / VERSUS_ROUNDS} color={MINE} />
-          <ScoreBar label={oppLabel} v={totals[otherSide(me)] / VERSUS_ROUNDS} color={THEIRS} />
-        </div>
+        <Panel>
+          <SectionTitle tone="opp">3ラウンドの あわせて</SectionTitle>
+          <p className="text-cw-12 mb-2 mt-1" style={{ color: 'var(--cw-fg-3)' }}>あいての コアを けずった わりあい</p>
+          <ScoreBar label="きみ" v={totals[me] / VERSUS_ROUNDS} tone="action" />
+          <ScoreBar label={oppLabel} v={totals[otherSide(me)] / VERSUS_ROUNDS} tone="opp" />
+        </Panel>
       )}
-      <div className="rounded-xl border border-[#facc15]/30 p-3 text-[12px] text-white/80" style={{ background: 'rgba(250,204,21,0.06)' }} data-testid="end-rewards">
-        まちがえずに とけた もんだい：<b className="text-[#facc15]">{stats.perfect}</b> もん（💠 +{stats.credits}）
-        <div className="text-white/45 text-[10px] mt-0.5">ごほうびは といた もんだいの ぶんだけ。かった・まけたでは ふえも へりも しないよ。</div>
-      </div>
+      <Panel className="cw-tone-reward" data-testid="end-rewards">
+        <div className="flex items-center gap-2 text-cw-14" style={{ color: 'var(--cw-fg)' }}>
+          <Icon name="credit" size={28} />まちがえずに とけた もんだい：<b className="font-cw-num" style={{ color: 'var(--cw-reward)' }}>{stats.perfect}</b> もん（+{stats.credits}）
+        </div>
+        <div className="text-cw-12 mt-1" style={{ color: 'var(--cw-fg-3)' }}>ごほうびは といた もんだいの ぶんだけ。かった・まけたでは ふえも へりも しないよ。</div>
+      </Panel>
       <div className="flex gap-2">
-        <button onClick={onAgain} data-testid="end-again" className="flex-1 py-3 rounded-xl border-2 font-black text-white active:scale-95" style={{ borderColor: ACCENT, background: 'rgba(244,114,182,0.15)', ...fontMono }}>もういちど</button>
-        <button onClick={onExit} data-testid="end-home" className="flex-1 py-3 rounded-xl border-2 font-black text-white active:scale-95" style={{ borderColor: '#38bdf8', background: 'rgba(56,189,248,0.15)', ...fontMono }}>ホームへ</button>
+        <Button variant="primary" size="lg" className="flex-1" onClick={onAgain} data-testid="end-again">もういちど</Button>
+        <Button variant="secondary" size="lg" className="flex-1" onClick={onExit} data-testid="end-home">ホームへ</Button>
       </div>
     </div>
   );

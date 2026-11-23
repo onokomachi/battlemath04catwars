@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
 import { useProgressStore } from '../../store/useProgressStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
-import { CHARACTERS, CHARACTER_BY_ID } from '../../data/characters';
+import { CHARACTERS, CHARACTER_BY_ID, getCharacterSprite } from '../../data/characters';
 import { sfx } from '../../utils/audioEngine';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
-
-const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
-const fontMono = { fontFamily: 'Orbitron, monospace' };
+import { Button, Card, Chip, ConfirmDialog, Icon, Notice, Panel } from '../ui';
 
 // レアネコの解放コスト（💠クレジット・永続）。ボスは高価。
 const creditCostFor = (id: string): number => (id.startsWith('boss') ? 1500 : 500);
@@ -34,18 +31,20 @@ export const ExchangePanel: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-sm mx-auto" style={font}>
-      <div className="flex items-center gap-2 mb-4 bg-white/5 rounded-2xl p-3">
-        <span className="text-2xl">💠</span>
-        <div>
-          <span className="text-[#38bdf8] text-xl font-bold" style={fontMono}>{credits}</span>
-          <span className="text-white/60 text-xs ml-2">クレジット（永続）</span>
+    <div className="w-full max-w-md mx-auto space-y-3" data-testid="exchange-panel">
+      <Panel className="cw-tone-action">
+        <div className="flex items-center gap-3">
+          <Icon name="credit" size={44} />
+          <div>
+            <div className="font-cw-num font-black text-cw-40 leading-none" style={{ color: 'var(--cw-action)' }}>{credits}</div>
+            <div className="text-cw-14 mt-1" style={{ color: 'var(--cw-fg-2)' }}>クレジット（永続）</div>
+          </div>
         </div>
-      </div>
-      <p className="text-white/40 text-xs mb-4" style={font}>
-        💠 をつかうと、ボスの宇宙ネコを<b style={{ color: '#a3e635' }}>ずっと</b>つかえるようになるよ。
+      </Panel>
+      <Notice tone="neutral" icon="bulb">
+        クレジットを つかうと、ボスの 宇宙ネコを <b style={{ color: 'var(--cw-growth)' }}>ずっと</b> つかえるように なるよ。
         ほかの系統は、陣地づくりで 兵舎を ふやすと ひらく。
-      </p>
+      </Notice>
 
       <div className="flex flex-col gap-2.5">
         {rares.map((c) => {
@@ -53,47 +52,25 @@ export const ExchangePanel: React.FC = () => {
           const owned = isUnlocked(c.id);
           const canAfford = !owned && credits >= cost;
           const isFlashing = flash === c.id;
-          const isBoss = c.id.startsWith('boss');
           return (
-            <div key={c.id}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all"
-              style={{
-                borderColor: isFlashing ? '#a3e635' : owned ? 'rgba(163,230,53,0.4)' : `${c.accent}55`,
-                background: isFlashing ? 'rgba(163,230,53,0.15)' : owned ? 'rgba(163,230,53,0.08)' : 'rgba(255,255,255,0.04)',
-              }}>
-              <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg"
-                style={{ background: `${c.accent}22`, border: `1px solid ${c.accent}66` }}>
-                <span className="text-xl">{isBoss ? '👾' : '🐱'}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-white/90 font-bold text-sm truncate">{c.forms[0].name}</span>
-                  {isBoss && <span className="text-[8px] font-black px-1 rounded bg-[#f43f5e] text-white">BOSS</span>}
-                </div>
-                <div className="text-white/40 text-[10px] mt-0.5 leading-snug truncate">{c.role}</div>
-              </div>
-              {owned ? (
-                <span className="text-[#a3e635] text-xs font-bold flex-shrink-0" style={fontMono}>解放ずみ ✓</span>
+            <Card key={c.id} tone={owned ? 'growth' : 'rare'} data-testid={`exchange-${c.id}`}
+              className={isFlashing ? 'cw-reward-pop' : ''}
+              icon={<img src={getCharacterSprite(c.spriteFamily, 1)} alt="" draggable={false} className="w-11 h-11 object-contain" />}
+              title={<span className="flex items-center gap-1.5">{c.forms[0].name}<Chip tone="danger">BOSS</Chip></span>}
+              sub={c.role}
+              right={owned ? (
+                <Chip tone="growth"><Icon name="check" size={18} />解放ずみ</Chip>
               ) : (
-                <button
-                  onClick={() => setPending({ id: c.id, cost })}
-                  disabled={!canAfford}
-                  className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                  style={{
-                    background: canAfford ? 'rgba(56,189,248,0.15)' : 'rgba(255,255,255,0.05)',
-                    border: `1.5px solid ${canAfford ? '#38bdf8' : 'rgba(255,255,255,0.2)'}`,
-                  }}>
-                  <span className="text-[#38bdf8] font-bold text-sm" style={fontMono}>{cost}</span>
-                  <span className="text-base">💠</span>
-                </button>
-              )}
-            </div>
+                <Button variant={canAfford ? 'primary' : 'secondary'} size="md" disabled={!canAfford} onClick={() => setPending({ id: c.id, cost })} className="min-w-[96px]">
+                  <span className="font-cw-num font-black">{cost}</span><Icon name="credit" size={22} />
+                </Button>
+              )} />
           );
         })}
       </div>
 
-      <p className="text-white/50 text-xs text-center mt-4" style={font}>
-        もんだいを といて 💠 を あつめよう！
+      <p className="text-cw-14 text-center mt-4" style={{ color: 'var(--cw-fg-2)' }}>
+        もんだいを といて クレジットを あつめよう！
       </p>
 
       <ConfirmDialog
@@ -101,8 +78,8 @@ export const ExchangePanel: React.FC = () => {
         variant="primary"
         title="クレジットを つかう？"
         message={pending ? (
-          <>💠 <b style={{ color: '#38bdf8' }}>{pending.cost}</b> をつかって<br />
-            「{CHARACTER_BY_ID[pending.id]?.forms[0].name}」を <b style={{ color: '#a3e635' }}>ずっと</b> 解放します。いい？</>
+          <>クレジット <b style={{ color: 'var(--cw-action)' }}>{pending.cost}</b> をつかって<br />
+            「{CHARACTER_BY_ID[pending.id]?.forms[0].name}」を <b style={{ color: 'var(--cw-growth)' }}>ずっと</b> 解放します。いい？</>
         ) : ''}
         confirmLabel="解放する"
         onConfirm={confirmBuy}

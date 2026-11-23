@@ -17,15 +17,12 @@ import { useFriendStore } from '../../store/useFriendStore';
 import { usePortal } from '../../portal/usePortal';
 import { isDemo } from '../../portal/demoMode';
 import { StarRow } from '../expedition/ExpeditionParts';
-import { Card, Panel, ScreenBackdrop, TitleBar } from '../ui';
+import { Button, Card, Chip, Disclosure, FacilityImg, Icon, Notice, Panel, ScreenBackdrop, TitleBar, TRAIT_ICON, iconOr } from '../ui';
 
-const fontMono = { fontFamily: 'Orbitron, monospace' };
-const font = { fontFamily: '"M PLUS Rounded 1c", sans-serif' };
-const ACCENT = '#38bdf8';
-
+/** 基地の ちいさな ずの 色（トークン）：コア＝行動・砲台＝危険・電撃＝ごほうび・かべ＝うす・キャンプ＝成長 */
 const COLOR: Record<string, string> = {
-  [BuildingType.TOWN_HALL]: '#3b82f6', [BuildingType.CANNON]: '#ef4444', [BuildingType.HIDDEN_TESLA]: '#facc15',
-  [BuildingType.WALL]: '#94a3b8', [BuildingType.ARMY_CAMP]: '#22c55e',
+  [BuildingType.TOWN_HALL]: 'var(--cw-action)', [BuildingType.CANNON]: 'var(--cw-danger)', [BuildingType.HIDDEN_TESLA]: 'var(--cw-reward)',
+  [BuildingType.WALL]: 'var(--cw-fg-3)', [BuildingType.ARMY_CAMP]: 'var(--cw-growth)',
 };
 
 /** 基地の ちいさな ず（敵陣 x 18〜27・y 0〜15。左が 攻める側） */
@@ -33,11 +30,11 @@ export const BasePreview: React.FC<{ buildings: { type: BuildingType; x: number;
   const x0 = GRID_W - BASE_MAX_W;
   return (
     <svg width={BASE_MAX_W * cell} height={GRID_H * cell} viewBox={`0 0 ${BASE_MAX_W * cell} ${GRID_H * cell}`}
-      className="rounded-md flex-shrink-0" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)' }} data-testid="base-preview" role="img" aria-label="基地の ようす">
+      className="flex-shrink-0" style={{ background: 'var(--cw-surface-strong)', borderRadius: 'var(--cw-r-sm)', boxShadow: 'inset 0 0 0 1px var(--cw-line-strong)' }} data-testid="base-preview" role="img" aria-label="基地の ようす">
       {buildings.filter((b) => b.x >= x0).map((b, i) => {
         const st = BUILDING_STATS[b.type];
         return <rect key={i} x={(b.x - x0) * cell + 0.5} y={b.y * cell + 0.5} width={st.width * cell - 1} height={st.height * cell - 1} rx={1.5}
-          fill={COLOR[b.type] ?? '#fff'} opacity={b.type === BuildingType.WALL ? 0.75 : 0.95} />;
+          fill={COLOR[b.type] ?? 'var(--cw-fg)'} opacity={b.type === BuildingType.WALL ? 0.7 : 0.95} />;
       })}
     </svg>
   );
@@ -54,6 +51,21 @@ export const FriendCard: React.FC<{ locked?: string | null; onOpen: () => void }
   <Card icon="friend" title="なかまの 基地に いく" data-testid="friend-card"
     sub="同じ学級の なかまの 基地の 配置に せめこもう"
     lockReason={locked ?? undefined} locked={!!locked} onClick={onOpen} />
+);
+
+/** 基地の くみあわせ（コア・砲台・電撃・かべ・キャンプ）を 施設の 絵で */
+const Legend: React.FC<{ d: { cannons: number; teslas: number; walls: number; camps: number } }> = ({ d }) => (
+  <div className="flex flex-wrap gap-1.5 mt-2">
+    {([
+      [BuildingType.TOWN_HALL, 'コア', null],
+      [BuildingType.CANNON, '砲台', d.cannons],
+      [BuildingType.HIDDEN_TESLA, '電撃', d.teslas],
+      [BuildingType.WALL, 'かべ', d.walls],
+      [BuildingType.ARMY_CAMP, 'キャンプ', d.camps],
+    ] as [BuildingType, string, number | null][]).map(([t, label, n]) => (
+      <Chip key={t}><FacilityImg type={t} size={20} /><span style={{ color: 'var(--cw-fg)' }}>{label}{n != null ? `×${n}` : ''}</span></Chip>
+    ))}
+  </div>
 );
 
 /** 相手を えらぶ（3つ）。avgLevel＝手持ちの平均レベル（敵の強さ「てき Lv」を 出す） */
@@ -75,69 +87,67 @@ export const FriendScreen: React.FC<{
   const bonusLeft = saved.bonusDay !== day;
   const loading = counts === 'class' && st === 'loading';
   return (
-    <div className="cw-screen min-h-[100dvh] h-[100dvh] flex flex-col" style={font} data-testid="friend-screen">
+    <div className="cw-screen min-h-[100dvh] h-[100dvh] flex flex-col" data-testid="friend-screen">
       <ScreenBackdrop name="friend" />
       <TitleBar title="なかまの 基地に いく" onBack={onBack} subtitle={<>{day} の 3つ（日づけが かわると 入れかわる）</>} />
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-w-3xl w-full mx-auto">
-        {counts === 'sample' && (
-          <p className="text-white/60 text-[11px] leading-relaxed rounded-xl border border-white/10 p-2.5" data-testid="friend-sample-note" style={{ background: 'rgba(6,10,24,0.55)' }}>
-            おためしでは「みほんの 基地」で あそべるよ（コンピュータが つくった 基地）。がっきゅうコードを 入れると、同じ学級の なかまの 基地に せめこめる。
-          </p>
-        )}
-        {counts === 'class' && error && (
-          <p className="text-[#fde68a] text-[11px] leading-relaxed rounded-xl border border-[#fde68a]/30 p-2.5" data-testid="friend-error" style={{ background: 'rgba(120,53,15,0.25)' }}>
-            なかまの 基地を よみこめなかったよ。いまは みほんの 基地で あそぼう（あとで もういちど ひらくと よめるかも）。
-          </p>
-        )}
-        {loading && <p className="text-white/55 text-[12px] text-center py-6" data-testid="friend-loading">なかまの 基地を さがしているよ…</p>}
-        {!loading && targets.map((t) => {
-          const su = friendSetup(t, avgLevel);
-          const d = describeBase({ buildings: su.enemyBase, levels: t.base.levels });
-          return (
-            <div key={t.slot} className="rounded-2xl border p-3 flex gap-3" data-testid={`friend-target-${t.slot}`}
-              style={{ borderColor: t.sample ? 'rgba(255,255,255,0.18)' : `${ACCENT}88`, background: 'rgba(6,10,24,0.6)' }}>
-              <BasePreview buildings={su.enemyBase} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-black text-sm leading-tight truncate" data-testid="friend-label">{t.label}</span>
-                  {t.sample && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white/30 text-white/70 whitespace-nowrap">みほん</span>}
+      <div className="flex-1 overflow-y-auto cw-scroll px-4 py-3 cw-enter">
+        <div className="max-w-3xl w-full mx-auto space-y-3">
+          {counts === 'sample' && (
+            <Notice tone="action" icon="bulb" data-testid="friend-sample-note">
+              おためしでは「みほんの 基地」で あそべるよ（コンピュータが つくった 基地）。がっきゅうコードを 入れると、同じ学級の なかまの 基地に せめこめる。
+            </Notice>
+          )}
+          {counts === 'class' && error && (
+            <Notice tone="reward" icon="warn" data-testid="friend-error">
+              なかまの 基地を よみこめなかったよ。いまは みほんの 基地で あそぼう（あとで もういちど ひらくと よめるかも）。
+            </Notice>
+          )}
+          {loading && <p className="text-cw-14 text-center py-6" style={{ color: 'var(--cw-fg-2)' }} data-testid="friend-loading">なかまの 基地を さがしているよ…</p>}
+          {!loading && targets.map((t) => {
+            const su = friendSetup(t, avgLevel);
+            const d = describeBase({ buildings: su.enemyBase, levels: t.base.levels });
+            return (
+              <Card key={t.slot} data-testid={`friend-target-${t.slot}`} tone={t.sample ? 'neutral' : 'action'}
+                className="!items-start !p-4" media={<BasePreview buildings={su.enemyBase} />}
+                title={<span className="flex items-center gap-2"><span data-testid="friend-label">{t.label}</span>{t.sample && <Chip>みほん</Chip>}</span>}
+                sub={<>戦場：{su.map.name}（第{t.chapterNo}章）</>}>
+                <Legend d={d} />
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2" data-testid="friend-level">
+                  <Chip tone="danger"><Icon name="enemy" size={18} />てきの つよさ Lv.{su.enemyLevel}</Chip>
+                  <span className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>きみの ネコの レベルに あわせて きまる</span>
                 </div>
-                <div className="text-white/55 text-[11px] mt-0.5">戦場：{su.map.name}（第{t.chapterNo}章）</div>
-                <div className="text-white/70 text-[11px] mt-1">
-                  🏰コア ・ 🔴砲台×{d.cannons} ・ 🟡電撃×{d.teslas} ・ ⬜かべ×{d.walls} ・ 🟢キャンプ×{d.camps}
-                </div>
-                <div className="text-[11px] text-[#f9a8d4] mt-0.5" data-testid="friend-level">てきの つよさ Lv.{su.enemyLevel}（きみの ネコの レベルに あわせて きまる）</div>
-                <div className="flex flex-wrap gap-1 mt-1">
+                <div className="flex flex-wrap gap-1.5 mt-2">
                   {su.difficulty.unitPool.map((k) => (
-                    <span key={k} className="text-[10px] text-white/80 rounded-full border border-white/15 px-1.5 py-0.5">
-                      <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="inline-block w-4 h-4 object-contain align-middle mr-0.5" />
-                      {ENEMY_TRAIT_NOTE[k]?.icon ?? ''}{ENEMY_UNIT_STATS[k].label}
-                    </span>
+                    <Chip key={k}>
+                      <img src={ENEMY_UNIT_SPRITE[k]} alt="" draggable={false} className="w-5 h-5 object-contain" />
+                      {ENEMY_TRAIT_NOTE[k] && <Icon name={iconOr(TRAIT_ICON, k)} size={16} />}
+                      <span style={{ color: 'var(--cw-fg)' }}>{ENEMY_UNIT_STATS[k].label}</span>
+                    </Chip>
                   ))}
                 </div>
-                <div className="flex items-center justify-between mt-2 gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-white/50 text-[10px]">きょうの きみの いちばん</span>
-                    <StarRow n={mine(t.slot)} size={15} />
+                <div className="flex items-center justify-between mt-3 gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-cw-12" style={{ color: 'var(--cw-fg-3)' }}>きょうの きみの いちばん</span>
+                    <StarRow n={mine(t.slot)} size={20} />
                   </div>
-                  <button onClick={() => onPick(t, day)} data-testid={`friend-go-${t.slot}`} aria-disabled={locked ? true : undefined}
-                    className={`px-3 py-2 rounded-xl border-2 font-black text-sm text-white transition-all active:scale-95 ${locked ? 'opacity-60 grayscale' : ''}`}
-                    style={{ borderColor: '#ef4444', background: 'rgba(239,68,68,0.18)', ...fontMono }}>
-                    ⚔️ せめる
-                  </button>
+                  <Button variant="primary" size="md" onClick={() => onPick(t, day)} data-testid={`friend-go-${t.slot}`} locked={!!locked} className="min-w-[132px]">
+                    <Icon name="sortie" size={26} />せめる
+                  </Button>
                 </div>
-              </div>
-            </div>
-          );
-        })}
-        {locked && <p className="text-[12px] text-[#fca5a5] text-center">🔒 {locked}</p>}
-        <ul className="text-white/55 text-[11px] leading-relaxed list-disc pl-4 pb-4">
-          <li>だれの 基地かは 分からない（番号も 名前も 出ないよ）。せめても、なかまには 何も つたわらない。</li>
-          <li>まもっているのは コンピュータ。なかまは その場に いなくていい。</li>
-          <li>★は かったうえで、まちがえずに とけた わりあいで きまる（はやさでは きまらない）。</li>
-          <li>{bonusLeft ? `きょう 1回目の 勝ち（まちがえずに 1問いじょう とく）で 💠${FRIEND_ATTACK_CREDITS}。` : 'きょうの 💠 は もう もらったよ。なんかいでも ちょうせん できる。'}</li>
-          <li>きみの 基地も「陣地づくり」で 配置すると、同じ学級の なかまが せめられるようになるよ（だれが せめたかは きみにも 伝わらない）。</li>
-        </ul>
+              </Card>
+            );
+          })}
+          {locked && <p className="flex items-center justify-center gap-1.5 text-cw-14 font-bold text-center" style={{ color: 'var(--cw-danger)' }}><Icon name="lock" size={18} />{locked}</p>}
+          <Disclosure title="なかまの 基地の きまり" icon="friend" className="mb-4">
+            <ul className="text-cw-14 leading-relaxed list-disc pl-5 space-y-1" style={{ color: 'var(--cw-fg-2)' }}>
+              <li>だれの 基地かは 分からない（番号も 名前も 出ないよ）。せめても、なかまには 何も つたわらない。</li>
+              <li>まもっているのは コンピュータ。なかまは その場に いなくていい。</li>
+              <li>★は かったうえで、まちがえずに とけた わりあいで きまる（はやさでは きまらない）。</li>
+              <li>{bonusLeft ? `きょう 1回目の 勝ち（まちがえずに 1問いじょう とく）で 💠${FRIEND_ATTACK_CREDITS}。` : 'きょうの 💠 は もう もらったよ。なんかいでも ちょうせん できる。'}</li>
+              <li>きみの 基地も「陣地づくり」で 配置すると、同じ学級の なかまが せめられるようになるよ（だれが せめたかは きみにも 伝わらない）。</li>
+            </ul>
+          </Disclosure>
+        </div>
       </div>
     </div>
   );
